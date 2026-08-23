@@ -470,6 +470,14 @@ export default function CoachOnboarding() {
             <UserPlus size={16} />
             {submitting ? 'Création en cours...' : 'Onboarder ce client'}
           </button>
+          <button
+            type="button"
+            onClick={() => { setSelectedLeadId(null); setForm(emptyForm); setResult(null); }}
+            className="w-full mt-2 font-medium py-2.5 rounded-xl"
+            style={{ color: 'var(--text-secondary)', border: 'var(--border-subtle)' }}
+          >
+            Annuler
+          </button>
         </form>
       )}
       </>)}
