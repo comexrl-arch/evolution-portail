@@ -1,0 +1,1792 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   eVOLUTION 2.0 — BUSINESS COMMAND CENTER
+   DESIGN SYSTEM 2026
+   --------------------------------------------------------------------------
+   Objectif :
+   Transformer le portail en interface "AI Business Operating System".
+
+   IMPORTANT :
+   - Aucun JSX à modifier
+   - Les classes existantes sont conservées
+   - Les anciennes variables sont conservées
+   - Compatible avec le code actuel
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. TOKENS
+   ========================================================================== */
+
+:root {
+
+  /* ---------- ENVIRONNEMENT ---------- */
+
+  --surface-0: #05060a;
+  --surface-1: #0a0d13;
+  --surface-2: #10141d;
+  --surface-3: #171c27;
+  --surface-4: #1d2431;
+
+  /* ---------- ACCENT — CYAN / VIOLET ---------- */
+
+  --accent: #6ee7ff;
+  --accent-strong: #8b7cff;
+  --accent-soft: rgba(110, 231, 255, 0.10);
+  --accent-ring: rgba(110, 231, 255, 0.28);
+
+  --accent-cyan: #6ee7ff;
+  --accent-violet: #8b7cff;
+  --accent-pink: #ff6b9d;
+
+  /* ---------- STATUTS ---------- */
+
+  --success: #43e6a3;
+  --success-soft: rgba(67, 230, 163, 0.10);
+
+  --warning: #ffca5c;
+  --warning-soft: rgba(255, 202, 92, 0.10);
+
+  --danger: #ff667c;
+  --danger-soft: rgba(255, 102, 124, 0.10);
+
+  /* ---------- TEXTE ---------- */
+
+  --text-primary: #f5f7fb;
+  --text-secondary: #9da5b5;
+  --text-tertiary: #626b7b;
+
+  --text-on-accent: #041014;
+
+  /* ---------- BORDURES ---------- */
+
+  --border-subtle: 1px solid rgba(255, 255, 255, 0.055);
+  --border-strong: 1px solid rgba(255, 255, 255, 0.11);
+  --border-accent: 1px solid rgba(110, 231, 255, 0.38);
+
+  /* ---------- RAYONS ---------- */
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+
+  /* ---------- OMBRES ---------- */
+
+  --shadow-sm:
+    0 2px 8px rgba(0, 0, 0, 0.28);
+
+  --shadow-md:
+    0 12px 35px rgba(0, 0, 0, 0.42);
+
+  --shadow-lg:
+    0 25px 70px rgba(0, 0, 0, 0.52);
+
+  --shadow-focus:
+    0 0 0 3px var(--accent-ring);
+
+  /* ---------- MOTION ---------- */
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --transition-fast:
+    140ms var(--ease-standard);
+
+  --transition-base:
+    240ms var(--ease-standard);
+
+  --transition-slow:
+    500ms var(--ease-standard);
+
+  /* ---------- TYPOGRAPHIE ---------- */
+
+  --font-sans:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+
+  --font-mono:
+    "JetBrains Mono",
+    "SF Mono",
+    Consolas,
+    monospace;
+
+
+  /* ==========================================================================
+     COMPATIBILITÉ V1
+     ========================================================================== */
+
+  --page-bg: var(--surface-0);
+  --bg-dark: var(--surface-0);
+
+  --card-bg-gradient:
+    linear-gradient(
+      145deg,
+      rgba(17, 21, 30, 0.98),
+      rgba(8, 11, 17, 0.98)
+    );
+
+  --gold: var(--accent);
+  --gold-light: var(--accent-strong);
+  --gold-glow: var(--accent-soft);
+
+  --green: var(--success);
+  --green-glow: var(--success-soft);
+
+  --red: var(--danger);
+
+  --text-pure: var(--text-primary);
+  --text-main: var(--text-primary);
+  --text-dimmed: var(--text-secondary);
+  --text-soft: var(--text-tertiary);
+
+  --ink: var(--text-primary);
+  --ink-soft: var(--text-secondary);
+
+  --border-glass: var(--border-subtle);
+  --border-glass-hover: var(--border-accent);
+}
+
+
+/* ==========================================================================
+   2. LIGHT MODE
+   ========================================================================== */
+
+[data-theme="light"] {
+
+  --surface-0: #f4f7fb;
+  --surface-1: #ffffff;
+  --surface-2: #eef2f7;
+  --surface-3: #e2e8f0;
+  --surface-4: #d8e0ea;
+
+  --text-primary: #10131a;
+  --text-secondary: #4f5969;
+  --text-tertiary: #7b8595;
+
+  --border-subtle: 1px solid rgba(0, 0, 0, 0.07);
+  --border-strong: 1px solid rgba(0, 0, 0, 0.12);
+
+  --card-bg-gradient:
+    linear-gradient(
+      145deg,
+      #ffffff,
+      #f5f7fa
+    );
+}
+
+
+/* ==========================================================================
+   3. GLOBAL RESET
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+
+  margin: 0;
+
+  min-height: 100vh;
+
+  background:
+    radial-gradient(
+      circle at 15% 10%,
+      rgba(110, 231, 255, 0.055),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 85% 15%,
+      rgba(139, 124, 255, 0.065),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 50% 100%,
+      rgba(110, 231, 255, 0.035),
+      transparent 35%
+    ),
+    var(--surface-0);
+
+  color: var(--text-primary);
+
+  font-family: var(--font-sans);
+
+  -webkit-font-smoothing: antialiased;
+
+  text-rendering: optimizeLegibility;
+
+  overflow-x: hidden;
+}
+
+
+/* ==========================================================================
+   4. GRILLE TECHNIQUE D'ARRIÈRE-PLAN
+   ========================================================================== */
+
+body::before {
+
+  content: "";
+
+  position: fixed;
+
+  inset: 0;
+
+  pointer-events: none;
+
+  z-index: -1;
+
+  opacity: 0.28;
+
+  background-image:
+
+    linear-gradient(
+      rgba(255,255,255,0.018) 1px,
+      transparent 1px
+    ),
+
+    linear-gradient(
+      90deg,
+      rgba(255,255,255,0.018) 1px,
+      transparent 1px
+    );
+
+  background-size: 42px 42px;
+
+  mask-image:
+    linear-gradient(
+      to bottom,
+      black 0%,
+      rgba(0,0,0,.5) 55%,
+      transparent 100%
+    );
+}
+
+
+/* ==========================================================================
+   5. SÉLECTION
+   ========================================================================== */
+
+::selection {
+
+  background:
+    rgba(110, 231, 255, 0.22);
+
+  color: #ffffff;
+}
+
+
+/* ==========================================================================
+   6. SCROLLBAR
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-0);
+}
+
+::-webkit-scrollbar-thumb {
+
+  background:
+    linear-gradient(
+      var(--accent),
+      var(--accent-strong)
+    );
+
+  border-radius: 999px;
+}
+
+
+/* ==========================================================================
+   7. TYPOGRAPHIE
+   ========================================================================== */
+
+.page-title {
+
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+
+  font-weight: 750;
+
+  letter-spacing: -0.04em;
+
+  line-height: 1.05;
+
+  color: var(--text-primary);
+}
+
+.section-eyebrow {
+
+  font-size: 0.68rem;
+
+  font-weight: 700;
+
+  letter-spacing: 0.12em;
+
+  text-transform: uppercase;
+
+  color: var(--text-tertiary);
+}
+
+.accent-text {
+  color: var(--accent);
+}
+
+
+/* ==========================================================================
+   8. TITRES GRADIENT
+   ========================================================================== */
+
+.gold-title {
+
+  background:
+    linear-gradient(
+      100deg,
+      #ffffff 0%,
+      var(--accent) 38%,
+      var(--accent-strong) 78%,
+      #ffffff 100%
+    );
+
+  -webkit-background-clip: text;
+
+  background-clip: text;
+
+  color: transparent;
+
+  letter-spacing: -0.045em;
+
+  font-weight: 800;
+
+  background-size: 200% auto;
+
+  animation:
+    title-shimmer 7s linear infinite;
+}
+
+@keyframes title-shimmer {
+
+  0% {
+    background-position: 0% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+
+/* ==========================================================================
+   9. CARTES — NOUVEAU STYLE "COMMAND CENTER"
+   ========================================================================== */
+
+.card {
+
+  position: relative;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(17, 21, 30, 0.96),
+      rgba(8, 11, 17, 0.96)
+    );
+
+  color: var(--text-primary);
+
+  border: var(--border-subtle);
+
+  border-radius: var(--radius-lg);
+
+  box-shadow: var(--shadow-sm);
+
+  backdrop-filter: blur(18px);
+
+  -webkit-backdrop-filter: blur(18px);
+}
+
+
+/* ==========================================================================
+   10. CARD GLASS — VERSION PREMIUM
+   ========================================================================== */
+
+.card-glass {
+
+  position: relative;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(18, 23, 32, 0.92),
+      rgba(8, 11, 17, 0.88)
+    );
+
+  color: var(--text-primary);
+
+  border: 1px solid rgba(255,255,255,0.065);
+
+  border-radius: var(--radius-lg);
+
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.025) inset,
+    0 10px 35px rgba(0,0,0,0.20);
+
+  backdrop-filter: blur(20px);
+
+  -webkit-backdrop-filter: blur(20px);
+
+  overflow: hidden;
+
+  transition:
+    transform var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+
+/* lumière interne */
+
+.card-glass::before {
+
+  content: "";
+
+  position: absolute;
+
+  top: 0;
+
+  left: 0;
+
+  width: 100%;
+
+  height: 1px;
+
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(110,231,255,0.28),
+      rgba(139,124,255,0.22),
+      transparent
+    );
+
+  opacity: 0.45;
+
+  pointer-events: none;
+}
+
+
+/* halo subtil */
+
+.card-glass::after {
+
+  content: "";
+
+  position: absolute;
+
+  width: 180px;
+
+  height: 180px;
+
+  top: -110px;
+
+  right: -90px;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(110,231,255,0.07),
+      transparent 70%
+    );
+
+  pointer-events: none;
+
+  opacity: 0;
+
+  transition: opacity var(--transition-base);
+}
+
+.card-glass:hover::after {
+  opacity: 1;
+}
+
+
+/* ==========================================================================
+   11. CARTES INTERACTIVES
+   ========================================================================== */
+
+.card-interactive {
+
+  cursor: pointer;
+
+  transition:
+    transform var(--transition-base),
+    background var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.card-interactive:hover:not(:disabled) {
+
+  transform: translateY(-3px);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(21,27,39,0.98),
+      rgba(9,13,20,0.98)
+    );
+
+  border-color:
+    rgba(110,231,255,0.22);
+
+  box-shadow:
+    0 18px 45px rgba(0,0,0,0.35),
+    0 0 35px rgba(110,231,255,0.035);
+}
+
+.card-interactive:active:not(:disabled) {
+  transform: translateY(-1px) scale(0.995);
+}
+
+.card-interactive:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+
+/* ==========================================================================
+   12. INPUTS — STYLE SAAS PREMIUM
+   ========================================================================== */
+
+.field-input {
+
+  width: 100%;
+
+  background:
+    rgba(5,8,13,0.72);
+
+  border:
+    1px solid rgba(255,255,255,0.09);
+
+  color: var(--text-primary);
+
+  border-radius: var(--radius-sm);
+
+  padding: 0.72rem 0.9rem;
+
+  outline: none;
+
+  font-size: 0.9rem;
+
+  font-family: var(--font-sans);
+
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.field-input:hover {
+
+  border-color:
+    rgba(255,255,255,0.15);
+}
+
+.field-input:focus {
+
+  border-color:
+    rgba(110,231,255,0.62);
+
+  background:
+    rgba(8,12,19,0.92);
+
+  box-shadow:
+    0 0 0 3px rgba(110,231,255,0.08),
+    0 0 25px rgba(110,231,255,0.06);
+}
+
+.field-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+textarea.field-input {
+  resize: vertical;
+  min-height: 90px;
+}
+
+
+/* ==========================================================================
+   13. BOUTONS
+   ========================================================================== */
+
+button {
+
+  font-family: inherit;
+
+  transition:
+    transform var(--transition-fast),
+    filter var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+button:not(:disabled):hover {
+
+  filter: brightness(1.08);
+}
+
+button:not(:disabled):active {
+
+  transform: scale(0.985);
+}
+
+
+/* boutons avec fond accent inline */
+
+button[style*="var(--gold)"] {
+
+  box-shadow:
+    0 8px 25px rgba(110,231,255,0.12);
+
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+button[style*="var(--gold)"]:hover {
+
+  box-shadow:
+    0 12px 35px rgba(110,231,255,0.20);
+}
+
+
+/* ==========================================================================
+   14. LOGO
+   ========================================================================== */
+
+.logo-plate {
+
+  display: block;
+
+  height: 40px;
+
+  width: auto;
+
+  background: #fff;
+
+  border-radius: 10px;
+
+  padding: 4px 8px;
+
+  box-shadow:
+    0 4px 15px rgba(0,0,0,0.35);
+
+  object-fit: contain;
+}
+
+.logo-plate-tile {
+
+  width: 100%;
+
+  max-width: 132px;
+
+  height: auto;
+
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.logo-plate-tile:hover {
+
+  transform:
+    scale(1.035)
+    rotate(-1deg);
+
+  box-shadow:
+    0 12px 30px rgba(110,231,255,0.12);
+}
+
+
+/* ==========================================================================
+   15. JAUGES — STYLE INSTRUMENTATION
+   ========================================================================== */
+
+.gauge-wrap {
+
+  --gauge-offset: 20%;
+
+  position: relative;
+
+  width: 100%;
+
+  max-width: 180px;
+
+  margin: 0 auto;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  justify-content: center;
+}
+
+.gauge-wrap svg {
+
+  overflow: visible;
+
+  filter:
+    drop-shadow(
+      0 0 8px rgba(110,231,255,0.06)
+    );
+}
+
+.gauge-track {
+
+  fill: none;
+
+  stroke:
+    rgba(255,255,255,0.055);
+
+  stroke-width: 8;
+
+  stroke-linecap: round;
+}
+
+.gauge-progress {
+
+  fill: none;
+
+  stroke-width: 8;
+
+  stroke-linecap: round;
+
+  transition:
+    stroke-dashoffset 800ms var(--ease-standard);
+
+  filter:
+    drop-shadow(
+      0 0 5px currentColor
+    );
+}
+
+.gauge-needle {
+
+  stroke:
+    var(--accent-strong);
+
+  stroke-width: 3;
+
+  stroke-linecap: round;
+
+  transition:
+    transform 800ms var(--ease-standard);
+
+  filter:
+    drop-shadow(
+      0 0 5px rgba(139,124,255,0.45)
+    );
+}
+
+.gauge-hub {
+
+  fill:
+    var(--accent-strong);
+
+  filter:
+    drop-shadow(
+      0 0 7px rgba(139,124,255,0.6)
+    );
+}
+
+.gauge-center-content {
+
+  position: absolute;
+
+  bottom: var(--gauge-offset);
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  text-align: center;
+}
+
+.gauge-value {
+
+  font-size: 1.8rem;
+
+  font-weight: 800;
+
+  line-height: 1;
+
+  color: var(--text-primary);
+
+  letter-spacing: -0.04em;
+
+  font-variant-numeric: tabular-nums;
+}
+
+.gauge-value-compact {
+
+  font-size: 1.9rem;
+}
+
+.gauge-label {
+
+  font-size: 0.66rem;
+
+  font-weight: 700;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.08em;
+
+  color: var(--text-tertiary);
+
+  margin-top: 0.3rem;
+}
+
+
+/* ==========================================================================
+   16. KPI TILES
+   ========================================================================== */
+
+.kpi-tile-label {
+
+  margin-top: -0.1rem;
+
+  color: var(--text-secondary);
+
+  font-size: 0.78rem;
+
+  font-weight: 600;
+
+  letter-spacing: -0.01em;
+
+  text-align: center;
+}
+
+
+/* ==========================================================================
+   17. KPI GRID
+   ========================================================================== */
+
+.kpi-grid {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(auto-fit, minmax(220px, 1fr));
+
+  gap: 1px;
+
+  background:
+    rgba(255,255,255,0.055);
+
+  border:
+    1px solid rgba(255,255,255,0.055);
+
+  border-radius: var(--radius-md);
+
+  overflow: hidden;
+}
+
+.kpi-card {
+
+  position: relative;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(15,19,27,0.96),
+      rgba(8,11,17,0.96)
+    );
+
+  padding: 1.15rem;
+
+  display: flex;
+
+  flex-direction: column;
+
+  justify-content: space-between;
+
+  transition:
+    background var(--transition-fast);
+}
+
+.kpi-card:hover {
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(22,28,40,0.98),
+      rgba(9,13,20,0.98)
+    );
+}
+
+.kpi-nom {
+
+  color: var(--text-primary);
+
+  font-weight: 700;
+
+  font-size: 0.88rem;
+
+  letter-spacing: -0.01em;
+}
+
+.kpi-categorie {
+
+  color: var(--text-tertiary);
+
+  font-size: 0.64rem;
+
+  font-weight: 700;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.08em;
+
+  margin-top: 0.2rem;
+}
+
+.kpi-periods {
+
+  display: grid;
+
+  grid-template-columns:
+    repeat(4, 1fr);
+
+  gap: 0.35rem;
+
+  padding-top: 0.85rem;
+
+  margin-top: 0.75rem;
+
+  border-top:
+    1px solid rgba(255,255,255,0.055);
+}
+
+.kpi-period {
+
+  text-align: center;
+}
+
+.kpi-period-label {
+
+  font-size: 0.58rem;
+
+  font-weight: 800;
+
+  letter-spacing: 0.08em;
+
+  text-transform: uppercase;
+
+  color: var(--text-tertiary);
+}
+
+.kpi-period-valeur {
+
+  font-size: 1rem;
+
+  font-weight: 800;
+
+  color: var(--text-primary);
+
+  margin-top: 0.2rem;
+
+  font-family: var(--font-mono);
+
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-period-objectif {
+
+  font-size: 0.62rem;
+
+  color: var(--text-secondary);
+
+  margin-top: 0.1rem;
+}
+
+
+/* ==========================================================================
+   18. LISTES
+   ========================================================================== */
+
+.list-row {
+
+  background: transparent;
+
+  border-bottom:
+    1px solid rgba(255,255,255,0.05);
+
+  padding: 0.8rem 0.3rem;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 0.75rem;
+
+  transition:
+    background var(--transition-fast),
+    padding-left var(--transition-fast);
+}
+
+.list-row:hover {
+
+  background:
+    rgba(255,255,255,0.025);
+
+  padding-left: 0.55rem;
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+
+/* ==========================================================================
+   19. CHECKLIST
+   ========================================================================== */
+
+.checklist-item {
+
+  position: relative;
+
+  background:
+    rgba(255,255,255,0.018);
+
+  border:
+    1px solid rgba(255,255,255,0.055);
+
+  border-radius:
+    var(--radius-md);
+
+  padding:
+    0.9rem 1.1rem;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 0.8rem;
+
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.checklist-item:hover {
+
+  background:
+    rgba(110,231,255,0.035);
+
+  border-color:
+    rgba(110,231,255,0.15);
+
+  transform:
+    translateX(3px);
+}
+
+.checklist-item input {
+
+  accent-color:
+    var(--accent);
+}
+
+
+/* ==========================================================================
+   20. BADGES
+   ========================================================================== */
+
+.badge {
+
+  display: inline-flex;
+
+  align-items: center;
+
+  gap: 0.35rem;
+
+  font-size: 0.65rem;
+
+  font-weight: 750;
+
+  letter-spacing: 0.04em;
+
+  padding:
+    0.25rem 0.6rem;
+
+  border-radius: 999px;
+
+  border:
+    1px solid transparent;
+}
+
+.badge-success {
+
+  color: var(--success);
+
+  background:
+    var(--success-soft);
+
+  border-color:
+    rgba(67,230,163,0.15);
+}
+
+.badge-warning {
+
+  color: var(--warning);
+
+  background:
+    var(--warning-soft);
+
+  border-color:
+    rgba(255,202,92,0.15);
+}
+
+.badge-danger {
+
+  color: var(--danger);
+
+  background:
+    var(--danger-soft);
+
+  border-color:
+    rgba(255,102,124,0.15);
+}
+
+.badge-accent {
+
+  color: var(--accent);
+
+  background:
+    var(--accent-soft);
+
+  border-color:
+    rgba(110,231,255,0.15);
+}
+
+
+/* ==========================================================================
+   21. ACCORDÉONS — PARCOURS
+   ========================================================================== */
+
+.module-accordion {
+
+  position: relative;
+
+  margin-bottom: 0.65rem;
+
+  border-radius:
+    var(--radius-md);
+
+  background:
+    rgba(10,14,21,0.82);
+
+  border:
+    1px solid rgba(255,255,255,0.055);
+
+  overflow: hidden;
+
+  transition:
+    border-color var(--transition-base),
+    background var(--transition-base),
+    box-shadow var(--transition-base);
+}
+
+.module-accordion:hover {
+
+  border-color:
+    rgba(255,255,255,0.10);
+}
+
+.module-accordion[open] {
+
+  border-color:
+    rgba(110,231,255,0.16);
+
+  box-shadow:
+    0 10px 35px rgba(0,0,0,0.18);
+}
+
+.module-heading {
+
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  padding:
+    0.95rem 1rem;
+
+  font-size: 1rem;
+
+  font-weight: 700;
+
+  letter-spacing: 0.01em;
+
+  color: var(--text-primary);
+
+  cursor: pointer;
+
+  user-select: none;
+
+  list-style: none;
+
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.module-heading::-webkit-details-marker {
+  display: none;
+}
+
+.module-heading:hover {
+
+  background:
+    rgba(110,231,255,0.025);
+
+  color:
+    var(--accent);
+}
+
+.module-heading-chevron {
+
+  color:
+    var(--text-tertiary);
+
+  transition:
+    transform var(--transition-base),
+    color var(--transition-base);
+}
+
+.module-accordion[open]
+.module-heading-chevron {
+
+  transform:
+    rotate(180deg);
+
+  color:
+    var(--accent);
+}
+
+
+/* ==========================================================================
+   22. BARRE DE MODULES
+   ========================================================================== */
+
+.module-bar {
+
+  display: flex;
+
+  width: 100%;
+
+  height: 7px;
+
+  border-radius: 999px;
+
+  overflow: hidden;
+
+  background:
+    rgba(255,255,255,0.05);
+
+  box-shadow:
+    inset 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.module-bar > div {
+
+  position: relative;
+
+  transition:
+    width 800ms var(--ease-standard);
+
+  box-shadow:
+    0 0 10px rgba(255,255,255,0.10);
+}
+
+.module-legend-dot {
+
+  display: inline-block;
+
+  width: 0.48rem;
+
+  height: 0.48rem;
+
+  border-radius: 999px;
+
+  flex-shrink: 0;
+
+  box-shadow:
+    0 0 8px currentColor;
+}
+
+
+/* ==========================================================================
+   23. TABLEAUX
+   ========================================================================== */
+
+.data-table {
+
+  width: 100%;
+
+  border-collapse: collapse;
+
+  font-size: 0.85rem;
+}
+
+.data-table thead th {
+
+  text-align: left;
+
+  font-size: 0.62rem;
+
+  font-weight: 750;
+
+  text-transform: uppercase;
+
+  letter-spacing: 0.08em;
+
+  color: var(--text-tertiary);
+
+  padding:
+    0.7rem 0.9rem;
+
+  border-bottom:
+    1px solid rgba(255,255,255,0.08);
+}
+
+.data-table tbody td {
+
+  padding:
+    0.75rem 0.9rem;
+
+  border-bottom:
+    1px solid rgba(255,255,255,0.045);
+
+  color:
+    var(--text-primary);
+}
+
+.data-table tbody tr {
+
+  transition:
+    background var(--transition-fast);
+}
+
+.data-table tbody tr:hover {
+
+  background:
+    rgba(110,231,255,0.025);
+}
+
+
+/* ==========================================================================
+   24. TABLES DU PORTAIL
+   ========================================================================== */
+
+table {
+
+  border-collapse: collapse;
+}
+
+table thead th {
+
+  color:
+    var(--text-tertiary);
+
+  font-size:
+    0.65rem;
+
+  font-weight:
+    750;
+
+  text-transform:
+    uppercase;
+
+  letter-spacing:
+    0.07em;
+}
+
+table tbody tr {
+
+  transition:
+    background var(--transition-fast);
+}
+
+table tbody tr:hover {
+
+  background:
+    rgba(110,231,255,0.025);
+}
+
+
+/* ==========================================================================
+   25. LIENS / TEXTES
+   ========================================================================== */
+
+a {
+
+  color:
+    var(--accent);
+
+  text-decoration: none;
+
+  transition:
+    color var(--transition-fast);
+}
+
+a:hover {
+
+  color:
+    #ffffff;
+}
+
+
+/* ==========================================================================
+   26. ICÔNES
+   ========================================================================== */
+
+svg {
+
+  flex-shrink: 0;
+}
+
+.card-glass svg {
+
+  transition:
+    filter var(--transition-fast);
+}
+
+.card-glass:hover svg {
+
+  filter:
+    drop-shadow(
+      0 0 5px rgba(110,231,255,0.18)
+    );
+}
+
+
+/* ==========================================================================
+   27. PAGE LOGIN
+   ========================================================================== */
+
+.min-h-screen {
+
+  position: relative;
+}
+
+
+/* carte login */
+
+.max-w-md .card-glass {
+
+  box-shadow:
+    0 25px 80px rgba(0,0,0,0.45),
+    0 0 60px rgba(110,231,255,0.035);
+}
+
+
+/* ==========================================================================
+   28. LOADING
+   ========================================================================== */
+
+.animate-spin {
+
+  filter:
+    drop-shadow(
+      0 0 8px rgba(110,231,255,0.5)
+    );
+}
+
+
+/* ==========================================================================
+   29. ETATS
+   ========================================================================== */
+
+button:disabled {
+
+  cursor:
+    not-allowed;
+}
+
+[aria-disabled="true"] {
+  opacity: 0.45;
+}
+
+
+/* ==========================================================================
+   30. FOCUS ACCESSIBLE
+   ========================================================================== */
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+
+  outline:
+    2px solid var(--accent);
+
+  outline-offset:
+    3px;
+}
+
+
+/* ==========================================================================
+   31. MICRO-ANIMATION DES CARTES
+   ========================================================================== */
+
+@keyframes card-entry {
+
+  from {
+
+    opacity: 0;
+
+    transform:
+      translateY(8px);
+  }
+
+  to {
+
+    opacity: 1;
+
+    transform:
+      translateY(0);
+  }
+}
+
+.card-glass {
+
+  animation:
+    card-entry 420ms var(--ease-standard) both;
+}
+
+
+/* ==========================================================================
+   32. ESPACEMENT MOBILE
+   ========================================================================== */
+
+@media (max-width: 768px) {
+
+  body::before {
+    background-size: 30px 30px;
+  }
+
+  .card-glass {
+
+    border-radius:
+      var(--radius-md);
+  }
+
+  .gauge-value {
+
+    font-size:
+      1.55rem;
+  }
+
+  .kpi-period-valeur {
+
+    font-size:
+      0.88rem;
+  }
+}
+
+
+/* ==========================================================================
+   33. PETITS ÉCRANS
+   ========================================================================== */
+
+@media (max-width: 480px) {
+
+  .kpi-grid {
+
+    grid-template-columns:
+      1fr;
+  }
+
+  .kpi-periods {
+
+    gap:
+      0.15rem;
+  }
+
+  .module-heading {
+
+    padding:
+      0.85rem;
+  }
+}
+
+
+/* ==========================================================================
+   34. RÉDUCTION DES ANIMATIONS
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+
+    animation-duration:
+      0.01ms !important;
+
+    animation-iteration-count:
+      1 !important;
+
+    transition-duration:
+      0.01ms !important;
+
+    scroll-behavior:
+      auto !important;
+  }
+}
+
+
+/* ==========================================================================
+   35. COMPATIBILITÉ ANCIEN STYLE
+   ========================================================================== */
+
+button.card-glass {
+
+  cursor:
+    pointer;
+
+  transition:
+    transform var(--transition-base),
+    box-shadow var(--transition-base),
+    border-color var(--transition-base),
+    background var(--transition-base);
+}
+
+button.card-glass:hover:not(:disabled) {
+
+  transform:
+    translateY(-3px);
+
+  border-color:
+    rgba(110,231,255,0.20);
+
+  box-shadow:
+    0 18px 45px rgba(0,0,0,0.35),
+    0 0 30px rgba(110,231,255,0.04);
+}
+
+button.card-glass:disabled {
+
+  cursor:
+    not-allowed;
+
+  opacity:
+    0.42;
+}
+
+
+/* ==========================================================================
+   36. CONTENU DES FICHES
+   ========================================================================== */
+
+.card-glass p {
+
+  line-height:
+    1.65;
+}
+
+.card-glass h2,
+.card-glass h3 {
+
+  letter-spacing:
+    -0.02em;
+}
+
+.card-glass strong {
+
+  color:
+    var(--text-primary);
+
+  font-weight:
+    700;
+}
+
+
+/* ==========================================================================
+   37. PETIT DÉTAIL PREMIUM : LIGNE ACTIVE
+   ========================================================================== */
+
+.module-accordion[open]::before {
+
+  content: "";
+
+  position: absolute;
+
+  left: 0;
+
+  top: 0;
+
+  bottom: 0;
+
+  width: 2px;
+
+  background:
+    linear-gradient(
+      to bottom,
+      var(--accent),
+      var(--accent-strong),
+      transparent
+    );
+
+  box-shadow:
+    0 0 12px rgba(110,231,255,0.35);
+}
+
+
+/* ==========================================================================
+   38. ÉTAT TERMINÉ / EN COURS
+   ========================================================================== */
+
+[style*="var(--green)"] {
+
+  text-shadow:
+    0 0 12px rgba(67,230,163,0.18);
+}
+
+[style*="var(--gold)"] {
+
+  box-shadow:
+    0 8px 25px rgba(110,231,255,0.12);
+
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    filter var(--transition-fast);
+}
+
+button[style*="var(--gold)"]:hover {
+
+  box-shadow:
+    0 12px 35px rgba(110,231,255,0.20);
+}
+
+
