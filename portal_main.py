@@ -212,6 +212,43 @@ def _require_coach_key(x_coach_key: str) -> None:
         raise HTTPException(status_code=401, detail="Code d'acces invalide.")
 
 
+@app.get("/coach/diagnostics")
+def coach_diagnostics(x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return {"diagnostics": notion_service.list_diagnostics_fiche8()}
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+
+@app.get("/coach/fiches/{fiche_client_id}")
+def coach_get_fiche(
+    fiche_client_id: str, client_page_id: str, x_coach_key: str = Header(default="")
+):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return notion_service.get_fiche(fiche_client_id, client_page_id)
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+
+@app.post("/coach/fiches/{fiche_client_id}/valider")
+def coach_valider_fiche(fiche_client_id: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        notion_service.validate_fiche(fiche_client_id)
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+    return {"status": "validee"}
+
+
 @app.get("/coach/leads/systeme-io")
 def coach_leads_systeme_io(query: str = "", x_coach_key: str = Header(default="")):
     _require_coach_key(x_coach_key)
