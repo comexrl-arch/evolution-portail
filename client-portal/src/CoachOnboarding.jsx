@@ -11,18 +11,6 @@ const emptyForm = {
   leads_j0: '', rdv_j0: '', nouveaux_clients_j0: '', ca_j0: '',
 }
 
-function renderDiagnosticLine(ligne, key) {
-  const texte = ligne.replace(/^#{1,3}\s*/, '').trim()
-
-  if (ligne.startsWith('###') || ligne.startsWith('##') || ligne.startsWith('#')) {
-    return <p key={key} className="font-semibold mt-3" style={{ color: 'var(--text-primary)' }}>{texte}</p>
-  }
-  if (ligne.trim().startsWith('-')) {
-    return <p key={key} className="pl-3">• {ligne.trim().slice(1).trim()}</p>
-  }
-  return <p key={key}>{ligne}</p>
-}
-
 export default function CoachOnboarding() {
   const [coachKey, setCoachKey] = useState(() => localStorage.getItem(COACH_KEY_STORAGE) || '')
   const [pinInput, setPinInput] = useState('')
@@ -42,9 +30,12 @@ export default function CoachOnboarding() {
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
   const [diagnosticsError, setDiagnosticsError] = useState('')
   const [expandedFicheId, setExpandedFicheId] = useState(null)
-  const [ficheContent, setFicheContent] = useState(null)
+  const [champs, setChamps] = useState(null)
+  const [champsError, setChampsError] = useState('')
   const [ficheLoading, setFicheLoading] = useState(false)
   const [validating, setValidating] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
   async function loadDiagnostics() {
     setDiagnosticsLoading(true)
@@ -67,24 +58,50 @@ export default function CoachOnboarding() {
   async function toggleFiche(diag) {
     if (expandedFicheId === diag.fiche_client_id) {
       setExpandedFicheId(null)
-      setFicheContent(null)
+      setChamps(null)
       return
     }
     setExpandedFicheId(diag.fiche_client_id)
-    setFicheContent(null)
+    setChamps(null)
+    setChampsError('')
+    setSaved(false)
     setFicheLoading(true)
     try {
-      const params = new URLSearchParams({ client_page_id: diag.client_page_id })
-      const res = await fetch(`${API_BASE}/coach/fiches/${diag.fiche_client_id}?${params}`, {
+      const res = await fetch(`${API_BASE}/coach/fiches/${diag.fiche_client_id}/diagnostic-champs`, {
         headers: { 'X-Coach-Key': coachKey },
       })
       if (res.status === 401) return handleAuthFailure()
       if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de chargement')
-      setFicheContent(await res.json())
+      const data = await res.json()
+      setChamps(data.champs)
     } catch (err) {
-      setFicheContent({ error: err.message })
+      setChampsError(err.message)
     } finally {
       setFicheLoading(false)
+    }
+  }
+
+  function updateChampValeur(index, valeur) {
+    setSaved(false)
+    setChamps((prev) => prev.map((c, i) => (i === index ? { ...c, valeur } : c)))
+  }
+
+  async function saveChamps(ficheClientId) {
+    setSaving(true)
+    setChampsError('')
+    try {
+      const res = await fetch(`${API_BASE}/coach/fiches/${ficheClientId}/diagnostic-champs`, {
+        method: 'POST',
+        headers: { 'X-Coach-Key': coachKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: champs }),
+      })
+      if (res.status === 401) return handleAuthFailure()
+      if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de sauvegarde')
+      setSaved(true)
+    } catch (err) {
+      setChampsError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -296,15 +313,36 @@ export default function CoachOnboarding() {
 
                 {expandedFicheId === diag.fiche_client_id && (
                   <div className="mt-4 pt-4" style={{ borderTop: 'var(--border-subtle)' }}>
-                    {ficheLoading && <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Chargement du contenu...</p>}
-                    {ficheContent?.error && <p className="text-sm" style={{ color: 'var(--danger)' }}>{ficheContent.error}</p>}
-                    {ficheContent?.segments && (
-                      <div className="space-y-1.5 mb-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                        {ficheContent.segments
-                          .filter((s) => s.type === 'texte' && s.texte?.trim())
-                          .map((s, i) => renderDiagnosticLine(s.texte, i))}
+                    {ficheLoading && <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Chargement...</p>}
+                    {champsError && <p className="text-sm mb-2" style={{ color: 'var(--danger)' }}>{champsError}</p>}
+
+                    {champs && (
+                      <div className="space-y-2.5 mb-4">
+                        {champs.map((champ, index) => (
+                          <div key={champ.block_id}>
+                            <label className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{champ.label}</label>
+                            <input
+                              type="text"
+                              value={champ.valeur}
+                              onChange={(e) => updateChampValeur(index, e.target.value)}
+                              className="w-full field-input bg-transparent outline-none px-3 py-1.5 text-sm mt-0.5"
+                            />
+                          </div>
+                        ))}
                       </div>
                     )}
+
+                    {champs && (
+                      <button
+                        onClick={() => saveChamps(diag.fiche_client_id)}
+                        disabled={saving}
+                        className="w-full font-semibold py-2 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 mb-2"
+                        style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}
+                      >
+                        {saving ? 'Enregistrement...' : saved ? '✓ Enregistré' : 'Enregistrer les modifications'}
+                      </button>
+                    )}
+
                     {diag.etat !== 'Terminé' && (
                       <button
                         onClick={() => validerFiche(diag.fiche_client_id)}
