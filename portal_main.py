@@ -236,6 +236,43 @@ def coach_get_fiche(
         raise HTTPException(status_code=503, detail=str(error))
 
 
+@app.get("/coach/fiches/{fiche_client_id}/diagnostic-champs")
+def coach_get_diagnostic_champs(fiche_client_id: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return {"champs": notion_service.get_diagnostic_fiche8(fiche_client_id)}
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+
+class DiagnosticUpdate(BaseModel):
+    block_id: str
+    type: str
+    label: str
+    valeur: str
+
+
+class DiagnosticUpdateRequest(BaseModel):
+    updates: list[DiagnosticUpdate]
+
+
+@app.post("/coach/fiches/{fiche_client_id}/diagnostic-champs")
+def coach_update_diagnostic_champs(
+    fiche_client_id: str, request: DiagnosticUpdateRequest, x_coach_key: str = Header(default="")
+):
+    _require_coach_key(x_coach_key)
+
+    try:
+        notion_service.update_diagnostic_fiche8([u.model_dump() for u in request.updates])
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+    return {"status": "mis a jour"}
+
+
 @app.post("/coach/fiches/{fiche_client_id}/valider")
 def coach_valider_fiche(fiche_client_id: str, x_coach_key: str = Header(default="")):
     _require_coach_key(x_coach_key)
