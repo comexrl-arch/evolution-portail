@@ -33,6 +33,9 @@ LIVRABLES_DATA_SOURCE_ID = os.getenv(
 KPI_DATA_SOURCE_ID = os.getenv(
     "NOTION_KPI_DATA_SOURCE_ID", "39ffaffd-8758-8010-a085-000bf44d8e0f"
 )
+CONNEXIONS_DATA_SOURCE_ID = os.getenv(
+    "NOTION_CONNEXIONS_DATA_SOURCE_ID", "c6580a4f-a53a-4359-9725-f4ebf3ef6ff2"
+)
 
 # Certains noms de propriete Notion contiennent des caracteres invisibles
 # (word joiner U+2060) introduits par l'editeur Notion. On compare les noms
@@ -1165,6 +1168,30 @@ def send_portal_invite(email: str, client_page_id: str, client_nom: str) -> None
 
     except requests.RequestException as error:
         raise RuntimeError(f"Erreur envoi invitation portail : {error}") from error
+
+
+def log_portal_connection(email: str, client_page_id: str) -> None:
+    # Journal des connexions reussies (lien magique verifie -> session creee).
+    # Best-effort : une erreur ici ne doit jamais faire echouer une vraie
+    # connexion client, donc on avale l'exception et on logue un warning.
+    try:
+        client_page = _get_page(client_page_id)
+        client_nom = client_display_name(client_page)
+    except RuntimeError:
+        client_nom = ""
+
+    properties = {
+        "Email": {"title": [{"text": {"content": email}}]},
+        "Client": {"rich_text": [{"text": {"content": client_nom}}]},
+        "Date de connexion": {
+            "date": {"start": datetime.now(timezone.utc).isoformat()}
+        },
+    }
+
+    try:
+        _create_page(CONNEXIONS_DATA_SOURCE_ID, properties)
+    except RuntimeError as error:
+        logger.warning("Echec journalisation connexion portail (%s) : %s", email, error)
 
 
 # Champs optionnels que le coach peut renseigner des l'onboarding minimal
