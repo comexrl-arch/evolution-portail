@@ -120,6 +120,8 @@ def portal_verify(request: PortalVerifyRequest):
         data["email"], data["client_page_id"]
     )
 
+    notion_service.log_portal_connection(data["email"], data["client_page_id"])
+
     return {"status": "verified", "session_token": session_token}
 
 
