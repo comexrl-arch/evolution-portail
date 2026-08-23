@@ -1,0 +1,30 @@
+# Blueprint Render pour le backend du Portail Client eVolution 2.0.
+# Le nom du service determine son URL publique : evolution-portail-backend.onrender.com
+# (voir README dans scripts/DEPLOY_PORTAIL.md pour le detail complet du deploiement).
+
+services:
+  - type: web
+    name: evolution-portail-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn portal_main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NOTION_API_KEY
+        sync: false
+      - key: NOTION_CLIENTS_DATA_SOURCE_ID
+        sync: false
+      - key: NOTION_FICHES_CLIENT_DATA_SOURCE_ID
+        sync: false
+      - key: NOTION_ENTREES_PORTAIL_DATA_SOURCE_ID
+        sync: false
+      - key: NOTION_KPI_DATA_SOURCE_ID
+        sync: false
+      - key: N8N_WEBHOOK_MAGIC_LINK
+        sync: false
+      - key: PORTAL_SECRET_KEY
+        sync: false
+      - key: PORTAL_FRONTEND_URL
+        value: https://evolution-portail.pages.dev
+      - key: PORTAL_ALLOWED_ORIGINS
+        value: https://evolution-portail.pages.dev
