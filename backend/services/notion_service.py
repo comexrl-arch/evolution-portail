@@ -1144,6 +1144,46 @@ def validate_fiche(fiche_client_id: str) -> None:
         raise RuntimeError(f"Erreur Notion (validation fiche {fiche_client_id}) : {error}") from error
 
 
+def list_diagnostics_fiche8() -> list[dict]:
+    # Pour l'espace coach : une ligne par client "En cours" avec sa fiche 8
+    # (diagnostic), pour valider sans ouvrir Notion. Filtre les fiches du
+    # client via sa relation "[DB] Fiches Client" plutot qu'une requete
+    # globale sur la relation Fiches Master -> evite de remonter les pages
+    # orphelines (anciennes copies non liees, jamais nettoyees) qui trainent
+    # dans la base suite a d'anciens cycles de duplication n8n.
+    diagnostic_master_id = next(iter(_FICHES_DEBLOCAGE_COACH))
+
+    clients = _query_data_source(
+        CLIENTS_DATA_SOURCE_ID,
+        filter_={"property": "État", "status": {"equals": "En cours"}},
+    )
+
+    result = []
+
+    for client in clients:
+        client_id = client["id"]
+        nom_client = client_display_name(client)
+
+        fiches = _query_data_source(
+            FICHES_CLIENT_DATA_SOURCE_ID,
+            filter_={"property": "⁠[DB] Clients⁠", "relation": {"contains": client_id}},
+        )
+
+        for page in fiches:
+            props = page.get("properties", {})
+
+            if _resolve_master_id(props) == diagnostic_master_id:
+                result.append({
+                    "client_page_id": client_id,
+                    "client_nom": nom_client,
+                    "fiche_client_id": page["id"],
+                    "etat": _prop_value(_prop(props, "État")),
+                })
+                break
+
+    return result
+
+
 def send_portal_invite(email: str, client_page_id: str, client_nom: str) -> None:
     # Factorise la logique utilisee par /portal/auth/request-link : partagee
     # avec onboard_client() pour que le lien d'acces parte automatiquement
