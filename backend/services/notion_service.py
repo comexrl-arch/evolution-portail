@@ -1184,6 +1184,83 @@ def list_diagnostics_fiche8() -> list[dict]:
     return result
 
 
+_ANNOT_BOLD = {
+    "bold": True, "italic": False, "strikethrough": False,
+    "underline": False, "code": False, "color": "default",
+}
+_ANNOT_PLAIN = {
+    "bold": False, "italic": False, "strikethrough": False,
+    "underline": False, "code": False, "color": "default",
+}
+
+
+def get_diagnostic_fiche8(fiche_client_id: str) -> list[dict]:
+    # Chaque score/priorite de la fiche 8 est un bulleted/numbered_list_item
+    # avec exactement 2 segments de rich_text : le libelle en gras ("Score
+    # d'Offre :") suivi de la valeur en texte normal (" _0 / 3"). On ne
+    # generalise pas au-dela de ce motif precis (skip silencieux si un bloc
+    # ne matche pas) pour ne jamais toucher les titres/paragraphes/instructions
+    # de la fiche par erreur.
+    champs = []
+
+    for block in _list_children(fiche_client_id):
+        block_type = block.get("type")
+
+        if block_type not in ("bulleted_list_item", "numbered_list_item"):
+            continue
+
+        rich_text = block.get(block_type, {}).get("rich_text", [])
+
+        if len(rich_text) < 2 or not rich_text[0].get("annotations", {}).get("bold"):
+            continue
+
+        label = rich_text[0].get("plain_text", "").rstrip().rstrip(":").strip()
+        valeur = "".join(part.get("plain_text", "") for part in rich_text[1:]).strip()
+
+        champs.append({
+            "block_id": block["id"],
+            "type": block_type,
+            "label": label,
+            "valeur": valeur,
+        })
+
+    return champs
+
+
+def update_diagnostic_fiche8(updates: list[dict]) -> None:
+    for update in updates:
+        payload = {
+            update["type"]: {
+                "rich_text": [
+                    {
+                        "type": "text",
+                        "text": {"content": f"{update['label']} :"},
+                        "annotations": _ANNOT_BOLD,
+                    },
+                    {
+                        "type": "text",
+                        "text": {"content": f" {update['valeur']}"},
+                        "annotations": _ANNOT_PLAIN,
+                    },
+                ]
+            }
+        }
+
+        try:
+            response = requests.patch(
+                f"{NOTION_API_BASE}/blocks/{update['block_id']}",
+                headers=_headers(),
+                json=payload,
+                timeout=15,
+            )
+            response.raise_for_status()
+
+        except requests.RequestException as error:
+            raise RuntimeError(
+                f"Erreur mise a jour bloc diagnostic {update['block_id']} : {error}"
+            ) from error
+
+
 def send_portal_invite(email: str, client_page_id: str, client_nom: str) -> None:
     # Factorise la logique utilisee par /portal/auth/request-link : partagee
     # avec onboard_client() pour que le lien d'acces parte automatiquement
