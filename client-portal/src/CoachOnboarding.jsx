@@ -31,6 +31,7 @@ export default function CoachOnboarding() {
   const [diagnosticsError, setDiagnosticsError] = useState('')
   const [expandedFicheId, setExpandedFicheId] = useState(null)
   const [champs, setChamps] = useState(null)
+  const [originalChamps, setOriginalChamps] = useState(null)
   const [champsError, setChampsError] = useState('')
   const [ficheLoading, setFicheLoading] = useState(false)
   const [validating, setValidating] = useState(false)
@@ -63,6 +64,7 @@ export default function CoachOnboarding() {
     }
     setExpandedFicheId(diag.fiche_client_id)
     setChamps(null)
+    setOriginalChamps(null)
     setChampsError('')
     setSaved(false)
     setFicheLoading(true)
@@ -74,6 +76,7 @@ export default function CoachOnboarding() {
       if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de chargement')
       const data = await res.json()
       setChamps(data.champs)
+      setOriginalChamps(data.champs)
     } catch (err) {
       setChampsError(err.message)
     } finally {
@@ -84,6 +87,12 @@ export default function CoachOnboarding() {
   function updateChampValeur(index, valeur) {
     setSaved(false)
     setChamps((prev) => prev.map((c, i) => (i === index ? { ...c, valeur } : c)))
+  }
+
+  function cancelChampsEdit() {
+    setChamps(originalChamps)
+    setChampsError('')
+    setSaved(false)
   }
 
   async function saveChamps(ficheClientId) {
@@ -340,6 +349,15 @@ export default function CoachOnboarding() {
                         style={{ background: 'var(--accent)', color: 'var(--text-on-accent)' }}
                       >
                         {saving ? 'Enregistrement...' : saved ? '✓ Enregistré' : 'Enregistrer les modifications'}
+                      </button>
+                    )}
+                    {champs && (
+                      <button
+                        onClick={cancelChampsEdit}
+                        className="w-full font-medium py-2 rounded-xl mb-2"
+                        style={{ color: 'var(--text-secondary)', border: 'var(--border-subtle)' }}
+                      >
+                        Annuler
                       </button>
                     )}
 
