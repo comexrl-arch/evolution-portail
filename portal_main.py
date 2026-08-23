@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from backend.services import notion_service
 from backend.services import portal_auth_service
+from backend.services import systeme_io_service
 
 
 app = FastAPI(
@@ -195,6 +196,73 @@ def portal_valider_fiche(fiche_id: str, authorization: str = Header(default=""))
         raise HTTPException(status_code=503, detail=str(error))
 
     return {"status": "validee"}
+
+
+# --- Espace Onboarding Coach (mobile) : protege par un code d'acces simple,
+# distinct de l'auth client par lien magique. Cree de vrais clients dans
+# Notion, donc jamais accessible sans ce code. ---
+
+def _require_coach_key(x_coach_key: str) -> None:
+    expected = os.getenv("COACH_ONBOARD_KEY")
+
+    if not expected:
+        raise HTTPException(status_code=503, detail="COACH_ONBOARD_KEY manquant.")
+
+    if x_coach_key != expected:
+        raise HTTPException(status_code=401, detail="Code d'acces invalide.")
+
+
+@app.get("/coach/leads/systeme-io")
+def coach_leads_systeme_io(query: str = "", x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return {"leads": systeme_io_service.search_contacts(query)}
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+
+class CoachClientOnboardRequest(BaseModel):
+    nom: str
+    email: str
+    activite: str = ""
+    secteur: str = ""
+    territoire: str = ""
+    contact: str = ""
+    telephone: str = ""
+    site_reseaux: str = ""
+    offre_principale: str = ""
+    client_cible: str = ""
+    objectif_90j: str = ""
+    urgence_echeance: str = ""
+    leads_j0: float | None = None
+    rdv_j0: float | None = None
+    nouveaux_clients_j0: float | None = None
+    ca_j0: float | None = None
+
+
+@app.post("/coach/clients/onboard")
+def coach_onboard_client(
+    request: CoachClientOnboardRequest, x_coach_key: str = Header(default="")
+):
+    _require_coach_key(x_coach_key)
+
+    data = request.model_dump(exclude={"nom", "email"})
+    kpi_j0 = {
+        "leads_j0": data.pop("leads_j0"),
+        "rdv_j0": data.pop("rdv_j0"),
+        "nouveaux_clients_j0": data.pop("nouveaux_clients_j0"),
+        "ca_j0": data.pop("ca_j0"),
+    }
+
+    try:
+        result = notion_service.onboard_client(request.nom, request.email, kpi_j0=kpi_j0, **data)
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+    return result
 
 
 if __name__ == "__main__":
