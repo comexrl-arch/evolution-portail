@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Lock, Search, UserPlus, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown } from 'lucide-react'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 const COACH_KEY_STORAGE = 'coach_onboard_key'
@@ -11,10 +11,23 @@ const emptyForm = {
   leads_j0: '', rdv_j0: '', nouveaux_clients_j0: '', ca_j0: '',
 }
 
+function renderDiagnosticLine(ligne, key) {
+  const texte = ligne.replace(/^#{1,3}\s*/, '').trim()
+
+  if (ligne.startsWith('###') || ligne.startsWith('##') || ligne.startsWith('#')) {
+    return <p key={key} className="font-semibold mt-3" style={{ color: 'var(--text-primary)' }}>{texte}</p>
+  }
+  if (ligne.trim().startsWith('-')) {
+    return <p key={key} className="pl-3">• {ligne.trim().slice(1).trim()}</p>
+  }
+  return <p key={key}>{ligne}</p>
+}
+
 export default function CoachOnboarding() {
   const [coachKey, setCoachKey] = useState(() => localStorage.getItem(COACH_KEY_STORAGE) || '')
   const [pinInput, setPinInput] = useState('')
   const [unlockError, setUnlockError] = useState('')
+  const [tab, setTab] = useState('onboarding')
 
   const [leadsQuery, setLeadsQuery] = useState('')
   const [leads, setLeads] = useState([])
@@ -24,6 +37,75 @@ export default function CoachOnboarding() {
   const [form, setForm] = useState(emptyForm)
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState(null)
+
+  const [diagnostics, setDiagnostics] = useState([])
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
+  const [diagnosticsError, setDiagnosticsError] = useState('')
+  const [expandedFicheId, setExpandedFicheId] = useState(null)
+  const [ficheContent, setFicheContent] = useState(null)
+  const [ficheLoading, setFicheLoading] = useState(false)
+  const [validating, setValidating] = useState(false)
+
+  async function loadDiagnostics() {
+    setDiagnosticsLoading(true)
+    setDiagnosticsError('')
+    try {
+      const res = await fetch(`${API_BASE}/coach/diagnostics`, {
+        headers: { 'X-Coach-Key': coachKey },
+      })
+      if (res.status === 401) return handleAuthFailure()
+      if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de chargement')
+      const data = await res.json()
+      setDiagnostics(data.diagnostics)
+    } catch (err) {
+      setDiagnosticsError(err.message)
+    } finally {
+      setDiagnosticsLoading(false)
+    }
+  }
+
+  async function toggleFiche(diag) {
+    if (expandedFicheId === diag.fiche_client_id) {
+      setExpandedFicheId(null)
+      setFicheContent(null)
+      return
+    }
+    setExpandedFicheId(diag.fiche_client_id)
+    setFicheContent(null)
+    setFicheLoading(true)
+    try {
+      const params = new URLSearchParams({ client_page_id: diag.client_page_id })
+      const res = await fetch(`${API_BASE}/coach/fiches/${diag.fiche_client_id}?${params}`, {
+        headers: { 'X-Coach-Key': coachKey },
+      })
+      if (res.status === 401) return handleAuthFailure()
+      if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de chargement')
+      setFicheContent(await res.json())
+    } catch (err) {
+      setFicheContent({ error: err.message })
+    } finally {
+      setFicheLoading(false)
+    }
+  }
+
+  async function validerFiche(ficheClientId) {
+    setValidating(true)
+    try {
+      const res = await fetch(`${API_BASE}/coach/fiches/${ficheClientId}/valider`, {
+        method: 'POST',
+        headers: { 'X-Coach-Key': coachKey },
+      })
+      if (res.status === 401) return handleAuthFailure()
+      if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de validation')
+      setDiagnostics((prev) => prev.map((d) =>
+        d.fiche_client_id === ficheClientId ? { ...d, etat: 'Terminé' } : d
+      ))
+    } catch (err) {
+      setDiagnosticsError(err.message)
+    } finally {
+      setValidating(false)
+    }
+  }
 
   function handleAuthFailure() {
     localStorage.removeItem(COACH_KEY_STORAGE)
@@ -151,12 +233,98 @@ export default function CoachOnboarding() {
 
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-lg mx-auto">
-      <header className="mb-6">
-        <h1 className="gold-title text-xl font-extrabold">Onboarding Client</h1>
-        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          Recherche un contact systeme.io ou saisis-le manuellement.
-        </p>
+      <header className="mb-4">
+        <h1 className="gold-title text-xl font-extrabold">Espace Coach</h1>
       </header>
+
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setTab('onboarding')}
+          className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5"
+          style={{
+            background: tab === 'onboarding' ? 'var(--accent)' : 'transparent',
+            color: tab === 'onboarding' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+            border: tab === 'onboarding' ? 'none' : 'var(--border-subtle)',
+          }}
+        >
+          <UserPlus size={15} /> Onboarding
+        </button>
+        <button
+          onClick={() => { setTab('diagnostics'); if (!diagnostics.length) loadDiagnostics() }}
+          className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5"
+          style={{
+            background: tab === 'diagnostics' ? 'var(--accent)' : 'transparent',
+            color: tab === 'diagnostics' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+            border: tab === 'diagnostics' ? 'none' : 'var(--border-subtle)',
+          }}
+        >
+          <ClipboardCheck size={15} /> Diagnostics
+        </button>
+      </div>
+
+      {tab === 'diagnostics' && (
+        <div>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
+            Fiche 8 (résultat de diagnostic) des clients en cours — valide sans ouvrir Notion.
+          </p>
+
+          {diagnosticsLoading && <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Chargement...</p>}
+          {diagnosticsError && <p className="text-sm" style={{ color: 'var(--danger)' }}>{diagnosticsError}</p>}
+          {!diagnosticsLoading && diagnostics.length === 0 && !diagnosticsError && (
+            <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Aucun client "En cours" trouvé.</p>
+          )}
+
+          <div className="space-y-3">
+            {diagnostics.map((diag) => (
+              <div key={diag.fiche_client_id} className="card-glass p-4" style={{ borderRadius: 'var(--radius-md)' }}>
+                <button
+                  onClick={() => toggleFiche(diag)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{diag.client_nom}</p>
+                    <p className="text-xs" style={{ color: diag.etat === 'Terminé' ? 'var(--success)' : 'var(--warning)' }}>
+                      {diag.etat === 'Terminé' ? '✅ Validée' : diag.etat || 'Non renseigné'}
+                    </p>
+                  </div>
+                  <ChevronDown
+                    size={18}
+                    color="var(--text-secondary)"
+                    style={{ transform: expandedFicheId === diag.fiche_client_id ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+                  />
+                </button>
+
+                {expandedFicheId === diag.fiche_client_id && (
+                  <div className="mt-4 pt-4" style={{ borderTop: 'var(--border-subtle)' }}>
+                    {ficheLoading && <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Chargement du contenu...</p>}
+                    {ficheContent?.error && <p className="text-sm" style={{ color: 'var(--danger)' }}>{ficheContent.error}</p>}
+                    {ficheContent?.segments && (
+                      <div className="space-y-1.5 mb-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        {ficheContent.segments
+                          .filter((s) => s.type === 'texte' && s.texte?.trim())
+                          .map((s, i) => renderDiagnosticLine(s.texte, i))}
+                      </div>
+                    )}
+                    {diag.etat !== 'Terminé' && (
+                      <button
+                        onClick={() => validerFiche(diag.fiche_client_id)}
+                        disabled={validating}
+                        className="w-full font-semibold py-2 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                        style={{ background: 'var(--success)', color: 'var(--text-on-accent)' }}
+                      >
+                        <CheckCircle2 size={16} />
+                        {validating ? 'Validation...' : 'Valider cette fiche'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'onboarding' && (<>
 
       {result?.ok && (
         <div className="card-glass p-4 mb-4 flex gap-3" style={{ borderRadius: 'var(--radius-md)' }}>
@@ -266,6 +434,7 @@ export default function CoachOnboarding() {
           </button>
         </form>
       )}
+      </>)}
     </div>
   )
 }
