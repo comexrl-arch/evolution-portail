@@ -8,7 +8,8 @@ load_dotenv()
 SECRET_KEY = os.getenv("PORTAL_SECRET_KEY")
 
 MAGIC_LINK_MAX_AGE = 15 * 60  # 15 minutes
-SESSION_MAX_AGE = 30 * 24 * 60 * 60  # 30 jours
+# Duree de vie de la session, configurable via PORTAL_SESSION_MAX_AGE_DAYS (defaut 30j).
+SESSION_MAX_AGE = int(os.getenv("PORTAL_SESSION_MAX_AGE_DAYS", "30")) * 24 * 60 * 60
 
 
 def _serializer() -> URLSafeTimedSerializer:
