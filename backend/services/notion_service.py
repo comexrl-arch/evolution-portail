@@ -403,6 +403,20 @@ def _fiche_sort_key(fiche: dict):
 _FICHES_DEBLOCAGE_COACH = {"39ffaffd87588015a47febbf572e6f62"}
 
 
+# Les 5 fiches de zone du diagnostic initial (fiches 3 a 7) + la fiche 8
+# "resultat". Sert a get_coach_diagnostic_bundle() : la vue lecture seule
+# consommee par l'assistant de synthese qui redige la fiche 8. master_id
+# sans tirets, memes cles que FICHE_SCHEMAS / _FICHES_PAR_MODULE["1. Diagnostic"].
+_DIAGNOSTIC_ZONES = [
+    {"numero": 1, "zone": "Offre", "master_id": "39ffaffd87588001824bdaf6c91b3632"},
+    {"numero": 2, "zone": "Visibilité", "master_id": "39ffaffd8758802d93c6e790f165b53e"},
+    {"numero": 3, "zone": "Prospection", "master_id": "39ffaffd87588048a076e678e9b24230"},
+    {"numero": 4, "zone": "Conversion", "master_id": "39ffaffd875880abae31d7fd1f7a1c99"},
+    {"numero": 5, "zone": "Suivi commercial", "master_id": "39ffaffd87588086b588e7a82738c7b1"},
+]
+_DIAGNOSTIC_FICHE8_MASTER_ID = "39ffaffd87588015a47febbf572e6f62"
+
+
 def _apply_acces(fiches: list[dict]) -> None:
     # Calcule le deblocage nous-memes plutot que de lire la formule Notion
     # "acces", qui depend de "Ordre" et de la relation "Fiche Precedente
@@ -1259,6 +1273,133 @@ def update_diagnostic_fiche8(updates: list[dict]) -> None:
             raise RuntimeError(
                 f"Erreur mise a jour bloc diagnostic {update['block_id']} : {error}"
             ) from error
+
+
+def _resolve_client(client_id: str) -> dict | None:
+    # Identifiant accepte par l'endpoint /coach/diagnostic : l'email du client
+    # (chemin nominal, s'appuie sur find_client_by_email) ou, a defaut, un id
+    # de page Notion "[DB] Clients". Renvoie None si rien ne correspond plutot
+    # que de lever, pour que l'appelant reponde un 404 propre.
+    client_id = (client_id or "").strip()
+
+    if not client_id:
+        return None
+
+    if "@" in client_id:
+        return find_client_by_email(client_id)
+
+    try:
+        return _get_page(client_id)
+
+    except RuntimeError:
+        return None
+
+
+def get_coach_diagnostic_bundle(client_id: str) -> dict:
+    """Vue lecture seule consolidee du diagnostic initial d'un client.
+
+    Pour chacune des 5 fiches de zone (Offre, Visibilite, Prospection,
+    Conversion, Suivi commercial) : les questions fermees Oui/Plutot/Non avec
+    la reponse choisie et la reponse ouverte ("ressenti") quand la fiche en
+    comporte une. Plus l'etat courant de la fiche 8 (scores/priorites deja
+    saisis le cas echeant). Reutilise get_client_dashboard / get_fiche /
+    get_diagnostic_fiche8 : aucune logique de parsing dupliquee ici.
+
+    client_id : email du client ou id de page Notion "[DB] Clients".
+    Leve LookupError si le client est introuvable.
+    """
+    client = _resolve_client(client_id)
+
+    if client is None:
+        raise LookupError(f"Aucun client trouve pour l'identifiant '{client_id}'.")
+
+    client_page_id = client["id"]
+    client_props = client.get("properties", {})
+
+    fiches_par_master = {
+        fiche["master_id"]: fiche
+        for fiche in get_client_dashboard(client_page_id)["fiches"]
+        if fiche.get("master_id")
+    }
+
+    zones = []
+
+    for zone in _DIAGNOSTIC_ZONES:
+        fiche = fiches_par_master.get(zone["master_id"])
+
+        if fiche is None:
+            zones.append({
+                "numero": zone["numero"],
+                "zone": zone["zone"],
+                "fiche_nom": None,
+                "fiche_client_id": None,
+                "master_id": zone["master_id"],
+                "etat": None,
+                "repondu_le": None,
+                "questions_fermees": [],
+                "reponse_ouverte": None,
+            })
+            continue
+
+        detail = get_fiche(fiche["id"], client_page_id)
+        entrees = detail.get("entrees") or []
+        derniere = entrees[-1]["donnees"] if entrees else {}
+        repondu_le = entrees[-1].get("date") if entrees else None
+
+        questions_fermees = []
+        reponse_ouverte = None
+
+        for champ in detail.get("champs") or []:
+            valeur = derniere.get(champ["cle"])
+
+            if champ.get("type") == "choix":
+                questions_fermees.append({
+                    "libelle": champ["libelle"],
+                    "options": champ.get("options", []),
+                    "reponse": valeur,
+                })
+            else:
+                # Zones 1 a 3 : une question ouverte "texte". Zone 4 : le 4e
+                # champ est un nombre (taux de signature /10). Zone 5 : aucune
+                # question ouverte -> reste None. On expose le type pour que
+                # l'assistant sache a quoi il a affaire.
+                reponse_ouverte = {
+                    "libelle": champ["libelle"],
+                    "type": champ.get("type"),
+                    "reponse": valeur,
+                }
+
+        zones.append({
+            "numero": zone["numero"],
+            "zone": zone["zone"],
+            "fiche_nom": fiche.get("nom"),
+            "fiche_client_id": fiche["id"],
+            "master_id": zone["master_id"],
+            "etat": fiche.get("etat"),
+            "repondu_le": repondu_le,
+            "questions_fermees": questions_fermees,
+            "reponse_ouverte": reponse_ouverte,
+        })
+
+    fiche8 = fiches_par_master.get(_DIAGNOSTIC_FICHE8_MASTER_ID)
+
+    fiche_8 = {
+        "fiche_client_id": fiche8["id"] if fiche8 else None,
+        "etat": fiche8.get("etat") if fiche8 else None,
+        "champs": get_diagnostic_fiche8(fiche8["id"]) if fiche8 else [],
+    }
+
+    return {
+        "client": {
+            "page_id": client_page_id,
+            "nom": _prop_value(_prop(client_props, "Nom")),
+            "email": _prop_value(_prop(client_props, "E-mail")),
+            "etat": _prop_value(_prop(client_props, "État")),
+            "objectif_90j": _prop_value(_prop(client_props, "Objectif 90j")),
+        },
+        "zones": zones,
+        "fiche_8": fiche_8,
+    }
 
 
 def send_portal_invite(email: str, client_page_id: str, client_nom: str) -> None:
