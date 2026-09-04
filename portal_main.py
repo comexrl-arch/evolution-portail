@@ -212,12 +212,42 @@ def _require_coach_key(x_coach_key: str) -> None:
         raise HTTPException(status_code=401, detail="Code d'acces invalide.")
 
 
+def _require_diagnostic_api_key(authorization: str) -> None:
+    # Cle technique dediee a la lecture consolidee du diagnostic (endpoint
+    # consomme par l'assistant de synthese de la fiche 8), distincte du code
+    # d'acces de l'Espace Coach (COACH_ONBOARD_KEY / X-Coach-Key) et de l'auth
+    # client par lien magique. Passee en header "Authorization: Bearer <cle>".
+    expected = os.getenv("COACH_DIAGNOSTIC_API_KEY")
+
+    if not expected:
+        raise HTTPException(status_code=503, detail="COACH_DIAGNOSTIC_API_KEY manquant.")
+
+    token = authorization.removeprefix("Bearer ").strip() if authorization else ""
+
+    if not token or token != expected:
+        raise HTTPException(status_code=401, detail="Cle API invalide.")
+
+
 @app.get("/coach/diagnostics")
 def coach_diagnostics(x_coach_key: str = Header(default="")):
     _require_coach_key(x_coach_key)
 
     try:
         return {"diagnostics": notion_service.list_diagnostics_fiche8()}
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+
+@app.get("/coach/diagnostic/{client_id}")
+def coach_diagnostic_bundle(client_id: str, authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        return notion_service.get_coach_diagnostic_bundle(client_id)
+
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error))
 
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error))
