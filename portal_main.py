@@ -4,16 +4,20 @@
 # process/port pour ne jamais risquer d'interrompre le backend agents en
 # production lors d'un redemarrage ou d'un crash cote portail.
 
+import logging
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from backend.services import magic_link_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
 from backend.services import systeme_io_service
+
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
@@ -76,27 +80,53 @@ class PortalLoginRequest(BaseModel):
 
 
 @app.post("/portal/auth/request-link")
-def portal_request_link(request: PortalLoginRequest):
+def portal_request_link(request: PortalLoginRequest, req: Request):
+    # Reponse volontairement generique et identique dans tous les cas (email
+    # inconnu, demande filtree par cooldown/rate-limit, envoi reussi) : ne
+    # jamais reveler si un email existe dans "[DB] Clients" (issue #4, P0).
     generic_response = {
         "status": "sent",
         "message": "Si cet email est enregistre, un lien d'acces a ete envoye.",
     }
 
+    email_normalized = (request.email or "").strip().lower()
+    client_ip = req.client.host if req.client else ""
+
+    decision = magic_link_guard.check_and_register(email_normalized, client_ip)
+
+    if not decision.should_send:
+        logger.info(
+            "Demande de lien magique filtree (%s) email=%s ip=%s",
+            decision.reason, email_normalized, client_ip,
+        )
+        return generic_response
+
     try:
-        client = notion_service.find_client_by_email(request.email)
+        client = notion_service.find_client_by_email(email_normalized)
 
     except RuntimeError as error:
+        logger.warning("Echec recherche client pour lien magique email=%s : %s", email_normalized, error)
         raise HTTPException(status_code=503, detail=str(error))
 
     if not client:
+        logger.info("Demande de lien magique - email inconnu ip=%s", client_ip)
         return generic_response
 
     client_nom = notion_service.client_display_name(client)
 
     try:
-        notion_service.send_portal_invite(request.email, client["id"], client_nom)
+        n8n_response = notion_service.send_portal_invite(email_normalized, client["id"], client_nom)
+        message_id = n8n_response.get("messageId") or n8n_response.get("message_id")
+        logger.info(
+            "Lien magique envoye email=%s client_id=%s message_id=%s",
+            email_normalized, client["id"], message_id,
+        )
 
     except RuntimeError as error:
+        logger.warning(
+            "Echec envoi lien magique email=%s client_id=%s erreur=%s",
+            email_normalized, client["id"], error,
+        )
         raise HTTPException(status_code=503, detail=str(error))
 
     return generic_response
