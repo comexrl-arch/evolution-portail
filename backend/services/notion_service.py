@@ -229,6 +229,8 @@ def client_display_name(client_page: dict) -> str:
 
 
 def find_client_by_email(email: str) -> dict | None:
+    email = (email or "").strip().lower()
+
     results = _query_data_source(
         CLIENTS_DATA_SOURCE_ID,
         filter_={"property": "E-mail", "email": {"equals": email}},
@@ -1511,6 +1513,7 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
     #   creation, pour eviter un doublon si l'endpoint est rappele par erreur.
     # - rollback : toute page deja creee est archivee si une etape echoue en
     #   cours de route, plutot que de laisser un client "a moitie onboarde".
+    email = (email or "").strip().lower()
     client_existant = find_client_by_email(email)
 
     if client_existant:
