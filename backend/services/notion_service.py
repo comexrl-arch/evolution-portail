@@ -276,7 +276,7 @@ _PARCOURS = [
     ("Prospecter · Module 4 · Ma routine (J31)", [(13, 31), (17, 31)]),
     ("Convertir · Module 5 · Mes rendez-vous (J61)", [(18, 61)]),
     ("Convertir · Module 6 · Prix et propositions (J68)", [(16, 68), (19, 68)]),
-    ("Stabiliser · Module 7 et bilan (J75 à J90)", [(20, 75), (21, 85)]),
+    ("Stabiliser · Module 7 et bilan (J75 à J90)", [(20, 75), (22, 75), (23, 85), (21, 85)]),
 ]
 
 # Fiches de suivi qui restent ouvertes jusqu'a J90 une fois leur jour

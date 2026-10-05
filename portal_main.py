@@ -126,6 +126,21 @@ def portal_verify(request: PortalVerifyRequest):
     return {"status": "verified", "session_token": session_token}
 
 
+def _exiger_fiche_ouverte(dashboard: dict, fiche_id: str) -> None:
+    # Verrou cote serveur : un client ne peut ni enregistrer ni valider une
+    # fiche qui n'est pas la sienne ou qui est encore bloquee (jour pas
+    # atteint, fiche precedente non terminee, verrou coach de la fiche 8).
+    cible = fiche_id.replace("-", "")
+
+    for fiche in dashboard.get("fiches", []):
+        if (fiche.get("id") or "").replace("-", "") == cible:
+            if "Bloqué" in (fiche.get("acces") or ""):
+                raise HTTPException(status_code=403, detail="Cette fiche n'est pas encore ouverte.")
+            return
+
+    raise HTTPException(status_code=403, detail="Fiche inconnue pour ce client.")
+
+
 @app.get("/portal/me")
 def portal_me(authorization: str = Header(default="")):
     session = _session_from_header(authorization)
@@ -175,6 +190,7 @@ def portal_create_entry(
 
     try:
         dashboard = notion_service.get_client_dashboard(session["client_page_id"])
+        _exiger_fiche_ouverte(dashboard, fiche_id)
         entry = notion_service.create_entry(
             fiche_id, session["client_page_id"], dashboard["nom"], request.data
         )
@@ -187,9 +203,11 @@ def portal_create_entry(
 
 @app.post("/portal/fiches/{fiche_id}/valider")
 def portal_valider_fiche(fiche_id: str, authorization: str = Header(default="")):
-    _session_from_header(authorization)
+    session = _session_from_header(authorization)
 
     try:
+        dashboard = notion_service.get_client_dashboard(session["client_page_id"])
+        _exiger_fiche_ouverte(dashboard, fiche_id)
         notion_service.validate_fiche(fiche_id)
 
     except RuntimeError as error:

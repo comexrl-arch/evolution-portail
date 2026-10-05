@@ -329,4 +329,35 @@ FICHE_SCHEMAS = {
             {"cle": "prochaine_etape_developpement", "libelle": "Quelle est la prochaine étape de développement (nouveau produit, nouveau marché, automatisation poussée) ?", "type": "texte", "ordre": 5},
         ],
     },
+
+    # 22. MES RECOMMANDATIONS (accompagne le Module 7, ajoutee le 05/10/2026)
+    "3f0faffd875881778743eb169a6915fb": {
+        "nom": "22. MES RECOMMANDATIONS",
+        "mode": "unique",
+        "champs": [
+            {"cle": "clients_satisfaits", "libelle": "Quels sont les 3 clients les plus satisfaits à qui tu peux demander une recommandation ?", "type": "texte", "ordre": 1},
+            {"cle": "message_recommandation", "libelle": "Quel message vas-tu leur envoyer ? (adapte le modèle du Module 7)", "type": "texte", "ordre": 2},
+            {"cle": "demandes_envoyees", "libelle": "À qui as-tu envoyé ta demande, et quand ?", "type": "texte", "ordre": 3},
+            {"cle": "recommandations_recues", "libelle": "Quelles recommandations as-tu reçues ? (nom, besoin, prochaine action)", "type": "texte", "ordre": 4},
+            {"cle": "routine_fidelisation", "libelle": "Quelle action de fidélisation vas-tu faire chaque mois pour tes clients actuels ?", "type": "texte", "ordre": 5},
+        ],
+    },
+
+    # 23. MON BILAN J90 (fin de parcours, ajoutee le 05/10/2026)
+    "3f0faffd87588137927fda435c873a9f": {
+        "nom": "23. MON BILAN J90",
+        "mode": "unique",
+        "champs": [
+            {"cle": "nb_prospects_contactes", "libelle": "Nombre de prospects contactés :", "type": "texte", "ordre": 1},
+            {"cle": "nb_rdv_obtenus", "libelle": "Nombre de rendez-vous obtenus :", "type": "texte", "ordre": 2},
+            {"cle": "nb_propositions", "libelle": "Nombre de propositions envoyées :", "type": "texte", "ordre": 3},
+            {"cle": "nb_clients_signes", "libelle": "Nombre de nouveaux clients signés :", "type": "texte", "ordre": 4},
+            {"cle": "ca_signe", "libelle": "Chiffre d'affaires signé sur la période :", "type": "texte", "ordre": 5},
+            {"cle": "objectif_atteint", "libelle": "Ton objectif de départ (fiche 1) est-il atteint ? Explique en une phrase.", "type": "texte", "ordre": 6},
+            {"cle": "ce_qui_a_fonctionne", "libelle": "Qu'est-ce qui a le mieux fonctionné pour toi ?", "type": "texte", "ordre": 7},
+            {"cle": "ce_qui_reste_difficile", "libelle": "Qu'est-ce qui reste difficile ?", "type": "texte", "ordre": 8},
+            {"cle": "habitudes_gardees", "libelle": "Quelles sont les 3 habitudes que tu gardes après le programme ?", "type": "texte", "ordre": 9},
+            {"cle": "priorite_suite", "libelle": "Quelle est ta priorité pour les 90 prochains jours ?", "type": "texte", "ordre": 10},
+        ],
+    },
 }
