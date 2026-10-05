@@ -297,12 +297,13 @@ _FICHE_JOUR = {
 }
 
 # Parcours "Atelier Collectif Terrain" (decision du 05/10/2026) : portail en
-# version courte, 5 fiches, une etape par session hebdomadaire. Pas de
+# version courte, 6 fiches, une etape par session hebdomadaire. Pas de
 # diagnostic ni de verrou coach. Le tableau de prospection (14) reste ouvert.
 _PARCOURS_ATELIER = [
     ("Session 1 · Clarifier ton offre (J0)", [(9, 0), (10, 0), (11, 0)]),
     ("Session 2 · Prospecter (J7)", [(15, 7)]),
     ("Session 3 · Suivre tes prospects (J14)", [(14, 14)]),
+    ("Session 4 · Planifier ta semaine (J21)", [(13, 21)]),
 ]
 _ATELIER_MODULE = {
     _NUMERO_TO_MASTER_ID[str(numero)]: libelle
@@ -315,7 +316,7 @@ _ATELIER_JOUR = {
     for numero, jour in etapes
 }
 _ATELIER_POSITION = {master_id: position for position, master_id in enumerate(_ATELIER_JOUR)}
-_ATELIER_PERMANENTES = {_NUMERO_TO_MASTER_ID["14"]}
+_ATELIER_PERMANENTES = {_NUMERO_TO_MASTER_ID["14"], _NUMERO_TO_MASTER_ID["13"]}
 
 
 def _est_parcours_atelier(valeur) -> bool:
