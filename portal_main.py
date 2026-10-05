@@ -450,7 +450,7 @@ def _docuseal_extraire(payload: dict) -> dict | None:
         "email": email,
         "parcours": parcours,
         "telephone": _docuseal_valeur(values, "téléphone", "telephone") or str(data.get("phone") or "").strip(),
-        "date_demarrage": _docuseal_date_iso(_docuseal_valeur(values, "session 1", "date de la session"))
+        "date_demarrage": _docuseal_date_iso(_docuseal_valeur(values, "session 1", "date de la session", "champ de date"))
         if parcours == "Atelier" else "",
     }
 
