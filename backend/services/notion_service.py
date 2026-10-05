@@ -319,6 +319,9 @@ _ATELIER_JOUR = {
     for numero, jour in etapes
 }
 _ATELIER_POSITION = {master_id: position for position, master_id in enumerate(_ATELIER_JOUR)}
+# Livrables masques pour l'atelier (decision du 05/10/2026) : ceux des fiches
+# 8 (aides publiques, bonus du coaching) et 14 (plan 30 jours, KPI 90 jours).
+_ATELIER_SANS_LIVRABLES = {_NUMERO_TO_MASTER_ID["8"], _NUMERO_TO_MASTER_ID["14"]}
 _ATELIER_PERMANENTES = {_NUMERO_TO_MASTER_ID["14"], _NUMERO_TO_MASTER_ID["13"]}
 
 
@@ -1055,13 +1058,25 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
         if prefill:
             entries = [{"id": None, "date": None, "donnees": prefill}]
 
+    livrables = _livrables_for_fiche(fiche_client_id, master_id)
+
+    if livrables and master_id in _ATELIER_SANS_LIVRABLES:
+        try:
+            client_props = _get_page(client_page_id).get("properties", {})
+
+            if _est_parcours_atelier(_prop_value(_prop(client_props, "Parcours"))):
+                livrables = []
+        except Exception:
+            # Dans le doute, on ne montre pas un livrable reserve au coaching.
+            livrables = []
+
     result = {
         "fiche_client_id": fiche_client_id,
         "nom": nom,
         "mode": mode,
         "champs": champs,
         "entrees": entries,
-        "livrables": _livrables_for_fiche(fiche_client_id, master_id),
+        "livrables": livrables,
     }
 
     if mode == "unique":
