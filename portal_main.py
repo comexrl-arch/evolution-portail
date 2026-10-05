@@ -7,7 +7,9 @@
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Header, HTTPException
+import re
+
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -386,6 +388,106 @@ def coach_onboard_client(
         raise HTTPException(status_code=503, detail=str(error))
 
     return result
+
+
+# --- Contrat signe dans DocuSeal -> creation automatique du client et envoi
+# du lien d'acces. DocuSeal appelle cette adresse a chaque contrat termine,
+# avec l'en-tete secret X-Webhook-Secret (= DOCUSEAL_WEBHOOK_SECRET). ---
+
+_DOCUSEAL_PARCOURS = {
+    "6159080": "Atelier",
+    "6152105": "Coaching 90 jours",
+}
+
+
+def _docuseal_valeur(values: list, *mots: str) -> str:
+    for item in values or []:
+        champ = str((item or {}).get("field") or "").lower()
+        valeur = (item or {}).get("value")
+
+        if valeur in (None, "", False, True) or not isinstance(valeur, (str, int, float)):
+            continue
+
+        if any(mot in champ for mot in mots):
+            return str(valeur).strip()
+
+    return ""
+
+
+def _docuseal_date_iso(texte: str) -> str:
+    texte = (texte or "").strip()
+    match = re.search(r"(\d{4})-(\d{2})-(\d{2})", texte)
+
+    if match:
+        return match.group(0)
+
+    match = re.search(r"(\d{1,2})[/.\- ](\d{1,2})[/.\- ](\d{4})", texte)
+
+    if match:
+        jour, mois, annee = match.groups()
+        return f"{annee}-{int(mois):02d}-{int(jour):02d}"
+
+    return ""
+
+
+def _docuseal_extraire(payload: dict) -> dict | None:
+    if (payload or {}).get("event_type") != "form.completed":
+        return None
+
+    data = payload.get("data") or {}
+    template_id = str((data.get("template") or {}).get("id") or "")
+    parcours = _DOCUSEAL_PARCOURS.get(template_id)
+    email = str(data.get("email") or "").strip().lower()
+
+    if not parcours or not email:
+        return None
+
+    values = data.get("values") or []
+    nom = _docuseal_valeur(values, "nom", "raison sociale") or str(data.get("name") or "").strip() or email
+
+    return {
+        "nom": nom,
+        "email": email,
+        "parcours": parcours,
+        "telephone": _docuseal_valeur(values, "téléphone", "telephone") or str(data.get("phone") or "").strip(),
+        "date_demarrage": _docuseal_date_iso(_docuseal_valeur(values, "session 1", "date de la session"))
+        if parcours == "Atelier" else "",
+    }
+
+
+def _docuseal_onboard(infos: dict) -> None:
+    try:
+        notion_service.onboard_client(
+            infos["nom"], infos["email"], kpi_j0={},
+            parcours=infos["parcours"], telephone=infos["telephone"],
+            date_demarrage=infos["date_demarrage"],
+        )
+    except Exception as error:  # doublon, Notion indisponible, etc.
+        print(f"[docuseal] onboarding non fait pour {infos['email']} : {error}")
+
+
+@app.post("/webhooks/docuseal")
+def webhook_docuseal(
+    payload: dict, background_tasks: BackgroundTasks, x_webhook_secret: str = Header(default="")
+):
+    expected = os.getenv("DOCUSEAL_WEBHOOK_SECRET")
+
+    if not expected:
+        raise HTTPException(status_code=503, detail="DOCUSEAL_WEBHOOK_SECRET manquant.")
+
+    if x_webhook_secret != expected:
+        raise HTTPException(status_code=401, detail="Secret invalide.")
+
+    infos = _docuseal_extraire(payload)
+
+    if not infos:
+        return {"status": "ignore"}
+
+    # L'onboarding enchaine une vingtaine d'appels Notion : on repond tout de
+    # suite a DocuSeal et on cree le client en arriere-plan.
+    background_tasks.add_task(_docuseal_onboard, infos)
+
+    return {"status": "accepte", "parcours": infos["parcours"]}
 
 
 if __name__ == "__main__":

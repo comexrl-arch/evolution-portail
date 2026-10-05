@@ -322,6 +322,9 @@ _ATELIER_POSITION = {master_id: position for position, master_id in enumerate(_A
 # Livrables masques pour l'atelier (decision du 05/10/2026) : ceux des fiches
 # 8 (aides publiques, bonus du coaching) et 14 (plan 30 jours, KPI 90 jours).
 _ATELIER_SANS_LIVRABLES = {_NUMERO_TO_MASTER_ID["8"], _NUMERO_TO_MASTER_ID["14"]}
+# Texte de bienvenue (fiche 0) propre a l'atelier : page Notion a part, modifiable
+# par Rony, lue a la place du master quand le client suit le parcours Atelier.
+_ATELIER_FICHE0_TEXTE_PAGE_ID = "3f0faffd8758812882e6d74429466129"
 _ATELIER_PERMANENTES = {_NUMERO_TO_MASTER_ID["14"], _NUMERO_TO_MASTER_ID["13"]}
 
 
@@ -1031,7 +1034,23 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
             # _page_segments() renvoie pour autant une liste vide. Le
             # contenu de ces fiches client n'est de toute facon jamais
             # modifie individuellement : le master fait foi.
-            segments = _page_segments(master_id)
+            source_id = master_id
+
+            if master_id == _NUMERO_TO_MASTER_ID["0"]:
+                try:
+                    client_props = _get_page(client_page_id).get("properties", {})
+
+                    if _est_parcours_atelier(_prop_value(_prop(client_props, "Parcours"))):
+                        source_id = _ATELIER_FICHE0_TEXTE_PAGE_ID
+                except Exception:
+                    source_id = master_id
+
+            try:
+                segments = _page_segments(source_id)
+            except Exception:
+                if source_id == master_id:
+                    raise
+                segments = _page_segments(master_id)
 
     champs = _champs_for(schema, master_id, segments)
 
@@ -1669,6 +1688,11 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
             properties[prop_name] = {"url": str(valeur)}
         elif prop_type == "phone_number":
             properties[prop_name] = {"phone_number": str(valeur)}
+
+    date_demarrage = str(extra.get("date_demarrage") or "").strip()
+
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_demarrage):
+        properties["Date de démarrage"] = {"date": {"start": date_demarrage}}
 
     atelier = _est_parcours_atelier(extra.get("parcours"))
     properties["Parcours"] = {"select": {"name": "Atelier" if atelier else "Coaching 90 jours"}}
