@@ -258,13 +258,16 @@ _NUMERO_TO_MASTER_ID = {
 # module vers les fiches master qu'il contient. Fige ici comme les autres
 # schemas plutot que requete a chaque affichage : la structure des modules
 # ne change pas au fil de l'eau, contrairement aux donnees d'un client.
+# Libelles alignes sur la numerotation de la formation systeme.io (Modules 0
+# a 7) : le portail n'a plus sa propre numerotation de modules, il renvoie
+# aux modules de la formation. L'ordre d'affichage vient de l'ordre du dict.
 _FICHES_PAR_MODULE = {
-    "0. Commencer ici": [
+    "Démarrage": [
         "39ffaffd87588016a405da4d8a0582d4",
         "39ffaffd8758809e9807c4c5e5504352",
         "39ffaffd875880a6aad2f438e54855dd",
     ],
-    "1. Diagnostic": [
+    "Diagnostic de départ": [
         "39ffaffd87588001824bdaf6c91b3632",
         "39ffaffd8758802d93c6e790f165b53e",
         "39ffaffd87588048a076e678e9b24230",
@@ -272,24 +275,24 @@ _FICHES_PAR_MODULE = {
         "39ffaffd87588086b588e7a82738c7b1",
         "39ffaffd87588015a47febbf572e6f62",
     ],
-    "2. Offre & Positionnement": [
+    "Offre & cible · Modules 1 et 2": [
         "39ffaffd8758805ebebfd5f5c3914a56",
         "39ffaffd875880deb56ce1395ae32687",
         "39ffaffd875880f980a9f99a718d4141",
         "39ffaffd875880d7bf80c72c865a88b2",
     ],
-    "3. Prospection Terrain": [
+    "Pitch & prospection · Modules 3 et 4": [
         "39ffaffd875880ebbcdde70a29c35269",
         "39ffaffd875880f7aee1e8b138416d0a",
         "39ffaffd875880f9a066e6a7e1dc7d37",
         "39ffaffd8758808c91dfdd277b66fa2a",
         "39ffaffd875880708581d60c234aab45",
     ],
-    "4. RDV & Conversion": [
+    "RDV, prix & closing · Modules 5 et 6": [
         "39ffaffd87588001b983e13aa1a06cda",
         "39ffaffd8758805398f7dc22d26b9626",
     ],
-    "5. KPI & Pilotage": [
+    "Pilotage & suite · J61 à J90": [
         "39ffaffd875880809b88e03b18dd4be3",
         "39ffaffd875880448c4fe3287b893bf1",
     ],
@@ -408,7 +411,7 @@ _FICHES_DEBLOCAGE_COACH = {"39ffaffd87588015a47febbf572e6f62"}
 # Les 5 fiches de zone du diagnostic initial (fiches 3 a 7) + la fiche 8
 # "resultat". Sert a get_coach_diagnostic_bundle() : la vue lecture seule
 # consommee par l'assistant de synthese qui redige la fiche 8. master_id
-# sans tirets, memes cles que FICHE_SCHEMAS / _FICHES_PAR_MODULE["1. Diagnostic"].
+# sans tirets, memes cles que FICHE_SCHEMAS / _FICHES_PAR_MODULE["Diagnostic de départ"].
 _DIAGNOSTIC_ZONES = [
     {"numero": 1, "zone": "Offre", "master_id": "39ffaffd87588001824bdaf6c91b3632"},
     {"numero": 2, "zone": "Visibilité", "master_id": "39ffaffd8758802d93c6e790f165b53e"},
@@ -991,7 +994,18 @@ _CLIENT_FIELD_SYNC = {
     ): "Objectif 90j",
     (
         "39ffaffd8758809e9807c4c5e5504352",
+        "Quel est ton objectif chiffré ou personnel pour les 90 prochains jours ?",
+    ): "Objectif 90j",
+    (
+        "39ffaffd8758809e9807c4c5e5504352",
         "Votre activité / Votre métier :",
+    ): "Activité",
+    # Variantes au tutoiement : les fiches master passent au "tu" (harmonisation
+    # avec la formation). Les deux formulations restent acceptees pour que la
+    # synchro ne casse pas pendant la transition.
+    (
+        "39ffaffd8758809e9807c4c5e5504352",
+        "Ton activité / Ton métier :",
     ): "Activité",
 }
 
@@ -1040,6 +1054,10 @@ _KPI_FIELD_SYNC = {
     (
         "39ffaffd875880abae31d7fd1f7a1c99",
         "Sur 10 rendez-vous commerciaux réalisés, combien de clients signez-vous en moyenne aujourd'hui ?",
+    ): {"nom": "Taux de signature (/10 RDV)", "categorie": "Conversion"},
+    (
+        "39ffaffd875880abae31d7fd1f7a1c99",
+        "Sur 10 rendez-vous commerciaux réalisés, combien de clients signes-tu en moyenne aujourd'hui ?",
     ): {"nom": "Taux de signature (/10 RDV)", "categorie": "Conversion"},
 }
 
