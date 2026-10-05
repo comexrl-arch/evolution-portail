@@ -297,9 +297,12 @@ _FICHE_JOUR = {
 }
 
 # Parcours "Atelier Collectif Terrain" (decision du 05/10/2026) : portail en
-# version courte, 6 fiches, une etape par session hebdomadaire. Pas de
-# diagnostic ni de verrou coach. Le tableau de prospection (14) reste ouvert.
+# version courte, 15 fiches, une etape par session hebdomadaire. Pas de
+# Diagnostic de l'onboarding conserve (fiche 8 validee par le coach). Le tableau de prospection (14) reste ouvert.
 _PARCOURS_ATELIER = [
+    # Demarrage et diagnostic de l'onboarding (fiches 0 a 8), ouverts des
+    # l'inscription, donc avant la date de la session 1 (jour negatif).
+    ("Avant la session 1 · Démarrage et diagnostic", [(n, -60) for n in range(0, 9)]),
     ("Session 1 · Clarifier ton offre (J0)", [(9, 0), (10, 0), (11, 0)]),
     ("Session 2 · Prospecter (J7)", [(15, 7)]),
     ("Session 3 · Suivre tes prospects (J14)", [(14, 14)]),
