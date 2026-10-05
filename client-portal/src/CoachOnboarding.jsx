@@ -7,7 +7,7 @@ const COACH_KEY_STORAGE = 'coach_onboard_key'
 const emptyForm = {
   nom: '', email: '', telephone: '', activite: '', secteur: '', territoire: '',
   contact: '', site_reseaux: '', offre_principale: '', client_cible: '',
-  objectif_90j: '', urgence_echeance: '',
+  objectif_90j: '', urgence_echeance: '', parcours: 'Coaching 90 jours',
   leads_j0: '', rdv_j0: '', nouveaux_clients_j0: '', ca_j0: '',
 }
 
@@ -453,6 +453,12 @@ export default function CoachOnboarding() {
           <input required type="email" placeholder="Email" value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
             className="w-full field-input bg-transparent outline-none px-3 py-2 text-sm" />
+          <select value={form.parcours}
+            onChange={(e) => setForm({ ...form, parcours: e.target.value })}
+            className="w-full field-input bg-transparent outline-none px-3 py-2 text-sm">
+            <option value="Coaching 90 jours">Parcours : Coaching 90 jours</option>
+            <option value="Atelier">Parcours : Atelier Collectif Terrain</option>
+          </select>
           <input placeholder="Téléphone" value={form.telephone}
             onChange={(e) => setForm({ ...form, telephone: e.target.value })}
             className="w-full field-input bg-transparent outline-none px-3 py-2 text-sm" />

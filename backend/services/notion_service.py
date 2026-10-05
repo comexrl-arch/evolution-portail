@@ -296,6 +296,32 @@ _FICHE_JOUR = {
     for numero, jour in etapes
 }
 
+# Parcours "Atelier Collectif Terrain" (decision du 05/10/2026) : portail en
+# version courte, 5 fiches, une etape par session hebdomadaire. Pas de
+# diagnostic ni de verrou coach. Le tableau de prospection (14) reste ouvert.
+_PARCOURS_ATELIER = [
+    ("Session 1 · Clarifier ton offre (J0)", [(9, 0), (10, 0), (11, 0)]),
+    ("Session 2 · Prospecter (J7)", [(15, 7)]),
+    ("Session 3 · Suivre tes prospects (J14)", [(14, 14)]),
+]
+_ATELIER_MODULE = {
+    _NUMERO_TO_MASTER_ID[str(numero)]: libelle
+    for libelle, etapes in _PARCOURS_ATELIER
+    for numero, _jour in etapes
+}
+_ATELIER_JOUR = {
+    _NUMERO_TO_MASTER_ID[str(numero)]: jour
+    for _libelle, etapes in _PARCOURS_ATELIER
+    for numero, jour in etapes
+}
+_ATELIER_POSITION = {master_id: position for position, master_id in enumerate(_ATELIER_JOUR)}
+_ATELIER_PERMANENTES = {_NUMERO_TO_MASTER_ID["14"]}
+
+
+def _est_parcours_atelier(valeur) -> bool:
+    return "atelier" in str(valeur or "").lower()
+
+
 _FICHE_POSITION = {
     _NUMERO_TO_MASTER_ID[str(numero)]: position
     for position, numero in enumerate(
@@ -446,7 +472,7 @@ def _jour_parcours(date_demarrage) -> int | None:
     return (datetime.now(timezone.utc).date() - debut).days
 
 
-def _apply_acces(fiches: list[dict], date_demarrage=None) -> None:
+def _apply_acces(fiches: list[dict], date_demarrage=None, jours=None, permanentes=None) -> None:
     # Calcule le deblocage nous-memes plutot que de lire la formule Notion
     # "acces". Trois regles, dans l'ordre du parcours (_PARCOURS) :
     #  1. jour d'ouverture atteint (frise J0 -> J90) ;
@@ -454,12 +480,14 @@ def _apply_acces(fiches: list[dict], date_demarrage=None) -> None:
     #  3. verrou coach : rien ne s'ouvre apres la fiche 8 tant que le coach
     #     ne l'a pas passee a Termine.
     jour = _jour_parcours(date_demarrage)
+    jours = _FICHE_JOUR if jours is None else jours
+    permanentes = _FICHES_PERMANENTES if permanentes is None else permanentes
     previous_terminee = True
 
     for fiche in fiches:
         master_id = fiche.get("master_id")
         etat = fiche.get("etat")
-        jour_ouverture = _FICHE_JOUR.get(master_id, 0)
+        jour_ouverture = jours.get(master_id, 0)
         trop_tot = jour is not None and jour < jour_ouverture
 
         if master_id in _FICHES_DEBLOCAGE_COACH:
@@ -478,7 +506,7 @@ def _apply_acces(fiches: list[dict], date_demarrage=None) -> None:
         else:
             fiche["acces"] = "🔒 Bloqué"
 
-        if master_id in _FICHES_PERMANENTES:
+        if master_id in permanentes:
             # Fiche de suivi : elle ne bloque pas la suite, sauf si elle
             # n'est pas encore ouverte elle-meme.
             previous_terminee = previous_terminee and not trop_tot
@@ -619,7 +647,7 @@ def get_livrable(livrable_id: str) -> dict:
     }
 
 
-def _repair_missing_fiches(client_page_id: str, nom_client: str, fiches: list[dict]) -> list[dict]:
+def _repair_missing_fiches(client_page_id: str, nom_client: str, fiches: list[dict], autorisees=None) -> list[dict]:
     # Le pipeline n8n de duplication a deja laisse des clients avec des
     # fiches manquantes (verifie en direct : Tarzan n'en avait que 16/22 -
     # aucun signal d'erreur nulle part, juste des fiches absentes sans
@@ -633,6 +661,9 @@ def _repair_missing_fiches(client_page_id: str, nom_client: str, fiches: list[di
 
     for master_id, schema in _fiche_master_items_sorted():
         if master_id in existing_master_ids:
+            continue
+
+        if autorisees is not None and master_id not in autorisees:
             continue
 
         ordre = int(_leading_number(schema["nom"]) or 0)
@@ -667,13 +698,27 @@ def get_client_dashboard(client_page_id: str) -> dict:
     fiche_ids = _prop_value(_prop(props, "[DB] Fiches Client")) or []
     fiches = [_fiche_summary(fiche_id) for fiche_id in fiche_ids]
 
-    if len(fiches) < len(FICHE_SCHEMAS):
-        fiches = _repair_missing_fiches(client_page_id, nom_client, fiches)
-
     date_demarrage = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
 
-    fiches.sort(key=_fiche_sort_key)
-    _apply_acces(fiches, date_demarrage)
+    if _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))):
+        # Atelier : seules les fiches du parcours court sont visibles.
+        fiches = [f for f in fiches if f.get("master_id") in _ATELIER_JOUR]
+
+        if len(fiches) < len(_ATELIER_JOUR):
+            fiches = _repair_missing_fiches(client_page_id, nom_client, fiches, autorisees=set(_ATELIER_JOUR))
+            fiches = [f for f in fiches if f.get("master_id") in _ATELIER_JOUR]
+
+        for fiche in fiches:
+            fiche["module"] = _ATELIER_MODULE.get(fiche.get("master_id"))
+
+        fiches.sort(key=lambda f: _ATELIER_POSITION.get(f.get("master_id"), 999))
+        _apply_acces(fiches, date_demarrage, jours=_ATELIER_JOUR, permanentes=_ATELIER_PERMANENTES)
+    else:
+        if len(fiches) < len(FICHE_SCHEMAS):
+            fiches = _repair_missing_fiches(client_page_id, nom_client, fiches)
+
+        fiches.sort(key=_fiche_sort_key)
+        _apply_acces(fiches, date_demarrage)
 
     return {
         "nom": nom_client,
@@ -1606,6 +1651,9 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
         elif prop_type == "phone_number":
             properties[prop_name] = {"phone_number": str(valeur)}
 
+    atelier = _est_parcours_atelier(extra.get("parcours"))
+    properties["Parcours"] = {"select": {"name": "Atelier" if atelier else "Coaching 90 jours"}}
+
     kpi_j0 = kpi_j0 or {}
     created_page_ids: list[str] = []
 
@@ -1617,6 +1665,9 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
         fiches_creees = 0
 
         for master_id, schema in _fiche_master_items_sorted():
+            if atelier and master_id not in _ATELIER_JOUR:
+                continue
+
             ordre = int(_leading_number(schema["nom"]) or 0)
 
             fiche_properties = {

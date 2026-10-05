@@ -355,6 +355,7 @@ class CoachClientOnboardRequest(BaseModel):
     telephone: str = ""
     site_reseaux: str = ""
     offre_principale: str = ""
+    parcours: str = ""
     client_cible: str = ""
     objectif_90j: str = ""
     urgence_echeance: str = ""
