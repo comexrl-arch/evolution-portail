@@ -258,41 +258,49 @@ _NUMERO_TO_MASTER_ID = {
 # module vers les fiches master qu'il contient. Fige ici comme les autres
 # schemas plutot que requete a chaque affichage : la structure des modules
 # ne change pas au fil de l'eau, contrairement aux donnees d'un client.
+# Libelles alignes sur la numerotation de la formation systeme.io (Modules 0
+# a 7) : le portail n'a plus sa propre numerotation de modules, il renvoie
+# aux modules de la formation. L'ordre d'affichage vient de l'ordre du dict.
+# Parcours unique valide par Rony le 05/10/2026 (frise J0 -> J90).
+# Chaque etape = (libelle affiche, [(numero de fiche, jour d'ouverture)]).
+# L'ordre de cette liste EST l'ordre du parcours (il remplace le tri par
+# numero de fiche). Une fiche s'ouvre quand son jour est atteint (compte
+# depuis "Date de demarrage" du client) ET que la fiche precedente du
+# parcours est terminee.
+_PARCOURS = [
+    ("Démarrage · J0", [(0, 0), (1, 0), (2, 0)]),
+    ("Diagnostic · J1 à J3", [(3, 1), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1)]),
+    ("Clarifier · Module 1 · Mon offre (J4)", [(9, 4), (11, 4), (14, 4)]),
+    ("Clarifier · Module 2 · Ma cible (J11)", [(10, 11), (12, 11)]),
+    ("Clarifier · Module 3 · Mon pitch (J18)", [(15, 18)]),
+    ("Prospecter · Module 4 · Ma routine (J31)", [(13, 31), (17, 31)]),
+    ("Convertir · Module 5 · Mes rendez-vous (J61)", [(18, 61)]),
+    ("Convertir · Module 6 · Prix et propositions (J68)", [(16, 68), (19, 68)]),
+    ("Stabiliser · Module 7 et bilan (J75 à J90)", [(20, 75), (21, 85)]),
+]
+
+# Fiches de suivi qui restent ouvertes jusqu'a J90 une fois leur jour
+# atteint : elles ne bloquent pas la suite du parcours (14 = tableau de
+# prospection, 13 = plan de la semaine, 17 = bilan hebdomadaire, 19 = suivi
+# des propositions).
+_FICHES_PERMANENTES = {_NUMERO_TO_MASTER_ID[n] for n in ("13", "14", "17", "19")}
+
 _FICHES_PAR_MODULE = {
-    "0. Commencer ici": [
-        "39ffaffd87588016a405da4d8a0582d4",
-        "39ffaffd8758809e9807c4c5e5504352",
-        "39ffaffd875880a6aad2f438e54855dd",
-    ],
-    "1. Diagnostic": [
-        "39ffaffd87588001824bdaf6c91b3632",
-        "39ffaffd8758802d93c6e790f165b53e",
-        "39ffaffd87588048a076e678e9b24230",
-        "39ffaffd875880abae31d7fd1f7a1c99",
-        "39ffaffd87588086b588e7a82738c7b1",
-        "39ffaffd87588015a47febbf572e6f62",
-    ],
-    "2. Offre & Positionnement": [
-        "39ffaffd8758805ebebfd5f5c3914a56",
-        "39ffaffd875880deb56ce1395ae32687",
-        "39ffaffd875880f980a9f99a718d4141",
-        "39ffaffd875880d7bf80c72c865a88b2",
-    ],
-    "3. Prospection Terrain": [
-        "39ffaffd875880ebbcdde70a29c35269",
-        "39ffaffd875880f7aee1e8b138416d0a",
-        "39ffaffd875880f9a066e6a7e1dc7d37",
-        "39ffaffd8758808c91dfdd277b66fa2a",
-        "39ffaffd875880708581d60c234aab45",
-    ],
-    "4. RDV & Conversion": [
-        "39ffaffd87588001b983e13aa1a06cda",
-        "39ffaffd8758805398f7dc22d26b9626",
-    ],
-    "5. KPI & Pilotage": [
-        "39ffaffd875880809b88e03b18dd4be3",
-        "39ffaffd875880448c4fe3287b893bf1",
-    ],
+    libelle: [_NUMERO_TO_MASTER_ID[str(numero)] for numero, _jour in etapes]
+    for libelle, etapes in _PARCOURS
+}
+
+_FICHE_JOUR = {
+    _NUMERO_TO_MASTER_ID[str(numero)]: jour
+    for _libelle, etapes in _PARCOURS
+    for numero, jour in etapes
+}
+
+_FICHE_POSITION = {
+    _NUMERO_TO_MASTER_ID[str(numero)]: position
+    for position, numero in enumerate(
+        numero for _libelle, etapes in _PARCOURS for numero, _jour in etapes
+    )
 }
 
 FICHE_MODULES = {
@@ -383,16 +391,20 @@ def _fiche_summary(fiche_client_id: str) -> dict:
 
 
 def _fiche_sort_key(fiche: dict):
-    if fiche.get("ordre") is not None:
-        return fiche["ordre"]
+    # Ordre du parcours (_PARCOURS) en priorite : il ne suit plus le numero
+    # de fiche (ex. la fiche 11 passe avant la 10, la 15 avant la 13).
+    position = _FICHE_POSITION.get(fiche.get("master_id"))
 
-    # Repli : "Ordre" n'est pas renseigne par le pipeline n8n de duplication
-    # (meme lacune que la relation Fiches Master). Les titres suivent le
-    # format "{Client} - {N}. {Titre}", on utilise ce numero comme tri.
+    if position is not None:
+        return position
+
+    if fiche.get("ordre") is not None:
+        return 100 + fiche["ordre"]
+
     nom = fiche.get("nom") or ""
     suffixe = nom.split(" - ", 1)[-1]
     match = re.match(r"^\s*(\d+)", suffixe)
-    return int(match.group(1)) if match else 999
+    return 100 + int(match.group(1)) if match else 999
 
 
 # "8. MON RÉSULTAT DE DIAGNOSTIC" se remplit avec le coach en session (scores
@@ -408,7 +420,7 @@ _FICHES_DEBLOCAGE_COACH = {"39ffaffd87588015a47febbf572e6f62"}
 # Les 5 fiches de zone du diagnostic initial (fiches 3 a 7) + la fiche 8
 # "resultat". Sert a get_coach_diagnostic_bundle() : la vue lecture seule
 # consommee par l'assistant de synthese qui redige la fiche 8. master_id
-# sans tirets, memes cles que FICHE_SCHEMAS / _FICHES_PAR_MODULE["1. Diagnostic"].
+# sans tirets, memes cles que FICHE_SCHEMAS / _PARCOURS (etape Diagnostic).
 _DIAGNOSTIC_ZONES = [
     {"numero": 1, "zone": "Offre", "master_id": "39ffaffd87588001824bdaf6c91b3632"},
     {"numero": 2, "zone": "Visibilité", "master_id": "39ffaffd8758802d93c6e790f165b53e"},
@@ -419,30 +431,60 @@ _DIAGNOSTIC_ZONES = [
 _DIAGNOSTIC_FICHE8_MASTER_ID = "39ffaffd87588015a47febbf572e6f62"
 
 
-def _apply_acces(fiches: list[dict]) -> None:
+def _jour_parcours(date_demarrage) -> int | None:
+    # Nombre de jours ecoules depuis la date de demarrage du client (J0 = le
+    # jour meme). None si la date est absente ou illisible : dans ce cas
+    # aucun verrou par jour ne s'applique (seul l'enchainement compte).
+    if not date_demarrage:
+        return None
+
+    try:
+        debut = datetime.fromisoformat(str(date_demarrage)[:10]).date()
+    except ValueError:
+        return None
+
+    return (datetime.now(timezone.utc).date() - debut).days
+
+
+def _apply_acces(fiches: list[dict], date_demarrage=None) -> None:
     # Calcule le deblocage nous-memes plutot que de lire la formule Notion
-    # "acces", qui depend de "Ordre" et de la relation "Fiche Precedente
-    # (client)" - non renseignees par le pipeline n8n de duplication (0/60
-    # fiches client en prod les ont). La sequence triee + l'Etat de chaque
-    # fiche suffisent et ne dependent d'aucune donnee Notion fragile.
+    # "acces". Trois regles, dans l'ordre du parcours (_PARCOURS) :
+    #  1. jour d'ouverture atteint (frise J0 -> J90) ;
+    #  2. fiche precedente terminee ;
+    #  3. verrou coach : rien ne s'ouvre apres la fiche 8 tant que le coach
+    #     ne l'a pas passee a Termine.
+    jour = _jour_parcours(date_demarrage)
     previous_terminee = True
 
     for fiche in fiches:
-        if fiche.get("master_id") in _FICHES_DEBLOCAGE_COACH:
-            etat = fiche.get("etat")
+        master_id = fiche.get("master_id")
+        etat = fiche.get("etat")
+        jour_ouverture = _FICHE_JOUR.get(master_id, 0)
+        trop_tot = jour is not None and jour < jour_ouverture
+
+        if master_id in _FICHES_DEBLOCAGE_COACH:
             fiche["acces"] = "✅ Terminé" if etat == "Terminé" else (
                 "🚀 En cours" if etat == "En cours" else "🔒 Bloqué"
             )
+            previous_terminee = etat == "Terminé"
             continue
 
-        if fiche.get("etat") == "Terminé":
+        if etat == "Terminé":
             fiche["acces"] = "✅ Terminé"
+        elif trop_tot and previous_terminee:
+            fiche["acces"] = f"🔒 Bloqué · ouvre à J{jour_ouverture}"
         elif previous_terminee:
             fiche["acces"] = "🚀 En cours"
         else:
             fiche["acces"] = "🔒 Bloqué"
 
-        previous_terminee = fiche.get("etat") == "Terminé"
+        if master_id in _FICHES_PERMANENTES:
+            # Fiche de suivi : elle ne bloque pas la suite, sauf si elle
+            # n'est pas encore ouverte elle-meme.
+            previous_terminee = previous_terminee and not trop_tot
+            continue
+
+        previous_terminee = etat == "Terminé"
 
 
 def _client_identite(props: dict) -> dict:
@@ -628,8 +670,10 @@ def get_client_dashboard(client_page_id: str) -> dict:
     if len(fiches) < len(FICHE_SCHEMAS):
         fiches = _repair_missing_fiches(client_page_id, nom_client, fiches)
 
+    date_demarrage = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
+
     fiches.sort(key=_fiche_sort_key)
-    _apply_acces(fiches)
+    _apply_acces(fiches, date_demarrage)
 
     return {
         "nom": nom_client,
@@ -991,7 +1035,18 @@ _CLIENT_FIELD_SYNC = {
     ): "Objectif 90j",
     (
         "39ffaffd8758809e9807c4c5e5504352",
+        "Quel est ton objectif chiffré ou personnel pour les 90 prochains jours ?",
+    ): "Objectif 90j",
+    (
+        "39ffaffd8758809e9807c4c5e5504352",
         "Votre activité / Votre métier :",
+    ): "Activité",
+    # Variantes au tutoiement : les fiches master passent au "tu" (harmonisation
+    # avec la formation). Les deux formulations restent acceptees pour que la
+    # synchro ne casse pas pendant la transition.
+    (
+        "39ffaffd8758809e9807c4c5e5504352",
+        "Ton activité / Ton métier :",
     ): "Activité",
 }
 
@@ -1040,6 +1095,10 @@ _KPI_FIELD_SYNC = {
     (
         "39ffaffd875880abae31d7fd1f7a1c99",
         "Sur 10 rendez-vous commerciaux réalisés, combien de clients signez-vous en moyenne aujourd'hui ?",
+    ): {"nom": "Taux de signature (/10 RDV)", "categorie": "Conversion"},
+    (
+        "39ffaffd875880abae31d7fd1f7a1c99",
+        "Sur 10 rendez-vous commerciaux réalisés, combien de clients signes-tu en moyenne aujourd'hui ?",
     ): {"nom": "Taux de signature (/10 RDV)", "categorie": "Conversion"},
 }
 

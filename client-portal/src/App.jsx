@@ -66,7 +66,7 @@ function FieldInput({ champ, value, onChange }) {
     <textarea
       className="field-input"
       rows={3}
-      placeholder="Écrivez ici..."
+      placeholder="Écris ici..."
       value={value ?? ''}
       onChange={(event) => onChange(event.target.value)}
     />
@@ -440,7 +440,7 @@ export default function App() {
         return
       }
 
-      if (!response.ok) throw new Error('Erreur de chargement de votre espace.')
+      if (!response.ok) throw new Error('Erreur de chargement de ton espace.')
 
       setDashboard(await response.json())
       setScreen('dashboard')
@@ -657,7 +657,7 @@ export default function App() {
           {screen === 'login' ? (
             <>
               <p className="text-sm mb-6" style={{ color: 'var(--text-soft)' }}>
-                Entrez votre email pour recevoir votre lien d'accès sécurisé.
+                Entre ton email pour recevoir ton lien d'accès sécurisé.
               </p>
               <form onSubmit={requestLink} className="space-y-4">
                 <div className="flex items-center gap-2 field-input">
@@ -665,7 +665,7 @@ export default function App() {
                   <input
                     type="email"
                     required
-                    placeholder="vous@exemple.com"
+                    placeholder="nom@exemple.com"
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                     className="bg-transparent outline-none flex-1"
@@ -685,7 +685,7 @@ export default function App() {
             <div className="text-center py-4">
               <CheckCircle2 className="mx-auto mb-3" color="var(--green)" size={36} />
               <p style={{ color: 'var(--text-dimmed)' }}>
-                Vérifiez vos emails — un lien d'accès vous a été envoyé s'il correspond à un compte.
+                Vérifie tes emails — un lien d'accès t'a été envoyé s'il correspond à un compte.
               </p>
             </div>
           )}
