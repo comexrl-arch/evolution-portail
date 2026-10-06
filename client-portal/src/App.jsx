@@ -73,33 +73,16 @@ function FieldInput({ champ, value, onChange }) {
   )
 }
 
-function GaugeAvancement({ pct, label, compact }) {
+function ProgressStat({ pct, children }) {
   const clamped = Math.max(0, Math.min(100, Math.round(pct || 0)))
-  const needleRotation = clamped * 1.8 - 90
-  const arcColor = clamped < 34 ? 'var(--red)' : clamped < 67 ? 'var(--gold)' : 'var(--green)'
 
   return (
-    <div className={`gauge-wrap${compact ? ' gauge-wrap-compact' : ''}`}>
-      <svg viewBox="0 0 200 115" className="w-full">
-        <path d="M 20 100 A 80 80 0 0 1 180 100" className="gauge-track" />
-        <path
-          d="M 20 100 A 80 80 0 0 1 180 100"
-          className="gauge-progress"
-          pathLength="100"
-          style={{ stroke: arcColor, strokeDasharray: 100, strokeDashoffset: 100 - clamped }}
-        />
-        <line
-          x1="100"
-          y1="100"
-          x2="100"
-          y2="32"
-          className="gauge-needle"
-          style={{ transform: `rotate(${needleRotation}deg)`, transformOrigin: '100px 100px' }}
-        />
-        <circle cx="100" cy="100" r="6" className="gauge-hub" />
-      </svg>
-      <p className={`gauge-value${compact ? ' gauge-value-compact' : ''}`}>{clamped}%</p>
-      {label && <p className="gauge-label">{label}</p>}
+    <div className="progress-stat">
+      <p className="progress-stat-value">{clamped}%</p>
+      <p className="progress-stat-label">{children}</p>
+      <div className="progress-stat-track">
+        <div style={{ width: `${clamped}%` }} />
+      </div>
     </div>
   )
 }
@@ -239,8 +222,8 @@ function IdentiteCard({ identite, cohorte, sessions }) {
   ].filter((info) => info.valeur)
 
   return (
-    <section className="card-glass p-6 mb-8" style={{ borderRadius: 'var(--radius-md)' }}>
-      <p className="text-sm mb-3" style={{ color: 'var(--text-soft)' }}>Ma fiche</p>
+    <section className="panel">
+      <p className="panel-eyebrow">Ma fiche</p>
 
       <div className="space-y-1.5 mb-4">
         {infos.map(({ icon: Icon, valeur }, index) => (
@@ -288,12 +271,20 @@ function KpiPeriod({ label, valeur, objectif }) {
   )
 }
 
+// Un suivi chiffre n'a de sens que si au moins une valeur ou un objectif
+// est renseigne (les parcours sans KPI n'affichent alors rien du tout).
+const KPI_CHAMPS = ['valeur_j0', 'valeur_j30', 'valeur_j60', 'valeur_j90', 'objectif_j30', 'objectif_j60', 'objectif_j90']
+
+function kpiRenseignes(kpis) {
+  return Array.isArray(kpis) && kpis.some((kpi) => KPI_CHAMPS.some((champ) => kpi[champ] !== null && kpi[champ] !== undefined && kpi[champ] !== ''))
+}
+
 function KpiTable({ kpis }) {
-  if (!kpis || kpis.length === 0) return null
+  if (!kpiRenseignes(kpis)) return null
 
   return (
-    <section className="card-glass p-6" style={{ borderRadius: 'var(--radius-md)' }}>
-      <h2 className="font-semibold mb-4 flex items-center gap-2" style={{ color: 'var(--text-pure)' }}>
+    <section className="panel">
+      <h2 className="panel-title flex items-center gap-2" style={{ color: 'var(--text-pure)' }}>
         <TrendingUp size={16} color="var(--gold)" />
         Mes indicateurs (KPI)
       </h2>
@@ -328,8 +319,8 @@ function ModulesBreakdown({ modules }) {
   if (!total) return null
 
   return (
-    <section className="card-glass p-6 mb-8" style={{ borderRadius: 'var(--radius-md)' }}>
-      <h2 className="font-semibold mb-4" style={{ color: 'var(--text-pure)' }}>
+    <section className="panel">
+      <h2 className="panel-title" style={{ color: 'var(--text-pure)' }}>
         Répartition par module
       </h2>
       <div className="module-bar mb-4">
@@ -340,11 +331,11 @@ function ModulesBreakdown({ modules }) {
           />
         ))}
       </div>
-      <div className="grid gap-1 text-[10px]" style={{ gridTemplateColumns: `repeat(${modules.length}, minmax(0, 1fr))` }}>
+      <div className="module-legend">
         {modules.map((m, index) => (
-          <span key={m.label} className="flex items-center gap-1 min-w-0" title={`${m.label} (${m.fiches.length})`}>
+          <span key={m.label} className="module-legend-item" title={`${m.label} (${m.fiches.length})`}>
             <span className="module-legend-dot" style={{ background: MODULE_COLORS[index % MODULE_COLORS.length], flexShrink: 0 }} />
-            <span className="truncate" style={{ color: 'var(--text-dimmed)' }}>
+            <span style={{ color: 'var(--text-dimmed)' }}>
               {m.label} ({m.fiches.length})
             </span>
           </span>
@@ -729,68 +720,35 @@ export default function App() {
     const livrablesPct = livrablesTotal ? (livrablesTermines / livrablesTotal) * 100 : 0
 
     const kpiPct = toPct(dashboard.progression_kpi_j90)
+    const avecKpi = kpiRenseignes(dashboard.kpi)
 
     return (
-      <div className="min-h-screen p-6 md:p-10 max-w-4xl mx-auto">
-        <header className="flex items-center justify-between mb-8">
-          <div>
+      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto">
+        <header className="portal-header">
+          <img src={logo} alt="RL-eVolution" className="portal-logo" />
+          <div className="portal-header-identity">
             <h1 className="gold-title text-2xl font-extrabold">{dashboard.nom}</h1>
             <p style={{ color: 'var(--ink-soft)' }}>{dashboard.phase_parcours}</p>
           </div>
-          <button onClick={logout} className="text-sm" style={{ color: 'var(--ink-soft)' }}>
+          <button onClick={logout} className="portal-logout text-sm" style={{ color: 'var(--ink-soft)' }}>
             Se déconnecter
           </button>
         </header>
 
-        {/* Ligne 1 : logo a la taille d'une jauge, puis Ma fiche prend le
-            reste de la largeur - meme grille 4 colonnes que la ligne des
-            jauges, pour que la case du logo fasse exactement la meme taille
-            qu'une case de jauge. */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 items-stretch">
-          <section className="card-glass p-4 flex items-center justify-center" style={{ borderRadius: 'var(--radius-md)' }}>
-            <img src={logo} alt="RL-eVolution" className="logo-plate logo-plate-tile" />
-          </section>
-          <div className="col-span-2 md:col-span-3">
-            <IdentiteCard identite={dashboard.identite} cohorte={dashboard.cohorte} sessions={dashboard.sessions} />
-          </div>
+        {/* Bandeau de progression compact : une ligne discrete, sans jauge.
+            Les indicateurs sans donnee (pas de KPI, aucun livrable) ne sont
+            pas affiches. */}
+        <div className="progress-strip">
+          <ProgressStat pct={avancementPct}>{ficheDoneCount} / {totalFiches} fiches</ProgressStat>
+          <ProgressStat pct={modulesPct}>{modulesDoneCount} / {modules.length} modules</ProgressStat>
+          {avecKpi && <ProgressStat pct={kpiPct}>Progression KPI J90</ProgressStat>}
+          {livrablesTotal > 0 && (
+            <ProgressStat pct={livrablesPct}>Livrables ({livrablesTermines}/{livrablesTotal})</ProgressStat>
+          )}
         </div>
 
-        {/* Ligne 2 : les 4 jauges d'avancement. */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <section className="card-glass p-4 flex flex-col items-center" style={{ borderRadius: 'var(--radius-md)' }}>
-            <GaugeAvancement pct={avancementPct} compact />
-            <p className="kpi-tile-label">{ficheDoneCount} / {totalFiches} fiches</p>
-          </section>
-          <section className="card-glass p-4 flex flex-col items-center" style={{ borderRadius: 'var(--radius-md)' }}>
-            <GaugeAvancement pct={modulesPct} compact />
-            <p className="kpi-tile-label">{modulesDoneCount} / {modules.length} modules</p>
-          </section>
-          <section className="card-glass p-4 flex flex-col items-center" style={{ borderRadius: 'var(--radius-md)' }}>
-            <GaugeAvancement pct={kpiPct} compact />
-            <p className="kpi-tile-label">Progression KPI J90</p>
-          </section>
-          <section className="card-glass p-4 flex flex-col items-center" style={{ borderRadius: 'var(--radius-md)' }}>
-            <GaugeAvancement pct={livrablesPct} compact />
-            <p className="kpi-tile-label">Livrables ({livrablesTermines}/{livrablesTotal})</p>
-          </section>
-        </div>
-
-        {/* Ligne 3 : indicateurs KPI a 50% de largeur, Objectif 90 jours a
-            cote sur l'autre moitie. */}
-        <div className="grid md:grid-cols-2 gap-5 mb-8 items-start">
-          <KpiTable kpis={dashboard.kpi} />
-
-          <section className="card-glass p-6" style={{ borderRadius: 'var(--radius-md)' }}>
-            <p className="text-sm mb-2" style={{ color: 'var(--text-soft)' }}>
-              Objectif 90 jours
-            </p>
-            <p className="text-lg font-medium">{dashboard.objectif_90j || '—'}</p>
-          </section>
-        </div>
-
-        <ModulesBreakdown modules={modules} />
-
-        <h2 className="text-lg font-semibold mb-1">Mon parcours</h2>
+        {/* Le parcours est l'action principale : il vient juste apres. */}
+        <h2 className="section-title">Mon parcours</h2>
         {(() => {
           const activeIndex = modules.findIndex((group) => group.fiches.some((f) => f.etat === 'En cours'))
           const defaultOpenIndex = activeIndex === -1 ? 0 : activeIndex
@@ -798,8 +756,8 @@ export default function App() {
           return modules.map((group, index) => (
             <details key={group.label} className="module-accordion" open={index === defaultOpenIndex}>
               <summary className="module-heading">
-                <ChevronDown size={14} className="module-heading-chevron" />
-                {group.label} ({group.fiches.length})
+                <ChevronDown size={16} className="module-heading-chevron" />
+                <span className="module-heading-label">{group.label} ({group.fiches.length})</span>
               </summary>
               <div className="grid md:grid-cols-2 gap-2">
                 {group.fiches.map((fiche) => {
@@ -824,13 +782,34 @@ export default function App() {
             </details>
           ))
         })()}
+
+        {/* Informations de reference, apres le parcours, en presentation
+            sobre. Un bloc sans donnee n'est pas affiche. */}
+        <div className="portal-secondary">
+          <div className="portal-secondary-row">
+            <IdentiteCard identite={dashboard.identite} cohorte={dashboard.cohorte} sessions={dashboard.sessions} />
+
+            {dashboard.objectif_90j && (
+              <section className="panel">
+                <p className="panel-eyebrow">
+                  Objectif 90 jours
+                </p>
+                <p className="panel-lead">{dashboard.objectif_90j}</p>
+              </section>
+            )}
+          </div>
+
+          <KpiTable kpis={dashboard.kpi} />
+
+          <ModulesBreakdown modules={modules} />
+        </div>
       </div>
     )
   }
 
   if (screen === 'fiche') {
     return (
-      <div className="min-h-screen p-6 md:p-10 max-w-2xl mx-auto">
+      <div className="min-h-screen p-5 md:p-10 reading-column mx-auto">
         <button onClick={backToDashboard} className="flex items-center gap-2 mb-6 text-sm" style={{ color: 'var(--ink-soft)' }}>
           <ArrowLeft size={16} /> Retour au parcours
         </button>
@@ -922,14 +901,14 @@ export default function App() {
 
             <LivrablesSection livrables={ficheData.livrables} onOpen={openLivrable} />
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-8 validate-bar">
               <button
                 onClick={validerEtSuivant}
                 disabled={validating}
-                className="text-sm font-semibold py-2 px-4 rounded-lg flex items-center gap-1.5 disabled:opacity-60"
+                className="validate-button font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
                 style={{ background: 'var(--green)', color: 'var(--bg-dark)' }}
               >
-                <CheckCircle2 size={15} />
+                <CheckCircle2 size={18} />
                 {validating ? 'Validation...' : 'Valider et continuer'}
               </button>
             </div>
@@ -941,7 +920,7 @@ export default function App() {
 
   if (screen === 'livrable') {
     return (
-      <div className="min-h-screen p-6 md:p-10 max-w-2xl mx-auto">
+      <div className="min-h-screen p-5 md:p-10 reading-column mx-auto">
         <button onClick={backToFiche} className="flex items-center gap-2 mb-6 text-sm" style={{ color: 'var(--ink-soft)' }}>
           <ArrowLeft size={16} /> Retour à la fiche
         </button>
