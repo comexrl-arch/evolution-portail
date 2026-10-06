@@ -1434,7 +1434,7 @@ summary:focus-visible {
   border-bottom: 1px solid var(--brand-line);
 }
 
-/* Le logo est un croquis sur papier crème : son bloc reprend ce fond */
+/* Logo sur fond presque blanc : fondu dans le fond de page */
 
 .portal-logo {
 
@@ -1446,7 +1446,9 @@ summary:focus-visible {
 
   flex-shrink: 0;
 
-  background: #FCF4E8;
+  background: transparent;
+
+  mix-blend-mode: multiply;
 
   border-radius: 10px;
 
