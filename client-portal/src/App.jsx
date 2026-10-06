@@ -130,7 +130,7 @@ function renderTextLine(ligne, key) {
                   <th
                     key={i}
                     className="text-left p-2 font-semibold"
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'var(--text-pure)' }}
+                    style={{ borderBottom: '1px solid #D6D3CA', color: 'var(--text-pure)' }}
                   >
                     {cell}
                   </th>
@@ -145,7 +145,7 @@ function renderTextLine(ligne, key) {
                   <td
                     key={ci}
                     className="p-2 align-top"
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-dimmed)' }}
+                    style={{ borderBottom: '1px solid #E7E5DF', color: 'var(--text-dimmed)' }}
                   >
                     {cell}
                   </td>
@@ -261,7 +261,7 @@ function IdentiteCard({ identite, cohorte, sessions }) {
       )}
 
       {sessions.length > 0 && (
-        <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="mt-3 pt-3" style={{ borderTop: '1px solid #E7E5DF' }}>
           <p className="text-sm mb-2 flex items-center gap-2" style={{ color: 'var(--text-soft)' }}>
             <CalendarDays size={14} /> Sessions
           </p>
@@ -320,7 +320,7 @@ function KpiTable({ kpis }) {
   )
 }
 
-const MODULE_COLORS = ['#f59e0b', '#38bdf8', '#a78bfa', '#fb7185', '#34d399', '#facc15']
+const MODULE_COLORS = ['#8E6C38', '#2B3140', '#C9A265', '#5F7482', '#9A6B55', '#7D8B74']
 
 function ModulesBreakdown({ modules }) {
   const total = modules.reduce((sum, m) => sum + m.fiches.length, 0)
@@ -388,7 +388,7 @@ function LivrablesSection({ livrables, onOpen }) {
             key={livrable.id}
             onClick={() => onOpen(livrable.id)}
             className="w-full text-left flex items-center justify-between gap-3 p-3"
-            style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-sm)' }}
+            style={{ background: '#F1F0EC', borderRadius: 'var(--radius-sm)' }}
           >
             <span className="text-sm flex items-center gap-2 min-w-0">
               <span className="truncate" title={livrable.nom}>{livrable.nom}</span>

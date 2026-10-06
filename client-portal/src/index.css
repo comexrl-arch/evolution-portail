@@ -1,17 +1,13 @@
 @import "tailwindcss";
 
 /* ==========================================================================
-   eVOLUTION 2.0 — BUSINESS COMMAND CENTER
-   DESIGN SYSTEM 2026
+   eVOLUTION 2.0 — PORTAIL CLIENT
+   Habillage : charte graphique claire RL-eVolution
    --------------------------------------------------------------------------
-   Objectif :
-   Transformer le portail en interface "AI Business Operating System".
-
-   IMPORTANT :
-   - Aucun JSX à modifier
-   - Les classes existantes sont conservées
-   - Les anciennes variables sont conservées
-   - Compatible avec le code actuel
+   - Aucun JSX à modifier : les classes et variables existantes sont conservées
+   - Fond #F1F0EC, surfaces #FBFBFA, bordures #E7E5DF, texte #14171F
+   - Or principal #8E6C38, or métallisé #C9A265, or champagne #E8C17F
+   - Titres : Newsreader ; corps : Plus Jakarta Sans
    ========================================================================== */
 
 
@@ -21,67 +17,87 @@
 
 :root {
 
+  /* ---------- CHARTE ---------- */
+
+  --brand-page: #F1F0EC;
+  --brand-surface: #FBFBFA;
+  --brand-white: #FFFFFF;
+  --brand-line: #E7E5DF;
+  --brand-line-strong: #D6D3CA;
+  --brand-ink: #14171F;
+  --brand-ink-2: #1E2330;
+  --brand-gold: #8E6C38;
+  --brand-gold-metal: #C9A265;
+  --brand-gold-champagne: #E8C17F;
+
   /* ---------- ENVIRONNEMENT ---------- */
 
-  --surface-0: #05060a;
-  --surface-1: #0a0d13;
-  --surface-2: #10141d;
-  --surface-3: #171c27;
-  --surface-4: #1d2431;
+  --surface-0: var(--brand-page);
+  --surface-1: var(--brand-surface);
+  --surface-2: var(--brand-white);
+  --surface-3: #F6F5F1;
+  --surface-4: var(--brand-line);
 
-  /* ---------- ACCENT — CYAN / VIOLET ---------- */
+  /* ---------- ACCENT — OR ---------- */
 
-  --accent: #6ee7ff;
-  --accent-strong: #8b7cff;
-  --accent-soft: rgba(110, 231, 255, 0.10);
-  --accent-ring: rgba(110, 231, 255, 0.28);
+  --accent: var(--brand-gold);
+  --accent-strong: var(--brand-gold-metal);
+  --accent-soft: rgba(142, 108, 56, 0.08);
+  --accent-ring: rgba(142, 108, 56, 0.22);
 
-  --accent-cyan: #6ee7ff;
-  --accent-violet: #8b7cff;
-  --accent-pink: #ff6b9d;
+  /* anciens noms conservés pour compatibilité */
+  --accent-cyan: var(--brand-gold);
+  --accent-violet: var(--brand-gold-metal);
+  --accent-pink: var(--brand-gold-champagne);
 
-  /* ---------- STATUTS ---------- */
+  /* ---------- STATUTS (sobres, contraste AA sur fond clair) ---------- */
 
-  --success: #43e6a3;
-  --success-soft: rgba(67, 230, 163, 0.10);
+  --success: #2F6B4F;
+  --success-soft: rgba(47, 107, 79, 0.09);
 
-  --warning: #ffca5c;
-  --warning-soft: rgba(255, 202, 92, 0.10);
+  --warning: #A8530F;
+  --warning-soft: rgba(168, 83, 15, 0.09);
 
-  --danger: #ff667c;
-  --danger-soft: rgba(255, 102, 124, 0.10);
+  --danger: #A8322A;
+  --danger-soft: rgba(168, 50, 42, 0.08);
 
   /* ---------- TEXTE ---------- */
 
-  --text-primary: #f5f7fb;
-  --text-secondary: #9da5b5;
-  --text-tertiary: #626b7b;
+  --text-primary: var(--brand-ink);
+  --text-secondary: #4A5060;
+  --text-tertiary: #6B7180;
 
-  --text-on-accent: #041014;
+  --text-on-accent: #FFFFFF;
 
   /* ---------- BORDURES ---------- */
 
-  --border-subtle: 1px solid rgba(255, 255, 255, 0.055);
-  --border-strong: 1px solid rgba(255, 255, 255, 0.11);
-  --border-accent: 1px solid rgba(110, 231, 255, 0.38);
+  --border-subtle: 1px solid var(--brand-line);
+  --border-strong: 1px solid var(--brand-line-strong);
+  --border-accent: 1px solid var(--brand-gold-metal);
 
   /* ---------- RAYONS ---------- */
 
-  --radius-sm: 10px;
+  --radius-sm: 12px;
   --radius-md: 16px;
-  --radius-lg: 22px;
-  --radius-xl: 28px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
 
   /* ---------- OMBRES ---------- */
 
   --shadow-sm:
-    0 2px 8px rgba(0, 0, 0, 0.28);
+    0 1px 2px rgba(20, 23, 31, 0.04),
+    0 2px 10px rgba(20, 23, 31, 0.04);
 
   --shadow-md:
-    0 12px 35px rgba(0, 0, 0, 0.42);
+    0 2px 4px rgba(20, 23, 31, 0.04),
+    0 10px 28px rgba(20, 23, 31, 0.07);
 
   --shadow-lg:
-    0 25px 70px rgba(0, 0, 0, 0.52);
+    0 4px 8px rgba(20, 23, 31, 0.04),
+    0 20px 48px rgba(20, 23, 31, 0.09);
+
+  --shadow-gold:
+    0 4px 14px rgba(142, 108, 56, .25);
 
   --shadow-focus:
     0 0 0 3px var(--accent-ring);
@@ -102,13 +118,20 @@
   /* ---------- TYPOGRAPHIE ---------- */
 
   --font-sans:
-    Inter,
+    "Plus Jakarta Sans",
     ui-sans-serif,
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+
+  --font-serif:
+    Newsreader,
+    "Iowan Old Style",
+    Georgia,
+    "Times New Roman",
+    serif;
 
   --font-mono:
     "JetBrains Mono",
@@ -122,17 +145,15 @@
      ========================================================================== */
 
   --page-bg: var(--surface-0);
-  --bg-dark: var(--surface-0);
 
-  --card-bg-gradient:
-    linear-gradient(
-      145deg,
-      rgba(17, 21, 30, 0.98),
-      rgba(8, 11, 17, 0.98)
-    );
+  /* --bg-dark sert uniquement de couleur de texte sur les boutons pleins
+     (or / vert) dans le JSX : blanc dans la charte claire. */
+  --bg-dark: #FFFFFF;
 
-  --gold: var(--accent);
-  --gold-light: var(--accent-strong);
+  --card-bg-gradient: var(--brand-surface);
+
+  --gold: var(--brand-gold);
+  --gold-light: var(--brand-gold-metal);
   --gold-glow: var(--accent-soft);
 
   --green: var(--success);
@@ -154,36 +175,17 @@
 
 
 /* ==========================================================================
-   2. LIGHT MODE
+   2. GLOBAL
    ========================================================================== */
 
-[data-theme="light"] {
+@layer base {
 
-  --surface-0: #f4f7fb;
-  --surface-1: #ffffff;
-  --surface-2: #eef2f7;
-  --surface-3: #e2e8f0;
-  --surface-4: #d8e0ea;
-
-  --text-primary: #10131a;
-  --text-secondary: #4f5969;
-  --text-tertiary: #7b8595;
-
-  --border-subtle: 1px solid rgba(0, 0, 0, 0.07);
-  --border-strong: 1px solid rgba(0, 0, 0, 0.12);
-
-  --card-bg-gradient:
-    linear-gradient(
-      145deg,
-      #ffffff,
-      #f5f7fa
-    );
+  *,
+  ::before,
+  ::after {
+    border-color: var(--brand-line);
+  }
 }
-
-
-/* ==========================================================================
-   3. GLOBAL RESET
-   ========================================================================== */
 
 * {
   box-sizing: border-box;
@@ -191,6 +193,7 @@
 
 html {
   scroll-behavior: smooth;
+  color-scheme: light;
 }
 
 body {
@@ -199,23 +202,7 @@ body {
 
   min-height: 100vh;
 
-  background:
-    radial-gradient(
-      circle at 15% 10%,
-      rgba(110, 231, 255, 0.055),
-      transparent 28%
-    ),
-    radial-gradient(
-      circle at 85% 15%,
-      rgba(139, 124, 255, 0.065),
-      transparent 30%
-    ),
-    radial-gradient(
-      circle at 50% 100%,
-      rgba(110, 231, 255, 0.035),
-      transparent 35%
-    ),
-    var(--surface-0);
+  background: var(--surface-0);
 
   color: var(--text-primary);
 
@@ -228,66 +215,10 @@ body {
   overflow-x: hidden;
 }
 
-
-/* ==========================================================================
-   4. GRILLE TECHNIQUE D'ARRIÈRE-PLAN
-   ========================================================================== */
-
-body::before {
-
-  content: "";
-
-  position: fixed;
-
-  inset: 0;
-
-  pointer-events: none;
-
-  z-index: -1;
-
-  opacity: 0.28;
-
-  background-image:
-
-    linear-gradient(
-      rgba(255,255,255,0.018) 1px,
-      transparent 1px
-    ),
-
-    linear-gradient(
-      90deg,
-      rgba(255,255,255,0.018) 1px,
-      transparent 1px
-    );
-
-  background-size: 42px 42px;
-
-  mask-image:
-    linear-gradient(
-      to bottom,
-      black 0%,
-      rgba(0,0,0,.5) 55%,
-      transparent 100%
-    );
-}
-
-
-/* ==========================================================================
-   5. SÉLECTION
-   ========================================================================== */
-
 ::selection {
-
-  background:
-    rgba(110, 231, 255, 0.22);
-
-  color: #ffffff;
+  background: rgba(232, 193, 127, 0.55);
+  color: var(--brand-ink);
 }
-
-
-/* ==========================================================================
-   6. SCROLLBAR
-   ========================================================================== */
 
 ::-webkit-scrollbar {
   width: 8px;
@@ -298,30 +229,34 @@ body::before {
 }
 
 ::-webkit-scrollbar-thumb {
-
-  background:
-    linear-gradient(
-      var(--accent),
-      var(--accent-strong)
-    );
-
+  background: var(--brand-line-strong);
   border-radius: 999px;
 }
 
 
 /* ==========================================================================
-   7. TYPOGRAPHIE
+   3. TYPOGRAPHIE
    ========================================================================== */
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
 
 .page-title {
 
+  font-family: var(--font-serif);
+
   font-size: clamp(1.7rem, 3vw, 2.4rem);
 
-  font-weight: 750;
+  font-weight: 600;
 
-  letter-spacing: -0.04em;
+  letter-spacing: -0.015em;
 
-  line-height: 1.05;
+  line-height: 1.1;
 
   color: var(--text-primary);
 }
@@ -343,64 +278,35 @@ body::before {
   color: var(--accent);
 }
 
-
-/* ==========================================================================
-   8. TITRES GRADIENT
-   ========================================================================== */
+/* Titres or : couleur pleine, plus de dégradé animé */
 
 .gold-title {
 
-  background:
-    linear-gradient(
-      100deg,
-      #ffffff 0%,
-      var(--accent) 38%,
-      var(--accent-strong) 78%,
-      #ffffff 100%
-    );
+  font-family: var(--font-serif);
 
-  -webkit-background-clip: text;
+  color: var(--brand-gold);
 
-  background-clip: text;
+  letter-spacing: -0.015em;
 
-  color: transparent;
+  font-weight: 600;
 
-  letter-spacing: -0.045em;
-
-  font-weight: 800;
-
-  background-size: 200% auto;
-
-  animation:
-    title-shimmer 7s linear infinite;
+  line-height: 1.2;
 }
 
-@keyframes title-shimmer {
-
-  0% {
-    background-position: 0% center;
-  }
-
-  100% {
-    background-position: 200% center;
-  }
+h1.gold-title {
+  font-size: 1.75rem;
 }
 
 
 /* ==========================================================================
-   9. CARTES — NOUVEAU STYLE "COMMAND CENTER"
+   4. CARTES
    ========================================================================== */
 
 .card {
 
   position: relative;
 
-  background:
-    linear-gradient(
-      145deg,
-      rgba(17, 21, 30, 0.96),
-      rgba(8, 11, 17, 0.96)
-    );
+  background: var(--brand-surface);
 
   color: var(--text-primary);
 
@@ -409,41 +315,21 @@ body::before {
   border-radius: var(--radius-lg);
 
   box-shadow: var(--shadow-sm);
-
-  backdrop-filter: blur(18px);
-
-  -webkit-backdrop-filter: blur(18px);
 }
-
-
-/* ==========================================================================
-   10. CARD GLASS — VERSION PREMIUM
-   ========================================================================== */
 
 .card-glass {
 
   position: relative;
 
-  background:
-    linear-gradient(
-      145deg,
-      rgba(18, 23, 32, 0.92),
-      rgba(8, 11, 17, 0.88)
-    );
+  background: var(--brand-surface);
 
   color: var(--text-primary);
 
-  border: 1px solid rgba(255,255,255,0.065);
+  border: 1px solid var(--brand-line);
 
   border-radius: var(--radius-lg);
 
-  box-shadow:
-    0 1px 0 rgba(255,255,255,0.025) inset,
-    0 10px 35px rgba(0,0,0,0.20);
-
-  backdrop-filter: blur(20px);
-
-  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-sm);
 
   overflow: hidden;
 
@@ -453,8 +339,7 @@ body::before {
     box-shadow var(--transition-base);
 }
 
-
-/* lumière interne */
+/* filet haut or métallisé */
 
 .card-glass::before {
 
@@ -468,60 +353,28 @@ body::before {
 
   width: 100%;
 
-  height: 1px;
+  height: 3px;
 
-  background:
-    linear-gradient(
-      90deg,
-      transparent,
-      rgba(110,231,255,0.28),
-      rgba(139,124,255,0.22),
-      transparent
-    );
-
-  opacity: 0.45;
+  background: var(--brand-gold-metal);
 
   pointer-events: none;
 }
 
+/* pas de filet sur les cartes imbriquées ni sur les fiches-boutons */
 
-/* halo subtil */
-
-.card-glass::after {
-
-  content: "";
-
-  position: absolute;
-
-  width: 180px;
-
-  height: 180px;
-
-  top: -110px;
-
-  right: -90px;
-
-  background:
-    radial-gradient(
-      circle,
-      rgba(110,231,255,0.07),
-      transparent 70%
-    );
-
-  pointer-events: none;
-
-  opacity: 0;
-
-  transition: opacity var(--transition-base);
+.card-glass .card-glass::before,
+button.card-glass::before {
+  display: none;
 }
 
-.card-glass:hover::after {
-  opacity: 1;
+.card-glass .card-glass {
+  box-shadow: none;
+  background: var(--brand-white);
 }
 
 
 /* ==========================================================================
-   11. CARTES INTERACTIVES
+   5. CARTES INTERACTIVES
    ========================================================================== */
 
 .card-interactive {
@@ -530,53 +383,40 @@ body::before {
 
   transition:
     transform var(--transition-base),
-    background var(--transition-base),
     border-color var(--transition-base),
     box-shadow var(--transition-base);
 }
 
 .card-interactive:hover:not(:disabled) {
 
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 
-  background:
-    linear-gradient(
-      145deg,
-      rgba(21,27,39,0.98),
-      rgba(9,13,20,0.98)
-    );
+  border-color: var(--brand-gold-metal);
 
-  border-color:
-    rgba(110,231,255,0.22);
-
-  box-shadow:
-    0 18px 45px rgba(0,0,0,0.35),
-    0 0 35px rgba(110,231,255,0.035);
+  box-shadow: var(--shadow-md);
 }
 
 .card-interactive:active:not(:disabled) {
-  transform: translateY(-1px) scale(0.995);
+  transform: translateY(0);
 }
 
 .card-interactive:disabled {
   cursor: not-allowed;
-  opacity: 0.42;
+  opacity: 0.7;
 }
 
 
 /* ==========================================================================
-   12. INPUTS — STYLE SAAS PREMIUM
+   6. CHAMPS DE SAISIE
    ========================================================================== */
 
 .field-input {
 
   width: 100%;
 
-  background:
-    rgba(5,8,13,0.72);
+  background: var(--brand-white);
 
-  border:
-    1px solid rgba(255,255,255,0.09);
+  border: 1px solid var(--brand-line-strong);
 
   color: var(--text-primary);
 
@@ -592,42 +432,46 @@ body::before {
 
   transition:
     border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
-    background var(--transition-fast),
-    transform var(--transition-fast);
+    box-shadow var(--transition-fast);
 }
 
 .field-input:hover {
-
-  border-color:
-    rgba(255,255,255,0.15);
+  border-color: var(--brand-gold-metal);
 }
 
-.field-input:focus {
+.field-input:focus,
+.field-input:focus-within {
 
-  border-color:
-    rgba(110,231,255,0.62);
+  border-color: var(--brand-gold);
 
-  background:
-    rgba(8,12,19,0.92);
-
-  box-shadow:
-    0 0 0 3px rgba(110,231,255,0.08),
-    0 0 25px rgba(110,231,255,0.06);
+  box-shadow: var(--shadow-focus);
 }
 
-.field-input::placeholder {
+.field-input::placeholder,
+.field-input input::placeholder {
   color: var(--text-tertiary);
+  opacity: 1;
+}
+
+.field-input input {
+  color: var(--text-primary);
+  min-width: 0;
 }
 
 textarea.field-input {
   resize: vertical;
   min-height: 90px;
+  line-height: 1.55;
+}
+
+select.field-input option {
+  background: var(--brand-white);
+  color: var(--text-primary);
 }
 
 
 /* ==========================================================================
-   13. BOUTONS
+   7. BOUTONS
    ========================================================================== */
 
 button {
@@ -635,44 +479,87 @@ button {
   font-family: inherit;
 
   transition:
-    transform var(--transition-fast),
-    filter var(--transition-fast),
-    box-shadow var(--transition-fast);
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-button:not(:disabled):hover {
-
-  filter: brightness(1.08);
+button:disabled {
+  cursor: not-allowed;
 }
 
-button:not(:disabled):active {
+/* Bouton principal : fond or (posé en style inline dans le JSX) */
 
-  transform: scale(0.985);
+button[style*="background: var(--gold)"],
+button[style*="background: var(--accent)"] {
+
+  border-radius: 12px;
+
+  font-weight: 700;
+
+  box-shadow: var(--shadow-gold);
 }
 
+button[style*="background: var(--gold)"],
+button[style*="background: var(--accent)"]:not(.flex-1) {
 
-/* boutons avec fond accent inline */
+  text-transform: uppercase;
 
-button[style*="var(--gold)"] {
+  letter-spacing: 0.05em;
 
-  box-shadow:
-    0 8px 25px rgba(110,231,255,0.12);
-
-  transition:
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast),
-    filter var(--transition-fast);
+  font-size: 0.8125rem;
 }
 
-button[style*="var(--gold)"]:hover {
+button[style*="background: var(--gold)"]:not(:disabled):hover,
+button[style*="background: var(--accent)"]:not(:disabled):hover {
 
-  box-shadow:
-    0 12px 35px rgba(110,231,255,0.20);
+  background: var(--brand-gold-metal) !important;
+
+  transform: translateY(-1px);
+}
+
+/* Bouton de validation : vert sobre */
+
+button[style*="background: var(--green)"],
+button[style*="background: var(--success)"] {
+
+  border-radius: 12px;
+
+  font-weight: 700;
+
+  box-shadow: 0 4px 14px rgba(47, 107, 79, .22);
+}
+
+button[style*="background: var(--green)"]:not(:disabled):hover,
+button[style*="background: var(--success)"]:not(:disabled):hover {
+
+  background: #255A41 !important;
+
+  transform: translateY(-1px);
+}
+
+/* Boutons secondaires (contour) */
+
+button[style*="border-color: var(--border-subtle)"] {
+  border-color: var(--brand-line-strong) !important;
+}
+
+button[style*="border-color: var(--border-subtle)"]:hover {
+  border-color: var(--brand-gold-metal) !important;
+}
+
+button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
+
+  border-color: var(--brand-gold-metal) !important;
+
+  color: var(--brand-gold) !important;
 }
 
 
 /* ==========================================================================
-   14. LOGO
+   8. LOGO
    ========================================================================== */
 
 .logo-plate {
@@ -689,8 +576,7 @@ button[style*="var(--gold)"]:hover {
 
   padding: 4px 8px;
 
-  box-shadow:
-    0 4px 15px rgba(0,0,0,0.35);
+  border: 1px solid var(--brand-line);
 
   object-fit: contain;
 }
@@ -702,25 +588,11 @@ button[style*="var(--gold)"]:hover {
   max-width: 132px;
 
   height: auto;
-
-  transition:
-    transform var(--transition-base),
-    box-shadow var(--transition-base);
-}
-
-.logo-plate-tile:hover {
-
-  transform:
-    scale(1.035)
-    rotate(-1deg);
-
-  box-shadow:
-    0 12px 30px rgba(110,231,255,0.12);
 }
 
 
 /* ==========================================================================
-   15. JAUGES — STYLE INSTRUMENTATION
+   9. JAUGES
    ========================================================================== */
 
 .gauge-wrap {
@@ -745,21 +617,14 @@ button[style*="var(--gold)"]:hover {
 }
 
 .gauge-wrap svg {
-
   overflow: visible;
-
-  filter:
-    drop-shadow(
-      0 0 8px rgba(110,231,255,0.06)
-    );
 }
 
 .gauge-track {
 
   fill: none;
 
-  stroke:
-    rgba(255,255,255,0.055);
+  stroke: var(--brand-line);
 
   stroke-width: 8;
 
@@ -776,17 +641,11 @@ button[style*="var(--gold)"]:hover {
 
   transition:
     stroke-dashoffset 800ms var(--ease-standard);
-
-  filter:
-    drop-shadow(
-      0 0 5px currentColor
-    );
 }
 
 .gauge-needle {
 
-  stroke:
-    var(--accent-strong);
+  stroke: var(--brand-ink);
 
   stroke-width: 3;
 
@@ -794,22 +653,10 @@ button[style*="var(--gold)"]:hover {
 
   transition:
     transform 800ms var(--ease-standard);
-
-  filter:
-    drop-shadow(
-      0 0 5px rgba(139,124,255,0.45)
-    );
 }
 
 .gauge-hub {
-
-  fill:
-    var(--accent-strong);
-
-  filter:
-    drop-shadow(
-      0 0 7px rgba(139,124,255,0.6)
-    );
+  fill: var(--brand-ink);
 }
 
 .gauge-center-content {
@@ -837,13 +684,12 @@ button[style*="var(--gold)"]:hover {
 
   color: var(--text-primary);
 
-  letter-spacing: -0.04em;
+  letter-spacing: -0.03em;
 
   font-variant-numeric: tabular-nums;
 }
 
 .gauge-value-compact {
-
   font-size: 1.9rem;
 }
 
@@ -864,7 +710,7 @@ button[style*="var(--gold)"]:hover {
 
 
 /* ==========================================================================
-   16. KPI TILES
+   10. KPI
    ========================================================================== */
 
 .kpi-tile-label {
@@ -882,11 +728,6 @@ button[style*="var(--gold)"]:hover {
   text-align: center;
 }
 
-
-/* ==========================================================================
-   17. KPI GRID
-   ========================================================================== */
-
 .kpi-grid {
 
   display: grid;
@@ -896,13 +737,11 @@ button[style*="var(--gold)"]:hover {
 
   gap: 1px;
 
-  background:
-    rgba(255,255,255,0.055);
+  background: var(--brand-line);
 
-  border:
-    1px solid rgba(255,255,255,0.055);
+  border: 1px solid var(--brand-line);
 
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
 
   overflow: hidden;
 }
@@ -911,12 +750,7 @@ button[style*="var(--gold)"]:hover {
 
   position: relative;
 
-  background:
-    linear-gradient(
-      145deg,
-      rgba(15,19,27,0.96),
-      rgba(8,11,17,0.96)
-    );
+  background: var(--brand-white);
 
   padding: 1.15rem;
 
@@ -931,13 +765,7 @@ button[style*="var(--gold)"]:hover {
 }
 
 .kpi-card:hover {
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(22,28,40,0.98),
-      rgba(9,13,20,0.98)
-    );
+  background: var(--surface-3);
 }
 
 .kpi-nom {
@@ -979,12 +807,10 @@ button[style*="var(--gold)"]:hover {
 
   margin-top: 0.75rem;
 
-  border-top:
-    1px solid rgba(255,255,255,0.055);
+  border-top: 1px solid var(--brand-line);
 }
 
 .kpi-period {
-
   text-align: center;
 }
 
@@ -1011,7 +837,7 @@ button[style*="var(--gold)"]:hover {
 
   margin-top: 0.2rem;
 
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 
   font-variant-numeric: tabular-nums;
 }
@@ -1027,15 +853,14 @@ button[style*="var(--gold)"]:hover {
 
 
 /* ==========================================================================
-   18. LISTES
+   11. LISTES / CHECKLIST
    ========================================================================== */
 
 .list-row {
 
   background: transparent;
 
-  border-bottom:
-    1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--brand-line);
 
   padding: 0.8rem 0.3rem;
 
@@ -1046,39 +871,26 @@ button[style*="var(--gold)"]:hover {
   gap: 0.75rem;
 
   transition:
-    background var(--transition-fast),
-    padding-left var(--transition-fast);
+    background var(--transition-fast);
 }
 
 .list-row:hover {
-
-  background:
-    rgba(255,255,255,0.025);
-
-  padding-left: 0.55rem;
+  background: var(--surface-3);
 }
 
 .list-row:last-child {
   border-bottom: none;
 }
 
-
-/* ==========================================================================
-   19. CHECKLIST
-   ========================================================================== */
-
 .checklist-item {
 
   position: relative;
 
-  background:
-    rgba(255,255,255,0.018);
+  background: var(--brand-white);
 
-  border:
-    1px solid rgba(255,255,255,0.055);
+  border: 1px solid var(--brand-line);
 
-  border-radius:
-    var(--radius-md);
+  border-radius: var(--radius-sm);
 
   padding:
     0.9rem 1.1rem;
@@ -1091,31 +903,23 @@ button[style*="var(--gold)"]:hover {
 
   transition:
     background var(--transition-fast),
-    border-color var(--transition-fast),
-    transform var(--transition-fast);
+    border-color var(--transition-fast);
 }
 
 .checklist-item:hover {
 
-  background:
-    rgba(110,231,255,0.035);
+  background: var(--surface-3);
 
-  border-color:
-    rgba(110,231,255,0.15);
-
-  transform:
-    translateX(3px);
+  border-color: var(--brand-gold-metal);
 }
 
 .checklist-item input {
-
-  accent-color:
-    var(--accent);
+  accent-color: var(--brand-gold);
 }
 
 
 /* ==========================================================================
-   20. BADGES
+   12. BADGES
    ========================================================================== */
 
 .badge {
@@ -1128,7 +932,7 @@ button[style*="var(--gold)"]:hover {
 
   font-size: 0.65rem;
 
-  font-weight: 750;
+  font-weight: 700;
 
   letter-spacing: 0.04em;
 
@@ -1142,52 +946,32 @@ button[style*="var(--gold)"]:hover {
 }
 
 .badge-success {
-
   color: var(--success);
-
-  background:
-    var(--success-soft);
-
-  border-color:
-    rgba(67,230,163,0.15);
+  background: var(--success-soft);
+  border-color: rgba(47, 107, 79, 0.22);
 }
 
 .badge-warning {
-
   color: var(--warning);
-
-  background:
-    var(--warning-soft);
-
-  border-color:
-    rgba(255,202,92,0.15);
+  background: var(--warning-soft);
+  border-color: rgba(168, 83, 15, 0.22);
 }
 
 .badge-danger {
-
   color: var(--danger);
-
-  background:
-    var(--danger-soft);
-
-  border-color:
-    rgba(255,102,124,0.15);
+  background: var(--danger-soft);
+  border-color: rgba(168, 50, 42, 0.22);
 }
 
 .badge-accent {
-
   color: var(--accent);
-
-  background:
-    var(--accent-soft);
-
-  border-color:
-    rgba(110,231,255,0.15);
+  background: var(--accent-soft);
+  border-color: rgba(142, 108, 56, 0.22);
 }
 
 
 /* ==========================================================================
-   21. ACCORDÉONS — PARCOURS
+   13. ACCORDÉONS — PARCOURS
    ========================================================================== */
 
 .module-accordion {
@@ -1199,33 +983,49 @@ button[style*="var(--gold)"]:hover {
   border-radius:
     var(--radius-md);
 
-  background:
-    rgba(10,14,21,0.82);
+  background: var(--brand-surface);
 
-  border:
-    1px solid rgba(255,255,255,0.055);
+  border: 1px solid var(--brand-line);
 
   overflow: hidden;
 
   transition:
     border-color var(--transition-base),
-    background var(--transition-base),
     box-shadow var(--transition-base);
 }
 
 .module-accordion:hover {
-
-  border-color:
-    rgba(255,255,255,0.10);
+  border-color: var(--brand-line-strong);
 }
 
 .module-accordion[open] {
 
-  border-color:
-    rgba(110,231,255,0.16);
+  border-color: var(--brand-gold-metal);
 
-  box-shadow:
-    0 10px 35px rgba(0,0,0,0.18);
+  box-shadow: var(--shadow-sm);
+}
+
+/* filet or sur le module ouvert */
+
+.module-accordion[open]::before {
+
+  content: "";
+
+  position: absolute;
+
+  left: 0;
+
+  top: 0;
+
+  bottom: 0;
+
+  width: 3px;
+
+  background: var(--brand-gold-metal);
+}
+
+.module-accordion[open] > div {
+  padding: 0 0.75rem 0.75rem 0.9rem;
 }
 
 .module-heading {
@@ -1239,11 +1039,11 @@ button[style*="var(--gold)"]:hover {
   padding:
     0.95rem 1rem;
 
-  font-size: 1rem;
+  font-family: var(--font-serif);
 
-  font-weight: 700;
+  font-size: 1.08rem;
 
-  letter-spacing: 0.01em;
+  font-weight: 600;
 
   color: var(--text-primary);
 
@@ -1263,18 +1063,12 @@ button[style*="var(--gold)"]:hover {
 }
 
 .module-heading:hover {
-
-  background:
-    rgba(110,231,255,0.025);
-
-  color:
-    var(--accent);
+  color: var(--brand-gold);
 }
 
 .module-heading-chevron {
 
-  color:
-    var(--text-tertiary);
+  color: var(--text-tertiary);
 
   transition:
     transform var(--transition-base),
@@ -1284,16 +1078,61 @@ button[style*="var(--gold)"]:hover {
 .module-accordion[open]
 .module-heading-chevron {
 
-  transform:
-    rotate(180deg);
+  transform: rotate(180deg);
 
-  color:
-    var(--accent);
+  color: var(--brand-gold);
+}
+
+/* Fiches du parcours (boutons) */
+
+button.card-glass {
+
+  cursor: pointer;
+
+  background: var(--brand-white);
+
+  box-shadow: none;
+
+  gap: 0.6rem;
+
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+button.card-glass:hover:not(:disabled) {
+
+  transform: translateY(-1px);
+
+  border-color: var(--brand-gold-metal);
+
+  box-shadow: var(--shadow-md);
+}
+
+button.card-glass:disabled {
+
+  cursor: not-allowed;
+
+  opacity: 1;
+
+  background: var(--brand-page);
+
+  border-style: dashed;
+
+  border-color: var(--brand-line-strong);
+
+  color: var(--text-tertiary);
+}
+
+button.card-glass > span:last-child {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 
 /* ==========================================================================
-   22. BARRE DE MODULES
+   14. BARRE DE MODULES
    ========================================================================== */
 
 .module-bar {
@@ -1302,17 +1141,15 @@ button[style*="var(--gold)"]:hover {
 
   width: 100%;
 
-  height: 7px;
+  height: 10px;
+
+  gap: 2px;
 
   border-radius: 999px;
 
   overflow: hidden;
 
-  background:
-    rgba(255,255,255,0.05);
-
-  box-shadow:
-    inset 0 1px 2px rgba(0,0,0,0.4);
+  background: var(--brand-line);
 }
 
 .module-bar > div {
@@ -1321,30 +1158,24 @@ button[style*="var(--gold)"]:hover {
 
   transition:
     width 800ms var(--ease-standard);
-
-  box-shadow:
-    0 0 10px rgba(255,255,255,0.10);
 }
 
 .module-legend-dot {
 
   display: inline-block;
 
-  width: 0.48rem;
+  width: 0.55rem;
 
-  height: 0.48rem;
+  height: 0.55rem;
 
   border-radius: 999px;
 
   flex-shrink: 0;
-
-  box-shadow:
-    0 0 8px currentColor;
 }
 
 
 /* ==========================================================================
-   23. TABLEAUX
+   15. TABLEAUX
    ========================================================================== */
 
 .data-table {
@@ -1362,7 +1193,7 @@ button[style*="var(--gold)"]:hover {
 
   font-size: 0.62rem;
 
-  font-weight: 750;
+  font-weight: 700;
 
   text-transform: uppercase;
 
@@ -1373,8 +1204,7 @@ button[style*="var(--gold)"]:hover {
   padding:
     0.7rem 0.9rem;
 
-  border-bottom:
-    1px solid rgba(255,255,255,0.08);
+  border-bottom: 1px solid var(--brand-line-strong);
 }
 
 .data-table tbody td {
@@ -1382,51 +1212,26 @@ button[style*="var(--gold)"]:hover {
   padding:
     0.75rem 0.9rem;
 
-  border-bottom:
-    1px solid rgba(255,255,255,0.045);
+  border-bottom: 1px solid var(--brand-line);
 
-  color:
-    var(--text-primary);
+  color: var(--text-primary);
 }
-
-.data-table tbody tr {
-
-  transition:
-    background var(--transition-fast);
-}
-
-.data-table tbody tr:hover {
-
-  background:
-    rgba(110,231,255,0.025);
-}
-
-
-/* ==========================================================================
-   24. TABLES DU PORTAIL
-   ========================================================================== */
 
 table {
-
   border-collapse: collapse;
 }
 
 table thead th {
 
-  color:
-    var(--text-tertiary);
+  color: var(--text-secondary);
 
-  font-size:
-    0.65rem;
+  font-size: 0.68rem;
 
-  font-weight:
-    750;
+  font-weight: 700;
 
-  text-transform:
-    uppercase;
+  text-transform: uppercase;
 
-  letter-spacing:
-    0.07em;
+  letter-spacing: 0.07em;
 }
 
 table tbody tr {
@@ -1435,21 +1240,19 @@ table tbody tr {
     background var(--transition-fast);
 }
 
-table tbody tr:hover {
-
-  background:
-    rgba(110,231,255,0.025);
+table tbody tr:hover,
+.data-table tbody tr:hover {
+  background: rgba(142, 108, 56, 0.05);
 }
 
 
 /* ==========================================================================
-   25. LIENS / TEXTES
+   16. LIENS / ICÔNES
    ========================================================================== */
 
 a {
 
-  color:
-    var(--accent);
+  color: var(--brand-gold);
 
   text-decoration: none;
 
@@ -1458,87 +1261,36 @@ a {
 }
 
 a:hover {
-
-  color:
-    #ffffff;
+  color: var(--brand-ink);
+  text-decoration: underline;
 }
 
-
-/* ==========================================================================
-   26. ICÔNES
-   ========================================================================== */
-
 svg {
-
   flex-shrink: 0;
 }
 
-.card-glass svg {
-
-  transition:
-    filter var(--transition-fast);
-}
-
-.card-glass:hover svg {
-
-  filter:
-    drop-shadow(
-      0 0 5px rgba(110,231,255,0.18)
-    );
-}
-
 
 /* ==========================================================================
-   27. PAGE LOGIN
+   17. PAGE LOGIN
    ========================================================================== */
 
 .min-h-screen {
-
   position: relative;
 }
 
-
-/* carte login */
-
-.max-w-md .card-glass {
-
-  box-shadow:
-    0 25px 80px rgba(0,0,0,0.45),
-    0 0 60px rgba(110,231,255,0.035);
+.max-w-md.card-glass,
+.max-w-sm.card-glass {
+  box-shadow: var(--shadow-lg);
 }
 
 
 /* ==========================================================================
-   28. LOADING
+   18. ÉTATS / FOCUS
    ========================================================================== */
-
-.animate-spin {
-
-  filter:
-    drop-shadow(
-      0 0 8px rgba(110,231,255,0.5)
-    );
-}
-
-
-/* ==========================================================================
-   29. ETATS
-   ========================================================================== */
-
-button:disabled {
-
-  cursor:
-    not-allowed;
-}
 
 [aria-disabled="true"] {
-  opacity: 0.45;
+  opacity: 0.6;
 }
-
-
-/* ==========================================================================
-   30. FOCUS ACCESSIBLE
-   ========================================================================== */
 
 button:focus-visible,
 input:focus-visible,
@@ -1547,15 +1299,20 @@ select:focus-visible,
 summary:focus-visible {
 
   outline:
-    2px solid var(--accent);
+    2px solid var(--brand-gold);
 
   outline-offset:
     3px;
 }
 
+.field-input input:focus-visible,
+.field-input:focus-visible {
+  outline: none;
+}
+
 
 /* ==========================================================================
-   31. MICRO-ANIMATION DES CARTES
+   19. ANIMATION D'ENTRÉE
    ========================================================================== */
 
 @keyframes card-entry {
@@ -1585,20 +1342,37 @@ summary:focus-visible {
 
 
 /* ==========================================================================
-   32. ESPACEMENT MOBILE
+   20. CONTENU DES FICHES
+   ========================================================================== */
+
+.card-glass p {
+
+  line-height:
+    1.65;
+}
+
+.card-glass h2,
+.card-glass h3 {
+
+  letter-spacing:
+    -0.01em;
+}
+
+.card-glass strong {
+
+  color:
+    var(--text-primary);
+
+  font-weight:
+    700;
+}
+
+
+/* ==========================================================================
+   21. MOBILE
    ========================================================================== */
 
 @media (max-width: 768px) {
-
-  body::before {
-    background-size: 30px 30px;
-  }
-
-  .card-glass {
-
-    border-radius:
-      var(--radius-md);
-  }
 
   .gauge-value {
 
@@ -1612,11 +1386,6 @@ summary:focus-visible {
       0.88rem;
   }
 }
-
-
-/* ==========================================================================
-   33. PETITS ÉCRANS
-   ========================================================================== */
 
 @media (max-width: 480px) {
 
@@ -1637,11 +1406,15 @@ summary:focus-visible {
     padding:
       0.85rem;
   }
+
+  h1.gold-title {
+    font-size: 1.5rem;
+  }
 }
 
 
 /* ==========================================================================
-   34. RÉDUCTION DES ANIMATIONS
+   22. RÉDUCTION DES ANIMATIONS
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1663,130 +1436,3 @@ summary:focus-visible {
       auto !important;
   }
 }
-
-
-/* ==========================================================================
-   35. COMPATIBILITÉ ANCIEN STYLE
-   ========================================================================== */
-
-button.card-glass {
-
-  cursor:
-    pointer;
-
-  transition:
-    transform var(--transition-base),
-    box-shadow var(--transition-base),
-    border-color var(--transition-base),
-    background var(--transition-base);
-}
-
-button.card-glass:hover:not(:disabled) {
-
-  transform:
-    translateY(-3px);
-
-  border-color:
-    rgba(110,231,255,0.20);
-
-  box-shadow:
-    0 18px 45px rgba(0,0,0,0.35),
-    0 0 30px rgba(110,231,255,0.04);
-}
-
-button.card-glass:disabled {
-
-  cursor:
-    not-allowed;
-
-  opacity:
-    0.42;
-}
-
-
-/* ==========================================================================
-   36. CONTENU DES FICHES
-   ========================================================================== */
-
-.card-glass p {
-
-  line-height:
-    1.65;
-}
-
-.card-glass h2,
-.card-glass h3 {
-
-  letter-spacing:
-    -0.02em;
-}
-
-.card-glass strong {
-
-  color:
-    var(--text-primary);
-
-  font-weight:
-    700;
-}
-
-
-/* ==========================================================================
-   37. PETIT DÉTAIL PREMIUM : LIGNE ACTIVE
-   ========================================================================== */
-
-.module-accordion[open]::before {
-
-  content: "";
-
-  position: absolute;
-
-  left: 0;
-
-  top: 0;
-
-  bottom: 0;
-
-  width: 2px;
-
-  background:
-    linear-gradient(
-      to bottom,
-      var(--accent),
-      var(--accent-strong),
-      transparent
-    );
-
-  box-shadow:
-    0 0 12px rgba(110,231,255,0.35);
-}
-
-
-/* ==========================================================================
-   38. ÉTAT TERMINÉ / EN COURS
-   ========================================================================== */
-
-[style*="var(--green)"] {
-
-  text-shadow:
-    0 0 12px rgba(67,230,163,0.18);
-}
-
-[style*="var(--gold)"] {
-
-  box-shadow:
-    0 8px 25px rgba(110,231,255,0.12);
-
-  transition:
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast),
-    filter var(--transition-fast);
-}
-
-button[style*="var(--gold)"]:hover {
-
-  box-shadow:
-    0 12px 35px rgba(110,231,255,0.20);
-}
-
-
