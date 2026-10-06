@@ -325,6 +325,27 @@ _ATELIER_SANS_LIVRABLES = {_NUMERO_TO_MASTER_ID["8"], _NUMERO_TO_MASTER_ID["14"]
 # Texte de bienvenue (fiche 0) propre a l'atelier : page Notion a part, modifiable
 # par Rony, lue a la place du master quand le client suit le parcours Atelier.
 _ATELIER_FICHE0_TEXTE_PAGE_ID = "3f0faffd8758812882e6d74429466129"
+# Texte de secours de la fiche 0 atelier, utilise si la page Notion ci-dessus
+# n'est pas lisible par l'integration (page non partagee, Notion indisponible).
+_ATELIER_FICHE0_TEXTE = [
+    "# 👋 BIENVENUE DANS TON ESPACE ATELIER COLLECTIF TERRAIN",
+    "Bonjour et bienvenue dans ton espace de travail personnel pour les 4 semaines de l'atelier.",
+    "Cet espace te sert à préparer chaque session et à garder ce que tu produis : tes réponses, ton script, tes prospects, ton plan de la semaine.",
+    "### 📖 COMMENT ÇA MARCHE ?",
+    "- **Avance pas à pas :** Tu avances fiche par fiche, dans l'ordre proposé.",
+    "- **Déblocage progressif :** Chaque fiche validée débloque la suivante, et les fiches de chaque session s'ouvrent le jour de la session.",
+    "- **Ton diagnostic d'abord :** Avant la session 1, tu remplis ton diagnostic commercial. Ton coach le valide : c'est ce qui ouvre la suite de ton parcours.",
+    "### 🗺️ TON PARCOURS",
+    "- **Avant la session 1 :** ton point de départ et ton diagnostic commercial.",
+    "- **Session 1 · Clarifier :** ton offre, ta cible, ta phrase de positionnement.",
+    "- **Session 2 · Prospecter :** ton script d'approche.",
+    "- **Session 3 · Suivre :** ton tableau de prospection. Il reste ouvert ensuite : chaque prospect contacté se reporte tout seul dans ton Tableau de bord.",
+    "- **Session 4 · Planifier :** ton plan de la semaine type.",
+    "- **En fin d'atelier :** un entretien individuel de 20 minutes avec ton coach.",
+    "### ⚡ LE SEUL GESTE À RETENIR",
+    "Une fois que tu as lu ou complété une fiche, va tout en bas de la page et clique sur le bouton : 👉 **\"Valider et continuer\"**.",
+    "La fiche suivante se débloque alors dans ton parcours.",
+]
 _ATELIER_PERMANENTES = {_NUMERO_TO_MASTER_ID["14"], _NUMERO_TO_MASTER_ID["13"]}
 
 
@@ -1050,7 +1071,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
             except Exception:
                 if source_id == master_id:
                     raise
-                segments = _page_segments(master_id)
+                segments = [{"type": "texte", "texte": ligne} for ligne in _ATELIER_FICHE0_TEXTE]
 
     champs = _champs_for(schema, master_id, segments)
 

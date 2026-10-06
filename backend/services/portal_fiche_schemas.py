@@ -34,7 +34,7 @@ FICHE_SCHEMAS = {
     # Page purement informative (mode d'emploi du portail). Aucune question posée
     # au client -> liste de champs vide.
     "39ffaffd87588016a405da4d8a0582d4": {
-        "nom": "0. BIENVENUE DANS VOTRE ESPACE EVOLUTION 2.0",
+        "nom": "0. BIENVENUE DANS TON ESPACE",
         "mode": "unique",
         "champs": [],
     },
