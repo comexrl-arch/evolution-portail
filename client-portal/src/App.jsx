@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Loader2, Lock, Mail, MapPin, Phone, Rocket, TrendingUp, Users } from 'lucide-react'
-import logo from './assets/logo.jpeg'
+import logo from './assets/logo.svg'
 
 // Le portail parle a portal_main.py, un process separe de main.py (agents
 // IA, port 8010) - voir portal_main.py. Port 8013, pas 8011 : verifie en

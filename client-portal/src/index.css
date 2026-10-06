@@ -1434,7 +1434,7 @@ summary:focus-visible {
   border-bottom: 1px solid var(--brand-line);
 }
 
-/* Logo sur fond presque blanc : fondu dans le fond de page */
+/* Logo officiel en SVG, fond transparent */
 
 .portal-logo {
 
@@ -1447,8 +1447,6 @@ summary:focus-visible {
   flex-shrink: 0;
 
   background: transparent;
-
-  mix-blend-mode: multiply;
 
   border-radius: 10px;
 
