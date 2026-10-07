@@ -12,6 +12,7 @@ import re
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 
 from backend.services import notion_service
@@ -30,6 +31,9 @@ app = FastAPI(
 # le definir dans .env avec le vrai domaine du frontend (ex. "https://portail.rl-evolution.fr").
 _default_origins = "http://localhost:5174,http://127.0.0.1:5174"
 _allowed_origins = os.getenv("PORTAL_ALLOWED_ORIGINS", _default_origins).split(",")
+
+# Reponses JSON compressees (fiches longues) : moins de donnees a telecharger.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
