@@ -1,11 +1,17 @@
+import copy
 import json
 import logging
 import os
 import re
+import threading
+import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 
 from backend.services.portal_fiche_schemas import FICHE_SCHEMAS
@@ -124,11 +130,59 @@ def _headers() -> dict:
     }
 
 
+# --- Performance : connexion Notion reutilisee (pas de nouvelle poignee de main
+# TLS a chaque appel), reessai automatique sur 429/5xx, petit cache memoire a
+# duree de vie courte et appels Notion independants lances en parallele. ---
+
+_retry = Retry(
+    total=3,
+    backoff_factor=0.4,
+    status_forcelist=(429,),
+    allowed_methods=None,
+    respect_retry_after_header=True,
+    raise_on_status=False,
+)
+_http = requests.Session()
+_http.mount("https://", HTTPAdapter(pool_connections=4, pool_maxsize=16, max_retries=_retry))
+
+_POOL = ThreadPoolExecutor(max_workers=8)
+
+_cache_lock = threading.Lock()
+_cache: dict = {}
+
+
+def _cache_get(key):
+    with _cache_lock:
+        hit = _cache.get(key)
+
+    if hit and hit[0] > time.monotonic():
+        return copy.deepcopy(hit[1])
+
+    return None
+
+
+def _cache_set(key, value, ttl: float):
+    with _cache_lock:
+        _cache[key] = (time.monotonic() + ttl, copy.deepcopy(value))
+
+    return value
+
+
+def _cache_clear(prefix: str | None = None) -> None:
+    with _cache_lock:
+        for key in [k for k in _cache if prefix is None or str(k).startswith(prefix)]:
+            del _cache[key]
+
+
+_TTL_DASHBOARD = 20  # secondes
+_TTL_MASTER = 600    # contenu des fiches master (quasi jamais modifie)
+
+
 def _query_data_source(data_source_id: str, filter_: dict | None = None) -> list[dict]:
     payload = {"filter": filter_} if filter_ else {}
 
     try:
-        response = requests.post(
+        response = _http.post(
             f"{NOTION_API_BASE}/data_sources/{data_source_id}/query",
             headers=_headers(),
             json=payload,
@@ -144,7 +198,7 @@ def _query_data_source(data_source_id: str, filter_: dict | None = None) -> list
 
 def _get_page(page_id: str) -> dict:
     try:
-        response = requests.get(
+        response = _http.get(
             f"{NOTION_API_BASE}/pages/{page_id}",
             headers=_headers(),
             timeout=15,
@@ -164,7 +218,7 @@ def _create_page(parent_data_source_id: str, properties: dict) -> dict:
     }
 
     try:
-        response = requests.post(
+        response = _http.post(
             f"{NOTION_API_BASE}/pages",
             headers=_headers(),
             json=payload,
@@ -180,7 +234,7 @@ def _create_page(parent_data_source_id: str, properties: dict) -> dict:
 
 def _update_page(page_id: str, properties: dict) -> dict:
     try:
-        response = requests.patch(
+        response = _http.patch(
             f"{NOTION_API_BASE}/pages/{page_id}",
             headers=_headers(),
             json={"properties": properties},
@@ -196,7 +250,7 @@ def _update_page(page_id: str, properties: dict) -> dict:
 
 def _archive_page(page_id: str) -> None:
     try:
-        response = requests.patch(
+        response = _http.patch(
             f"{NOTION_API_BASE}/pages/{page_id}",
             headers=_headers(),
             json={"archived": True},
@@ -402,7 +456,11 @@ def _resolve_master_id(props: dict) -> str | None:
 
 
 def _fiche_summary(fiche_client_id: str) -> dict:
-    page = _get_page(fiche_client_id)
+    return _fiche_summary_from_page(_get_page(fiche_client_id))
+
+
+def _fiche_summary_from_page(page: dict) -> dict:
+    fiche_client_id = page["id"]
     props = page.get("properties", {})
     nom = _prop_value(_prop(props, "Nom"))
 
@@ -724,12 +782,63 @@ def _repair_missing_fiches(client_page_id: str, nom_client: str, fiches: list[di
 
 
 def get_client_dashboard(client_page_id: str) -> dict:
+    # Calcul lourd (une vingtaine d'appels Notion) : memorise ~20 s, et vide a
+    # chaque enregistrement/validation pour que le client voie toujours son
+    # etat a jour juste apres une action.
+    cle = f"dashboard:{client_page_id}"
+    en_cache = _cache_get(cle)
+
+    if en_cache is not None:
+        return en_cache
+
+    return _cache_set(cle, _build_client_dashboard(client_page_id), _TTL_DASHBOARD)
+
+
+def _fiches_du_client(client_page_id: str, fiche_ids: list[str]) -> list[dict]:
+    # UNE requete (filtre sur la relation) au lieu d'un GET par fiche. Toute
+    # fiche annoncee par le client mais absente du resultat est relue
+    # individuellement : comportement identique a l'ancien, en bien plus rapide.
+    voulues = [fid.replace("-", "") for fid in fiche_ids]
+    pages: dict[str, dict] = {}
+
+    try:
+        for page in _query_data_source(
+            FICHES_CLIENT_DATA_SOURCE_ID,
+            filter_={"property": "\u2060[DB] Clients\u2060", "relation": {"contains": client_page_id}},
+        ):
+            pages[page["id"].replace("-", "")] = page
+    except Exception as error:
+        logger.warning("Requete groupee des fiches impossible (%s), lecture une par une.", error)
+
+    manquantes = [fid for fid in voulues if fid not in pages]
+
+    if manquantes:
+        for fid, page in zip(manquantes, _POOL.map(_get_page, manquantes)):
+            pages[fid] = page
+
+    return [_fiche_summary_from_page(pages[fid]) for fid in voulues]
+
+
+def _build_client_dashboard(client_page_id: str) -> dict:
     page = _get_page(client_page_id)
     props = page.get("properties", {})
     nom_client = _prop_value(_prop(props, "Nom"))
 
+    # Appels independants lances ensemble : fiches, KPI, classeur Google.
+    kpi_future = _POOL.submit(_client_kpi, client_page_id)
+    sheets_future = None
+
+    if sheets_service.enabled():
+        sheets_future = _POOL.submit(
+            sheets_service.sheet_url,
+            client_page_id,
+            nom_client,
+            _prop_value(_prop(props, "E-mail")) or "",
+            _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))),
+        )
+
     fiche_ids = _prop_value(_prop(props, "[DB] Fiches Client")) or []
-    fiches = [_fiche_summary(fiche_id) for fiche_id in fiche_ids]
+    fiches = _fiches_du_client(client_page_id, fiche_ids)
 
     date_demarrage = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
 
@@ -759,12 +868,7 @@ def get_client_dashboard(client_page_id: str) -> dict:
         "date_demarrage": _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage")),
         "date_bilan_90j": _prop_value(_prop(props, "Date bilan 90 jours")),
         "phase_parcours": _prop_value(_prop(props, "Phase parcours")),
-        "sheets_url": sheets_service.sheet_url(
-            client_page_id,
-            nom_client,
-            _prop_value(_prop(props, "E-mail")) or "",
-            _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))),
-        ) if sheets_service.enabled() else None,
+        "sheets_url": _resultat_sheets(sheets_future),
         "parcours": _prop_value(_prop(props, "Parcours")),
         "progression_kpi_j90": _prop_value(_prop(props, "Progression KPI J90")),
         "progression_livrables": _prop_value(_prop(props, "Progression livrables")),
@@ -772,8 +876,20 @@ def get_client_dashboard(client_page_id: str) -> dict:
         "cohorte": _client_cohorte(props),
         "sessions": _client_sessions(props),
         "fiches": fiches,
-        "kpi": _client_kpi(client_page_id),
+        "kpi": kpi_future.result(),
     }
+
+
+def _resultat_sheets(future) -> str | None:
+    # Le classeur Google ne doit jamais retarder le portail : on attend 2,5 s
+    # au plus (il continue en arriere-plan et sera pret au prochain chargement).
+    if future is None:
+        return None
+
+    try:
+        return future.result(timeout=2.5)
+    except Exception:
+        return None
 
 
 def _fiche_schema_for(fiche_client_id: str) -> tuple[dict, str, str]:
@@ -835,7 +951,7 @@ def _list_children(block_id: str) -> list[dict]:
             params["start_cursor"] = cursor
 
         try:
-            response = requests.get(
+            response = _http.get(
                 f"{NOTION_API_BASE}/blocks/{block_id}/children",
                 headers=_headers(),
                 params=params,
@@ -1142,9 +1258,44 @@ def _prefill_from_client(master_id: str, client_page_id: str, champs: list[dict]
     return prefill
 
 
+def _segments_master_cache(page_id: str) -> list[dict]:
+    # Les fiches master ne changent quasi jamais : on evite de re-lire tous
+    # leurs blocs Notion (plusieurs appels) a chaque ouverture de fiche.
+    cle = f"segments:{page_id}"
+    en_cache = _cache_get(cle)
+
+    if en_cache is not None:
+        return en_cache
+
+    return _cache_set(cle, _page_segments(page_id), _TTL_MASTER)
+
+
+def _contenu_master_cache(page_id: str) -> str:
+    cle = f"contenu:{page_id}"
+    en_cache = _cache_get(cle)
+
+    if en_cache is not None:
+        return en_cache
+
+    return _cache_set(cle, _get_page_content(page_id), _TTL_MASTER)
+
+
 def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
     schema, nom, master_id = _fiche_schema_for(fiche_client_id)
     mode = schema["mode"]
+
+    # Requetes independantes lancees des le depart, en parallele du contenu.
+    entries_future = _POOL.submit(
+        _query_data_source,
+        ENTREES_PORTAIL_DATA_SOURCE_ID,
+        {
+            "and": [
+                {"property": "Fiche Client", "relation": {"contains": fiche_client_id}},
+                {"property": "Client", "relation": {"contains": client_page_id}},
+            ]
+        },
+    )
+    livrables_future = _POOL.submit(_livrables_for_fiche, fiche_client_id, master_id)
 
     segments = None
 
@@ -1182,7 +1333,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
                     source_id = master_id
 
             try:
-                segments = _page_segments(source_id)
+                segments = _segments_master_cache(source_id)
             except Exception:
                 if source_id == master_id:
                     raise
@@ -1190,15 +1341,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
 
     champs = _champs_for(schema, master_id, segments)
 
-    entries_raw = _query_data_source(
-        ENTREES_PORTAIL_DATA_SOURCE_ID,
-        filter_={
-            "and": [
-                {"property": "Fiche Client", "relation": {"contains": fiche_client_id}},
-                {"property": "Client", "relation": {"contains": client_page_id}},
-            ]
-        },
-    )
+    entries_raw = entries_future.result()
     entries = [_parse_entry(page, champs) for page in entries_raw]
     entries.sort(key=lambda entry: entry.get("date") or "")
 
@@ -1213,7 +1356,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
         if prefill:
             entries = [{"id": None, "date": None, "donnees": prefill}]
 
-    livrables = _livrables_for_fiche(fiche_client_id, master_id)
+    livrables = livrables_future.result()
 
     if livrables and master_id in _ATELIER_SANS_LIVRABLES:
         try:
@@ -1237,7 +1380,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
     if mode == "unique":
         result["segments"] = segments
     else:
-        result["contenu"] = _get_page_content(master_id)
+        result["contenu"] = _contenu_master_cache(master_id)
 
     return result
 
@@ -1278,7 +1421,7 @@ def _sync_special_fields(master_id: str, client_page_id: str, donnees_lisibles: 
             continue
 
         try:
-            response = requests.patch(
+            response = _http.patch(
                 f"{NOTION_API_BASE}/pages/{client_page_id}",
                 headers=_headers(),
                 json={"properties": {client_prop: {"rich_text": [{"text": {"content": str(valeur)}}]}}},
@@ -1337,7 +1480,7 @@ def _upsert_kpi_entry(
 
     if existing:
         try:
-            response = requests.patch(
+            response = _http.patch(
                 f"{NOTION_API_BASE}/pages/{existing[0]['id']}",
                 headers=_headers(),
                 json={"properties": {"Valeur J0": {"number": valeur}}},
@@ -1381,6 +1524,13 @@ def _sync_kpi_fields(master_id: str, client_page_id: str, donnees_lisibles: dict
 
 
 def create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, data: dict) -> dict:
+    try:
+        return _create_entry(fiche_client_id, client_page_id, client_nom, data)
+    finally:
+        _cache_clear("dashboard:")
+
+
+def _create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, data: dict) -> dict:
     schema, fiche_nom, master_id = _fiche_schema_for(fiche_client_id)
     champs = _champs_for(schema, master_id)
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1424,6 +1574,13 @@ def _reporter_vers_sheets(schema: dict, client_page_id: str, client_nom: str, da
     if not sheets_service.enabled():
         return
 
+    def _tache():
+        _reporter_vers_sheets_sync(schema, client_page_id, client_nom, data)
+
+    threading.Thread(target=_tache, daemon=True).start()
+
+
+def _reporter_vers_sheets_sync(schema: dict, client_page_id: str, client_nom: str, data: dict) -> None:
     try:
         props = _get_page(client_page_id).get("properties", {})
         sheets_service.sync_entry_async(
@@ -1447,7 +1604,7 @@ def validate_fiche(fiche_client_id: str) -> None:
     # de dependre du polling/webhook n8n existant, pour un deblocage instantane
     # cote client.
     try:
-        response = requests.patch(
+        response = _http.patch(
             f"{NOTION_API_BASE}/pages/{fiche_client_id}",
             headers=_headers(),
             json={
@@ -1462,6 +1619,8 @@ def validate_fiche(fiche_client_id: str) -> None:
 
     except requests.RequestException as error:
         raise RuntimeError(f"Erreur Notion (validation fiche {fiche_client_id}) : {error}") from error
+
+    _cache_clear("dashboard:")
 
 
 def list_diagnostics_fiche8() -> list[dict]:
@@ -1582,7 +1741,7 @@ def update_diagnostic_fiche8(updates: list[dict]) -> None:
         }
 
         try:
-            response = requests.patch(
+            response = _http.patch(
                 f"{NOTION_API_BASE}/blocks/{update['block_id']}",
                 headers=_headers(),
                 json=payload,
