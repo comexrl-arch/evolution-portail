@@ -360,4 +360,12 @@ FICHE_SCHEMAS = {
             {"cle": "priorite_suite", "libelle": "Quelle est ta priorité pour les 90 prochains jours ?", "type": "texte", "ordre": 10},
         ],
     },
+
+    # Bonus : diagnostic d'eligibilite aux aides publiques (ajoutee le 07/10/2026).
+    # Questions lues depuis la fiche master Notion (mode unique).
+    "3f2faffd87588099b815ed70c549204b": {
+        "nom": "Bonus",
+        "mode": "unique",
+        "champs": [],
+    },
 }
