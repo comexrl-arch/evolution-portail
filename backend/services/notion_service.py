@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 
 from backend.services.portal_fiche_schemas import FICHE_SCHEMAS
-from backend.services import portal_auth_service
+from backend.services import portal_auth_service, sheets_service
 
 logger = logging.getLogger(__name__)
 
@@ -757,6 +757,13 @@ def get_client_dashboard(client_page_id: str) -> dict:
         "date_demarrage": _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage")),
         "date_bilan_90j": _prop_value(_prop(props, "Date bilan 90 jours")),
         "phase_parcours": _prop_value(_prop(props, "Phase parcours")),
+        "sheets_url": sheets_service.sheet_url(
+            client_page_id,
+            nom_client,
+            _prop_value(_prop(props, "E-mail")) or "",
+            _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))),
+        ) if sheets_service.enabled() else None,
+        "parcours": _prop_value(_prop(props, "Parcours")),
         "progression_kpi_j90": _prop_value(_prop(props, "Progression KPI J90")),
         "progression_livrables": _prop_value(_prop(props, "Progression livrables")),
         "identite": _client_identite(props),
@@ -814,19 +821,38 @@ def _is_internal_warning(block: dict) -> bool:
 
 
 def _list_children(block_id: str) -> list[dict]:
-    try:
-        response = requests.get(
-            f"{NOTION_API_BASE}/blocks/{block_id}/children",
-            headers=_headers(),
-            params={"page_size": 100},
-            timeout=15,
-        )
-        response.raise_for_status()
+    # Pagine : l'API Notion plafonne a 100 blocs par appel, et une fiche plus
+    # longue perdait sinon tout ce qui suivait.
+    results: list[dict] = []
+    cursor = None
 
-    except requests.RequestException as error:
-        raise RuntimeError(f"Erreur Notion (blocs {block_id}) : {error}") from error
+    for _ in range(20):
+        params = {"page_size": 100}
 
-    return response.json().get("results", [])
+        if cursor:
+            params["start_cursor"] = cursor
+
+        try:
+            response = requests.get(
+                f"{NOTION_API_BASE}/blocks/{block_id}/children",
+                headers=_headers(),
+                params=params,
+                timeout=15,
+            )
+            response.raise_for_status()
+
+        except requests.RequestException as error:
+            raise RuntimeError(f"Erreur Notion (blocs {block_id}) : {error}") from error
+
+        data = response.json()
+        results.extend(data.get("results", []))
+
+        if not data.get("has_more") or not data.get("next_cursor"):
+            break
+
+        cursor = data["next_cursor"]
+
+    return results
 
 
 # Marqueur de ligne pour un tableau Notion complet (bloc "table" + ses
@@ -841,7 +867,7 @@ _TABLE_LINE_PREFIX = "##TABLE## "
 
 def _table_row_cells(block: dict) -> list[str]:
     cells = block.get("table_row", {}).get("cells", [])
-    return ["".join(part.get("plain_text", "") for part in cell) for cell in cells]
+    return [_rich_text_md(cell) for cell in cells]
 
 
 def _table_to_line(block: dict) -> str | None:
@@ -859,29 +885,121 @@ def _table_to_line(block: dict) -> str | None:
     return _TABLE_LINE_PREFIX + json.dumps(payload, ensure_ascii=False)
 
 
+_NOTION_HOSTS = ("notion.so", "notion.site", "notion.com", "notion.new")
+
+
+def _lien_externe(href: str | None) -> str | None:
+    # Un lien Notion interne (page, mention, ancre) ne mene a rien pour le
+    # client : seuls les liens http(s)/mailto/tel vers l'exterieur sont gardes.
+    if not href:
+        return None
+
+    href = href.strip()
+
+    if not href.lower().startswith(("http://", "https://", "mailto:", "tel:")):
+        return None
+
+    if href.lower().startswith("http"):
+        hote = href.split("/")[2].lower() if href.count("/") >= 2 else ""
+
+        if any(hote == h or hote.endswith("." + h) for h in _NOTION_HOSTS):
+            return None
+
+    return href
+
+
+def _rich_text_md(rich_text: list[dict]) -> str:
+    out = []
+
+    for part in rich_text:
+        texte = part.get("plain_text", "")
+        lien = _lien_externe(part.get("href"))
+
+        if texte and lien:
+            texte = f"[{texte.strip()}]({lien})"
+
+        out.append(texte)
+
+    return "".join(out)
+
+
+def _block_text_md(block: dict) -> str:
+    block_type = block.get("type")
+    return _rich_text_md(block.get(block_type, {}).get("rich_text", []))
+
+
+def _file_block_url(data: dict) -> str | None:
+    kind = data.get("type")
+    return (data.get(kind) or {}).get("url") if kind else None
+
+
+def _block_lines(block: dict, depth: int = 0) -> list[str]:
+    # Un bloc -> ses lignes de texte (avec ses enfants : listes imbriquees,
+    # blocs repliables, colonnes...). Avant, les enfants etaient ignores :
+    # le contenu d'un bloc repliable (exemples, astuces, "a eviter") ne
+    # remontait pas et seul son titre restait, sans rien derriere.
+    block_type = block.get("type")
+
+    if block_type == "divider" or _is_internal_warning(block):
+        return []
+
+    if block_type == "table":
+        line = _table_to_line(block)
+        return [line] if line else []
+
+    lines: list[str] = []
+    data = block.get(block_type, {}) or {}
+
+    if block_type in ("bookmark", "embed", "link_preview"):
+        url = _lien_externe(data.get("url"))
+        legende = _rich_text_md(data.get("caption", [])).strip()
+
+        if url:
+            lines.append(f"[{legende or url}]({url})")
+
+    elif block_type in ("file", "pdf", "video", "audio"):
+        url = _file_block_url(data)
+        legende = _rich_text_md(data.get("caption", [])).strip()
+
+        if url:
+            lines.append(f"[{legende or 'Ouvrir le fichier'}]({url})")
+
+    elif block_type == "image":
+        url = _file_block_url(data)
+
+        if url:
+            legende = _rich_text_md(data.get("caption", [])).strip() or "Voir l'image"
+            lines.append(f"[{legende}]({url})")
+
+    elif block_type == "child_page":
+        titre = (data.get("title") or "").strip()
+
+        if titre:
+            lines.append(titre)
+
+    else:
+        text = _block_text_md(block)
+
+        if text:
+            prefix = _BLOCK_TYPE_PREFIX.get(block_type, "")
+
+            if block_type == "toggle":
+                prefix = "### "
+
+            lines.append(prefix + text)
+
+    if block.get("has_children") and depth < 3 and block_type not in ("child_page", "child_database", "table"):
+        for child in _list_children(block["id"]):
+            lines.extend(_block_lines(child, depth + 1))
+
+    return lines
+
+
 def _blocks_to_text(blocks: list[dict]) -> str:
     lines = []
 
     for block in blocks:
-        block_type = block.get("type")
-
-        if block_type == "divider" or _is_internal_warning(block):
-            continue
-
-        if block_type == "table":
-            table_line = _table_to_line(block)
-
-            if table_line:
-                lines.append(table_line)
-
-            continue
-
-        text = _block_text(block)
-
-        if not text:
-            continue
-
-        lines.append(_BLOCK_TYPE_PREFIX.get(block_type, "") + text)
+        lines.extend(_block_lines(block))
 
     return "\n".join(lines)
 
@@ -956,13 +1074,8 @@ def _page_segments(page_id: str) -> list[dict]:
                 })
                 continue
 
-        text = _block_text(block)
-
-        if not text:
-            continue
-
-        prefix = "- " if block_type in ("bulleted_list_item", "numbered_list_item") else _BLOCK_TYPE_PREFIX.get(block_type, "")
-        segments.append({"type": "texte", "texte": prefix + text})
+        for ligne in _block_lines(block):
+            segments.append({"type": "texte", "texte": ligne})
 
     return segments
 
@@ -1294,9 +1407,35 @@ def create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, dat
         )
 
         if existing:
-            return _parse_entry(_update_page(existing[0]["id"], properties), champs)
+            entree = _parse_entry(_update_page(existing[0]["id"], properties), champs)
+            _reporter_vers_sheets(schema, client_page_id, client_nom, data)
+            return entree
 
-    return _parse_entry(_create_page(ENTREES_PORTAIL_DATA_SOURCE_ID, properties), champs)
+    entree = _parse_entry(_create_page(ENTREES_PORTAIL_DATA_SOURCE_ID, properties), champs)
+    _reporter_vers_sheets(schema, client_page_id, client_nom, data)
+    return entree
+
+
+def _reporter_vers_sheets(schema: dict, client_page_id: str, client_nom: str, data: dict) -> None:
+    # Les saisies utiles sont reportees dans le Google Sheets du client, en
+    # arriere-plan : un probleme Google ne doit jamais empecher d'enregistrer.
+    if not sheets_service.enabled():
+        return
+
+    try:
+        props = _get_page(client_page_id).get("properties", {})
+        sheets_service.sync_entry_async(
+            _leading_number(schema["nom"]),
+            data,
+            client_page_id,
+            client_nom,
+            _prop_value(_prop(props, "E-mail")) or "",
+            _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))),
+            _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage")),
+        )
+
+    except Exception as error:
+        logging.getLogger(__name__).warning("Report Sheets impossible : %s", error)
 
 
 def validate_fiche(fiche_client_id: str) -> None:
