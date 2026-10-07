@@ -589,6 +589,12 @@ def _apply_acces(fiches: list[dict], date_demarrage=None, jours=None, permanente
         jour_ouverture = jours.get(master_id, 0)
         trop_tot = jour is not None and jour < jour_ouverture
 
+        if master_id == _BONUS_MASTER_ID:
+            # Bonus : ouvert des le debut de la formation, sans condition de
+            # jour ni de fiche precedente, et sans jamais bloquer la suite.
+            fiche["acces"] = "✅ Terminé" if etat == "Terminé" else "🚀 En cours"
+            continue
+
         if master_id in _FICHES_DEBLOCAGE_COACH:
             fiche["acces"] = "✅ Terminé" if etat == "Terminé" else (
                 "🚀 En cours" if etat == "En cours" else "🔒 Bloqué"
