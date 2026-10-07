@@ -416,6 +416,13 @@ _FICHE_POSITION = {
     )
 }
 
+# Fiche "Bonus" (diagnostic d'eligibilite aux aides publiques) : hors parcours
+# J0-J90, ouverte en permanence et ne bloquant jamais la suite.
+_BONUS_MASTER_ID = "3f2faffd87588099b815ed70c549204b"
+_FICHES_PAR_MODULE["Bonus · Aides publiques"] = [_BONUS_MASTER_ID]
+_FICHES_PERMANENTES.add(_BONUS_MASTER_ID)
+_FICHE_POSITION[_BONUS_MASTER_ID] = len(_FICHE_POSITION)
+
 FICHE_MODULES = {
     master_id: {"nom": module_nom, "ordre": ordre}
     for ordre, (module_nom, master_ids) in enumerate(_FICHES_PAR_MODULE.items())
@@ -1278,6 +1285,76 @@ def _prefill_from_client(master_id: str, client_page_id: str, champs: list[dict]
     return prefill
 
 
+# Pre-remplissage entre fiches : (master source, debut du libelle source,
+# master destination, debut du libelle destination). Les libelles sont compares
+# en minuscules sur leur debut : robuste a de petites retouches dans Notion.
+_PREFILL_ENTRE_FICHES = [
+    ("9", "quel est le problème urgent", "10", "quelle est sa plus grande frustration"),
+    ("11", "ma phrase officielle", "15", "mon script personnalisé"),
+    ("11", "ma phrase officielle", "16", "objection \"c'est trop cher\""),
+]
+
+
+def _prefill_entre_fiches(master_id: str, client_page_id: str, champs: list[dict]) -> dict:
+    regles = [
+        (_NUMERO_TO_MASTER_ID.get(src), lsrc, dlib)
+        for src, lsrc, dst, dlib in _PREFILL_ENTRE_FICHES
+        if _NUMERO_TO_MASTER_ID.get(dst) == master_id
+    ]
+
+    if not regles:
+        return {}
+
+    try:
+        fiches = get_client_dashboard(client_page_id).get("fiches", [])
+    except Exception:
+        return {}
+
+    client_fiche_par_master = {f.get("master_id"): f.get("id") for f in fiches}
+    prefill = {}
+    sources: dict = {}
+
+    for src_master, lsrc, dlib in regles:
+        champ_dst = next(
+            (c for c in champs if c["libelle"].strip().lower().startswith(dlib)), None
+        )
+        fiche_src = client_fiche_par_master.get(src_master)
+
+        if not champ_dst or not fiche_src or champ_dst["cle"] in prefill:
+            continue
+
+        try:
+            if src_master not in sources:
+                src_champs = _champs_for(FICHE_SCHEMAS[src_master], src_master)
+                pages = _query_data_source(
+                    ENTREES_PORTAIL_DATA_SOURCE_ID,
+                    {
+                        "and": [
+                            {"property": "Fiche Client", "relation": {"contains": fiche_src}},
+                            {"property": "Client", "relation": {"contains": client_page_id}},
+                        ]
+                    },
+                )
+                entrees = [_parse_entry(p, src_champs) for p in pages]
+                entrees.sort(key=lambda e: e.get("date") or "")
+                sources[src_master] = (src_champs, entrees)
+
+            src_champs, entrees = sources[src_master]
+            champ_src = next(
+                (c for c in src_champs if c["libelle"].strip().lower().startswith(lsrc)), None
+            )
+
+            if champ_src and entrees:
+                valeur = entrees[-1]["donnees"].get(champ_src["cle"])
+
+                if valeur not in (None, ""):
+                    prefill[champ_dst["cle"]] = valeur
+        except Exception as error:
+            logger.warning("Pre-remplissage entre fiches impossible (%s)", error)
+
+    return prefill
+
+
 def _segments_master_cache(page_id: str) -> list[dict]:
     # Les fiches master ne changent quasi jamais : on evite de re-lire tous
     # leurs blocs Notion (plusieurs appels) a chaque ouverture de fiche.
@@ -1381,6 +1458,9 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
         # plutot que de faire retaper au client une info deja connue. Reste
         # editable normalement au moment de l'enregistrement.
         prefill = _prefill_from_client(master_id, client_page_id, champs)
+
+        for cle, valeur in _prefill_entre_fiches(master_id, client_page_id, champs).items():
+            prefill.setdefault(cle, valeur)
 
         if prefill:
             entries = [{"id": None, "date": None, "donnees": prefill}]
