@@ -237,6 +237,17 @@ def _alerter_si_diagnostic_termine(client_page_id: str, fiche_id: str) -> None:
         logging.getLogger("uvicorn.error").warning("Alerte diagnostic impossible : %s", error)
 
 
+def _alerter_si_bonus_termine(client_page_id: str, fiche_id: str) -> None:
+    try:
+        infos = notion_service.bonus_vient_de_se_terminer(client_page_id, fiche_id)
+
+        if infos and infos["resultat"]:
+            notion_service.alerter_coach_bonus(infos["client_nom"], infos["resultat"])
+
+    except Exception as error:
+        logging.getLogger("uvicorn.error").warning("Alerte bonus impossible : %s", error)
+
+
 @app.post("/portal/fiches/{fiche_id}/valider")
 def portal_valider_fiche(
     fiche_id: str, background_tasks: BackgroundTasks, authorization: str = Header(default="")
@@ -257,6 +268,7 @@ def portal_valider_fiche(
 
     if not deja_terminee:
         background_tasks.add_task(_alerter_si_diagnostic_termine, session["client_page_id"], fiche_id)
+        background_tasks.add_task(_alerter_si_bonus_termine, session["client_page_id"], fiche_id)
 
     # Renvoie directement le tableau de bord a jour : le portail n'a plus a
     # refaire un second appel /portal/me juste apres la validation.
@@ -318,6 +330,17 @@ def coach_diagnostic_rapport(client_page_id: str, x_coach_key: str = Header(defa
 
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error))
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+
+@app.get("/coach/bonus/{client_page_id}")
+def coach_bonus(client_page_id: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return notion_service.get_bonus_resultat(client_page_id) or {}
 
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error))
