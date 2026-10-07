@@ -1052,7 +1052,7 @@ def _file_block_url(data: dict) -> str | None:
     return (data.get(kind) or {}).get("url") if kind else None
 
 
-def _block_lines(block: dict, depth: int = 0) -> list[str]:
+def _block_lines(block: dict, depth: int = 0, checks: bool = False) -> list[str]:
     # Un bloc -> ses lignes de texte (avec ses enfants : listes imbriquees,
     # blocs repliables, colonnes...). Avant, les enfants etaient ignores :
     # le contenu d'un bloc repliable (exemples, astuces, "a eviter") ne
@@ -1065,6 +1065,11 @@ def _block_lines(block: dict, depth: int = 0) -> list[str]:
     if block_type == "table":
         line = _table_to_line(block)
         return [line] if line else []
+
+    if checks and block_type == "to_do":
+        # Case a cocher reelle (etat memorise par client) : "##CHECK## cle|texte"
+        texte = _block_text(block).strip("* ")
+        return [f"{_CHECK_LINE_PREFIX}{block['id'].replace('-', '')}|{texte}"] if texte else []
 
     lines: list[str] = []
     data = block.get(block_type, {}) or {}
@@ -1109,22 +1114,25 @@ def _block_lines(block: dict, depth: int = 0) -> list[str]:
 
     if block.get("has_children") and depth < 3 and block_type not in ("child_page", "child_database", "table"):
         for child in _list_children(block["id"]):
-            lines.extend(_block_lines(child, depth + 1))
+            lines.extend(_block_lines(child, depth + 1, checks))
 
     return lines
 
 
-def _blocks_to_text(blocks: list[dict]) -> str:
+_CHECK_LINE_PREFIX = "##CHECK## "
+
+
+def _blocks_to_text(blocks: list[dict], checks: bool = False) -> str:
     lines = []
 
     for block in blocks:
-        lines.extend(_block_lines(block))
+        lines.extend(_block_lines(block, 0, checks))
 
     return "\n".join(lines)
 
 
-def _get_page_content(page_id: str) -> str:
-    return _blocks_to_text(_list_children(page_id))
+def _get_page_content(page_id: str, checks: bool = False) -> str:
+    return _blocks_to_text(_list_children(page_id), checks)
 
 
 def _page_segments(page_id: str) -> list[dict]:
@@ -1289,7 +1297,7 @@ def _contenu_master_cache(page_id: str) -> str:
     if en_cache is not None:
         return en_cache
 
-    return _cache_set(cle, _get_page_content(page_id), _TTL_MASTER)
+    return _cache_set(cle, _get_page_content(page_id, checks=True), _TTL_MASTER)
 
 
 def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
@@ -1357,6 +1365,15 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
     entries = [_parse_entry(page, champs) for page in entries_raw]
     entries.sort(key=lambda entry: entry.get("date") or "")
 
+    # L'etat des cases a cocher est memorise dans une entree speciale : elle
+    # n'est jamais une ligne du tableau.
+    checks_etat: dict = {}
+
+    for entry in list(entries):
+        if isinstance(entry.get("donnees"), dict) and _CHECKLIST_KEY in entry["donnees"]:
+            checks_etat = entry["donnees"][_CHECKLIST_KEY] or {}
+            entries.remove(entry)
+
     if mode == "unique" and not entries:
         # Pre-remplissage : si le client n'a encore jamais repondu a cette
         # fiche, on propose comme valeur de depart ce qui a deja ete capture
@@ -1387,6 +1404,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
         "champs": champs,
         "entrees": entries,
         "livrables": livrables,
+        "checks": checks_etat,
     }
 
     if mode == "unique":
@@ -1548,8 +1566,43 @@ def create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, dat
             _cache_clear("dashboard:")
 
 
+_CHECKLIST_KEY = "__checklist__"
+
+
+def _save_checklist(fiche_client_id: str, client_page_id: str, client_nom: str, fiche_nom: str, data: dict) -> dict:
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    properties = {
+        "Nom": {"title": [{"text": {"content": f"{client_nom} — {fiche_nom} — checklist"}}]},
+        "Client": {"relation": [{"id": client_page_id}]},
+        "Fiche Client": {"relation": [{"id": fiche_client_id}]},
+        "Date": {"date": {"start": now_iso}},
+        "Données (JSON)": {"rich_text": [{"text": {"content": json.dumps(data, ensure_ascii=False)}}]},
+    }
+
+    existing = _query_data_source(
+        ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={
+            "and": [
+                {"property": "Fiche Client", "relation": {"contains": fiche_client_id}},
+                {"property": "Client", "relation": {"contains": client_page_id}},
+                {"property": "Nom", "title": {"contains": "checklist"}},
+            ]
+        },
+    )
+
+    if existing:
+        page = _update_page(existing[0]["id"], properties)
+    else:
+        page = _create_page(ENTREES_PORTAIL_DATA_SOURCE_ID, properties)
+
+    return {"id": page["id"], "date": now_iso, "donnees": data}
+
+
 def _create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, data: dict, affecte: list) -> dict:
     schema, fiche_nom, master_id = _fiche_schema_for(fiche_client_id)
+
+    if _CHECKLIST_KEY in data:
+        return _save_checklist(fiche_client_id, client_page_id, client_nom, fiche_nom, data)
 
     if any(m == master_id for m, _ in _CLIENT_FIELD_SYNC) or any(m == master_id for m, _ in _KPI_FIELD_SYNC):
         affecte.append(True)
