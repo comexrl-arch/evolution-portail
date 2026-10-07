@@ -146,6 +146,7 @@ _http = requests.Session()
 _http.mount("https://", HTTPAdapter(pool_connections=4, pool_maxsize=16, max_retries=_retry))
 
 _POOL = ThreadPoolExecutor(max_workers=8)
+_POOL_BLOCS = ThreadPoolExecutor(max_workers=8)
 
 _cache_lock = threading.Lock()
 _cache: dict = {}
@@ -1132,8 +1133,17 @@ def _page_segments(page_id: str) -> list[dict]:
     # ligne juste apres son enonce, plutot qu'une zone de reponses separee.
     # Les cases a cocher Notion (to_do) restent des cases a cocher.
     segments = []
+    blocs = _list_children(page_id)
 
-    for block in _list_children(page_id):
+    # Sous-blocs de toutes les questions lus en parallele (au lieu d'un appel
+    # Notion par question, l'un apres l'autre).
+    enfants = {
+        bloc["id"]: _POOL_BLOCS.submit(_list_children, bloc["id"])
+        for bloc in blocs
+        if bloc.get("type") in ("bulleted_list_item", "numbered_list_item") and bloc.get("has_children")
+    }
+
+    for block in blocs:
         block_type = block.get("type")
 
         if block_type == "divider" or _is_internal_warning(block):
@@ -1151,7 +1161,7 @@ def _page_segments(page_id: str) -> list[dict]:
             continue
 
         if block_type in ("bulleted_list_item", "numbered_list_item") and block.get("has_children"):
-            children = _list_children(block["id"])
+            children = enfants[block["id"]].result()
 
             # Motif "Oui | Plutot | Non" : une sous-case a cocher (to_do)
             # unique servant de texte d'options, plutot qu'une vraie case.
@@ -1230,7 +1240,9 @@ def _parse_entry(page: dict, champs: list[dict]) -> dict:
 def _champs_for(schema: dict, master_id: str, segments: list[dict] | None = None) -> list[dict]:
     if schema["mode"] == "unique":
         if segments is None:
-            segments = _page_segments(master_id)
+            # Cache : sinon chaque enregistrement relisait toutes les questions
+            # de la fiche master dans Notion (un appel par question).
+            segments = _segments_master_cache(master_id)
 
         return [segment["champ"] for segment in segments if segment["type"] == "champ"]
 
