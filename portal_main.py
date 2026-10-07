@@ -244,7 +244,14 @@ def portal_valider_fiche(
     if not deja_terminee:
         background_tasks.add_task(_alerter_si_diagnostic_termine, session["client_page_id"], fiche_id)
 
-    return {"status": "validee"}
+    # Renvoie directement le tableau de bord a jour : le portail n'a plus a
+    # refaire un second appel /portal/me juste apres la validation.
+    try:
+        tableau = notion_service.get_client_dashboard(session["client_page_id"])
+    except RuntimeError:
+        tableau = None
+
+    return {"status": "validee", "dashboard": tableau}
 
 
 # --- Espace Onboarding Coach (mobile) : protege par un code d'acces simple,
