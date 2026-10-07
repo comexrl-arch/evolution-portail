@@ -89,6 +89,13 @@ function ProgressStat({ pct, children }) {
 
 const TABLE_LINE_PREFIX = '##TABLE## '
 
+function renderInline(texte) {
+  if (typeof texte !== 'string' || !texte.includes('**')) return texte
+  return texte.split(/\*\*(.+?)\*\*/g).map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
+  )
+}
+
 function renderTextLine(ligne, key) {
   if (ligne.startsWith(TABLE_LINE_PREFIX)) {
     let table = null
@@ -115,7 +122,7 @@ function renderTextLine(ligne, key) {
                     className="text-left p-2 font-semibold"
                     style={{ borderBottom: '1px solid #D6D3CA', color: 'var(--text-pure)' }}
                   >
-                    {cell}
+                    {renderInline(cell)}
                   </th>
                 ))}
               </tr>
@@ -130,7 +137,7 @@ function renderTextLine(ligne, key) {
                     className="p-2 align-top"
                     style={{ borderBottom: '1px solid #E7E5DF', color: 'var(--text-dimmed)' }}
                   >
-                    {cell}
+                    {renderInline(cell)}
                   </td>
                 ))}
               </tr>
@@ -141,25 +148,25 @@ function renderTextLine(ligne, key) {
     )
   }
   if (ligne.startsWith('### ')) {
-    return <h3 key={key} className="font-semibold mt-3">{ligne.slice(4)}</h3>
+    return <h3 key={key} className="font-semibold mt-3">{renderInline(ligne.slice(4))}</h3>
   }
   if (ligne.startsWith('## ')) {
-    return <h3 key={key} className="text-lg font-semibold mt-3">{ligne.slice(3)}</h3>
+    return <h3 key={key} className="text-lg font-semibold mt-3">{renderInline(ligne.slice(3))}</h3>
   }
   if (ligne.startsWith('# ')) {
-    return <h2 key={key} className="gold-title text-xl mt-2">{ligne.slice(2)}</h2>
+    return <h2 key={key} className="gold-title text-xl mt-2">{renderInline(ligne.slice(2))}</h2>
   }
   if (ligne.startsWith('- ')) {
-    return <p key={key} className="pl-4" style={{ color: 'var(--text-dimmed)' }}>• {ligne.slice(2)}</p>
+    return <p key={key} className="pl-4" style={{ color: 'var(--text-dimmed)' }}>• {renderInline(ligne.slice(2))}</p>
   }
   if (ligne.startsWith('> ')) {
     return (
       <p key={key} className="pl-3 border-l-2 italic" style={{ color: 'var(--text-soft)', borderColor: 'var(--gold)' }}>
-        {ligne.slice(2)}
+        {renderInline(ligne.slice(2))}
       </p>
     )
   }
-  return <p key={key} style={{ color: 'var(--text-dimmed)' }}>{ligne}</p>
+  return <p key={key} style={{ color: 'var(--text-dimmed)' }}>{renderInline(ligne)}</p>
 }
 
 function FicheContent({ texte }) {
