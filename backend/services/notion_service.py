@@ -1524,14 +1524,24 @@ def _sync_kpi_fields(master_id: str, client_page_id: str, donnees_lisibles: dict
 
 
 def create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, data: dict) -> dict:
+    # Une saisie ne change le tableau de bord (objectif, activite, KPI) que pour
+    # quelques fiches precises : sinon on garde le cache, la sauvegarde reste
+    # rapide et les etats des fiches ne bougent pas.
+    affecte = []
+
     try:
-        return _create_entry(fiche_client_id, client_page_id, client_nom, data)
+        return _create_entry(fiche_client_id, client_page_id, client_nom, data, affecte)
     finally:
-        _cache_clear("dashboard:")
+        if affecte:
+            _cache_clear("dashboard:")
 
 
-def _create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, data: dict) -> dict:
+def _create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, data: dict, affecte: list) -> dict:
     schema, fiche_nom, master_id = _fiche_schema_for(fiche_client_id)
+
+    if any(m == master_id for m, _ in _CLIENT_FIELD_SYNC) or any(m == master_id for m, _ in _KPI_FIELD_SYNC):
+        affecte.append(True)
+
     champs = _champs_for(schema, master_id)
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
