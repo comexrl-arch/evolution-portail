@@ -4,6 +4,7 @@
 # process/port pour ne jamais risquer d'interrompre le backend agents en
 # production lors d'un redemarrage ou d'un crash cote portail.
 
+import logging
 import os
 from datetime import datetime, timezone
 
@@ -205,17 +206,39 @@ def portal_create_entry(
     return {"status": "saved", "entry": entry}
 
 
+def _alerter_si_diagnostic_termine(client_page_id: str, fiche_id: str) -> None:
+    # Tache de fond : previent le coach quand le client vient de terminer ses
+    # 5 fiches de diagnostic. Best-effort, ne bloque jamais la validation.
+    try:
+        infos = notion_service.diagnostic_vient_de_se_terminer(client_page_id, fiche_id)
+
+        if infos:
+            notion_service.alerter_coach_diagnostic(infos["client_nom"], infos["client_email"])
+
+    except Exception as error:
+        logging.getLogger("uvicorn.error").warning("Alerte diagnostic impossible : %s", error)
+
+
 @app.post("/portal/fiches/{fiche_id}/valider")
-def portal_valider_fiche(fiche_id: str, authorization: str = Header(default="")):
+def portal_valider_fiche(
+    fiche_id: str, background_tasks: BackgroundTasks, authorization: str = Header(default="")
+):
     session = _session_from_header(authorization)
 
     try:
         dashboard = notion_service.get_client_dashboard(session["client_page_id"])
         _exiger_fiche_ouverte(dashboard, fiche_id)
+        deja_terminee = any(
+            f["id"].replace("-", "") == fiche_id.replace("-", "") and f.get("etat") == "Terminé"
+            for f in dashboard["fiches"]
+        )
         notion_service.validate_fiche(fiche_id)
 
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error))
+
+    if not deja_terminee:
+        background_tasks.add_task(_alerter_si_diagnostic_termine, session["client_page_id"], fiche_id)
 
     return {"status": "validee"}
 
@@ -256,6 +279,20 @@ def coach_diagnostics(x_coach_key: str = Header(default="")):
 
     try:
         return {"diagnostics": notion_service.list_diagnostics_fiche8()}
+
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error))
+
+
+@app.get("/coach/diagnostic-rapport/{client_page_id}")
+def coach_diagnostic_rapport(client_page_id: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return notion_service.get_diagnostic_rapport(client_page_id)
+
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error))
 
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error))
