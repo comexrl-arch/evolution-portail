@@ -2239,6 +2239,110 @@ def alerter_coach_diagnostic(client_nom: str, client_email: str | None) -> None:
         logger.warning("Alerte diagnostic non envoyee (%s) : %s", client_nom, error)
 
 
+def _calculer_bonus(champs: list[dict], valeurs: dict) -> dict:
+    # Meme logique que BonusPanel (App.jsx) : score d'ancrage local /25 + aides.
+    def rep(debut):
+        c = next((c for c in champs if c["libelle"].strip().lower().startswith(debut)), None)
+        return (valeurs.get(c["cle"]) or "") if c else ""
+
+    total = maxi = repondus = 0
+
+    for c in champs:
+        if not re.match(r"^ancrage \d", c["libelle"].strip(), re.I):
+            continue
+        m = re.search(r"\(max (\d+)\)", c["libelle"])
+        maxi += int(m.group(1)) if m else 0
+        p = re.search(r"\((\d+) pts?\)", str(valeurs.get(c["cle"]) or ""))
+        if p:
+            total += int(p.group(1))
+            repondus += 1
+
+    terr, eff, exclu = rep("territoire"), rep("effectif"), rep("mon activité relève")
+    invest, export, fret = rep("montant de mon projet"), rep("je prospecte"), rep("j'importe")
+    apprenti, regulier, rien = rep("je prévois"), rep("mes obligations"), rep("je n'ai encore")
+    gp, mq, gf = terr == "Guadeloupe", terr == "Martinique", terr == "Guyane"
+    aides = []
+
+    if gp and exclu == "Non" and eff != "5 salariés ou plus" and invest == "Moins de 25 000 €":
+        aides.append("ARDDA (jusqu'à 10 000 €, dépôt avant le 31 octobre)")
+    if gp and invest == "25 000 à 100 000 €":
+        aides.append("ARICE (jusqu'à 40 % des investissements, max 40 000 €)")
+    if gp and export == "Oui":
+        aides.append("Aide à la prospection internationale (jusqu'à 10 000 €)")
+    if (gp and invest == "Plus de 200 000 €") or (mq and invest in ("25 000 à 100 000 €", "100 000 à 200 000 €", "Plus de 200 000 €")):
+        aides.append("FEDER (seuil CTM 50 000 €)" if mq else "FEDER-FSE+ Action 1.3 (coût min. 200 000 €)")
+    if mq and fret == "Oui":
+        aides.append("Aide au fret Martinique")
+    if mq and apprenti == "Oui":
+        aides.append("ATR / ATEF (apprentissage)")
+    if gf:
+        aides.append("France 2030 régionalisé / AAP ESS 2026 (valider le guichet)")
+
+    alertes = []
+    if regulier == "Non":
+        alertes.append("URSSAF / CGSS pas à jour")
+    if rien == "Non":
+        alertes.append("Dépenses déjà engagées avant dépôt")
+
+    niveau = ("Maximal" if total >= 19 else "Fort" if total >= 12 else "Modéré" if total >= 8 else "Faible")
+    return {"territoire": terr, "score": total, "max": maxi or 25, "niveau": niveau,
+            "repondus": repondus, "aides": aides, "alertes": alertes}
+
+
+def get_bonus_resultat(client_page_id: str) -> dict | None:
+    fiches = get_client_dashboard(client_page_id).get("fiches", [])
+    fiche = next((f for f in fiches if f.get("master_id") == _BONUS_MASTER_ID), None)
+
+    if not fiche:
+        return None
+
+    data = get_fiche(fiche["id"], client_page_id)
+    valeurs = data["entrees"][-1]["donnees"] if data["entrees"] else {}
+    resultat = _calculer_bonus(data["champs"], valeurs)
+    resultat["etat"] = fiche.get("etat")
+    return resultat
+
+
+def bonus_vient_de_se_terminer(client_page_id: str, fiche_id: str) -> dict | None:
+    fiches = get_client_dashboard(client_page_id).get("fiches", [])
+    fiche = next((f for f in fiches if f["id"].replace("-", "") == fiche_id.replace("-", "")), None)
+
+    if not fiche or fiche.get("master_id") != _BONUS_MASTER_ID:
+        return None
+
+    resultat = get_bonus_resultat(client_page_id)
+    props = _get_page(client_page_id).get("properties", {})
+    return {"client_nom": _prop_value(_prop(props, "Nom")), "resultat": resultat}
+
+
+def alerter_coach_bonus(client_nom: str, r: dict) -> None:
+    webhook_url = os.getenv("N8N_WEBHOOK_COACH_ALERT")
+
+    if not webhook_url:
+        return
+
+    portail = os.getenv("PORTAL_FRONTEND_URL", "https://portail.rl-evolution.fr").rstrip("/")
+    lignes = [
+        f"{client_nom} a validé son diagnostic d'éligibilité aux aides.",
+        f"Territoire : {r['territoire'] or 'non précisé'}",
+        f"Score d'ancrage local : {r['score']} / {r['max']} ({r['niveau']}, seuil bonus 12)",
+        "Aides à explorer : " + (", ".join(r["aides"]) or "aucune identifiée"),
+    ]
+    if r["alertes"]:
+        lignes.append("Points de vigilance : " + ", ".join(r["alertes"]))
+    lignes.append(f"{portail}/coach")
+
+    try:
+        requests.post(webhook_url, json={
+            "event": "bonus_termine",
+            "client_nom": client_nom,
+            "subject": f"Bonus aides : {client_nom} ({r['score']}/{r['max']})",
+            "message": "\n".join(lignes),
+        }, timeout=15).raise_for_status()
+    except requests.RequestException as error:
+        logger.warning("Alerte bonus non envoyee (%s) : %s", client_nom, error)
+
+
 def send_portal_invite(email: str, client_page_id: str, client_nom: str) -> None:
     # Factorise la logique utilisee par /portal/auth/request-link : partagee
     # avec onboard_client() pour que le lien d'acces parte automatiquement
