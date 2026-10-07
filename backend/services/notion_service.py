@@ -1710,6 +1710,49 @@ _ANNOT_PLAIN = {
 }
 
 
+def _rt(texte: str, gras: bool = False, italique: bool = False) -> dict:
+    annotations = dict(_ANNOT_BOLD if gras else _ANNOT_PLAIN)
+    annotations["italic"] = italique
+    return {"type": "text", "text": {"content": texte}, "annotations": annotations}
+
+
+def _initialiser_fiche8(fiche_client_id: str) -> None:
+    # Meme structure que la fiche master "8. MON RESULTAT DE DIAGNOSTIC".
+    def bloc(type_, *rich_text):
+        return {"object": "block", "type": type_, type_: {"rich_text": list(rich_text)}}
+
+    enfants = [
+        bloc("heading_1", _rt("\U0001F3C6 MON RÉSULTAT DE DIAGNOSTIC")),
+        bloc("paragraph", _rt("C'est ici que nous posons ton point de départ chiffré avant d'attaquer la restructuration.")),
+        {"object": "block", "type": "divider", "divider": {}},
+        bloc("heading_3", _rt("\U0001F4CA 1. LE SCORE GLOBAL")),
+        bloc("bulleted_list_item", _rt("Score d'Offre :", gras=True), _rt(" / 3")),
+        bloc("bulleted_list_item", _rt("Score de Visibilité :", gras=True), _rt(" / 3")),
+        bloc("bulleted_list_item", _rt("Score de Prospection :", gras=True), _rt(" / 3")),
+        bloc("bulleted_list_item", _rt("Score de Conversion :", gras=True), _rt(" / 3")),
+        bloc("bulleted_list_item", _rt("Score de Suivi :", gras=True), _rt(" / 3")),
+        bloc("bulleted_list_item", _rt("SCORE TOTAL :", gras=True), _rt(" / 15")),
+        {"object": "block", "type": "divider", "divider": {}},
+        bloc("heading_3", _rt("\U0001F3AF 2. NOS 3 PRIORITÉS POUR LES 90 JOURS")),
+        bloc("paragraph", _rt("Sur la base de tes résultats, voici les trois chantiers prioritaires que nous allons mener ensemble :", italique=True)),
+        bloc("numbered_list_item", _rt("Priorité 1 :", gras=True), _rt(" ")),
+        bloc("numbered_list_item", _rt("Priorité 2 :", gras=True), _rt(" ")),
+        bloc("numbered_list_item", _rt("Priorité 3 :", gras=True), _rt(" ")),
+    ]
+
+    try:
+        response = _http.patch(
+            f"{NOTION_API_BASE}/blocks/{fiche_client_id}/children",
+            headers=_headers(),
+            json={"children": enfants},
+            timeout=20,
+        )
+        response.raise_for_status()
+
+    except requests.RequestException as error:
+        raise RuntimeError(f"Erreur Notion (initialisation fiche 8 {fiche_client_id}) : {error}") from error
+
+
 def get_diagnostic_fiche8(fiche_client_id: str) -> list[dict]:
     # Chaque score/priorite de la fiche 8 est un bulleted/numbered_list_item
     # avec exactement 2 segments de rich_text : le libelle en gras ("Score
@@ -1718,8 +1761,16 @@ def get_diagnostic_fiche8(fiche_client_id: str) -> list[dict]:
     # ne matche pas) pour ne jamais toucher les titres/paragraphes/instructions
     # de la fiche par erreur.
     champs = []
+    blocs = _list_children(fiche_client_id)
 
-    for block in _list_children(fiche_client_id):
+    if not blocs:
+        # La fiche 8 d'un client est parfois une page vide (copie du modele non
+        # injectee par le pipeline de duplication) : sans structure, il n'y a
+        # aucun champ a remplir. On la cree a l'identique du modele.
+        _initialiser_fiche8(fiche_client_id)
+        blocs = _list_children(fiche_client_id)
+
+    for block in blocs:
         block_type = block.get("type")
 
         if block_type not in ("bulleted_list_item", "numbered_list_item"):
