@@ -6,6 +6,7 @@
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 
 import re
@@ -42,6 +43,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def _journal_duree(request, call_next):
+    # Duree de chaque requete dans les logs Render : "PERF 12.3s POST /portal/..."
+    debut = time.monotonic()
+    response = await call_next(request)
+    duree = time.monotonic() - debut
+
+    if request.method != "OPTIONS":
+        logging.getLogger("uvicorn.error").info("PERF %.1fs %s %s", duree, request.method, request.url.path)
+
+    return response
+
 
 # Horodatage calcule une seule fois au chargement du module (donc au demarrage
 # du process). Sert a detecter un "process fantome" qui repond encore sur le
