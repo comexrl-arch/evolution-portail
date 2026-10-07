@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 from datetime import datetime, timezone
 
 import requests
@@ -486,6 +487,7 @@ _DIAGNOSTIC_ZONES = [
     {"numero": 5, "zone": "Suivi commercial", "master_id": "39ffaffd87588086b588e7a82738c7b1"},
 ]
 _DIAGNOSTIC_FICHE8_MASTER_ID = "39ffaffd87588015a47febbf572e6f62"
+_DIAGNOSTIC_ZONE_IDS = {zone["master_id"] for zone in _DIAGNOSTIC_ZONES}
 
 
 def _jour_parcours(date_demarrage) -> int | None:
@@ -1487,18 +1489,33 @@ def list_diagnostics_fiche8() -> list[dict]:
             filter_={"property": "⁠[DB] Clients⁠", "relation": {"contains": client_id}},
         )
 
+        fiche8 = None
+        zones_terminees = 0
+
         for page in fiches:
             props = page.get("properties", {})
+            master_id = _resolve_master_id(props)
 
-            if _resolve_master_id(props) == diagnostic_master_id:
-                result.append({
-                    "client_page_id": client_id,
-                    "client_nom": nom_client,
+            if master_id == diagnostic_master_id:
+                fiche8 = {
                     "fiche_client_id": page["id"],
                     "etat": _prop_value(_prop(props, "État")),
-                })
-                break
+                }
+            elif master_id in _DIAGNOSTIC_ZONE_IDS and _prop_value(_prop(props, "État")) == "Terminé":
+                zones_terminees += 1
 
+        if fiche8:
+            result.append({
+                "client_page_id": client_id,
+                "client_nom": nom_client,
+                "fiche_client_id": fiche8["fiche_client_id"],
+                "etat": fiche8["etat"],
+                "zones_terminees": zones_terminees,
+                "diagnostic_pret": zones_terminees >= len(_DIAGNOSTIC_ZONES) and fiche8["etat"] != "Terminé",
+            })
+
+    # Les diagnostics prets a valider remontent en premier.
+    result.sort(key=lambda d: (not d["diagnostic_pret"], d["client_nom"] or ""))
     return result
 
 
@@ -1704,6 +1721,151 @@ def get_coach_diagnostic_bundle(client_id: str) -> dict:
         "zones": zones,
         "fiche_8": fiche_8,
     }
+
+
+def _norm(texte) -> str:
+    texte = unicodedata.normalize("NFD", str(texte or ""))
+    texte = "".join(c for c in texte if unicodedata.category(c) != "Mn")
+    return texte.strip().lower()
+
+
+_REPONSE_POINTS = {"oui": 1.0, "plutot": 0.5, "non": 0.0}
+
+# Libelles exacts de la fiche 8 (page Notion "8. MON RESULTAT DE DIAGNOSTIC").
+_FICHE8_LIBELLE_SCORE = {
+    "Offre": "Score d'Offre",
+    "Visibilité": "Score de Visibilité",
+    "Prospection": "Score de Prospection",
+    "Conversion": "Score de Conversion",
+    "Suivi commercial": "Score de Suivi",
+}
+_PRIORITE_PAR_ZONE = {
+    "Offre": "Clarifier ton offre : un message simple que ta cible comprend tout de suite",
+    "Visibilité": "Gagner en visibilité auprès de ta cible, avec une présence régulière",
+    "Prospection": "Structurer ta prospection : un rythme, des contacts, un suivi",
+    "Conversion": "Améliorer ta conversion : de l'échange au rendez-vous, du rendez-vous à la vente",
+    "Suivi commercial": "Mettre en place ton suivi commercial : relances, tableau de bord, chiffres",
+}
+
+
+def get_diagnostic_rapport(client_page_id: str) -> dict:
+    """Rapport de diagnostic pour le coach : reponses par zone + proposition de scores.
+
+    Score d'une zone /3 = part de reponses positives (Oui = 1, Plutot = 0,5,
+    Non = 0) ramenee sur 3 et arrondie. C'est une PROPOSITION calculee, que le
+    coach relit et ajuste avant de valider la fiche 8.
+    """
+    bundle = get_coach_diagnostic_bundle(client_page_id)
+    zones = []
+    scores = {}
+
+    for zone in bundle["zones"]:
+        points = []
+
+        for question in zone["questions_fermees"]:
+            valeur = _REPONSE_POINTS.get(_norm(question.get("reponse")))
+
+            if valeur is not None:
+                points.append(valeur)
+
+        score = int(3 * sum(points) / len(points) + 0.5) if points else None
+        scores[zone["zone"]] = score
+        zones.append({
+            "zone": zone["zone"],
+            "etat": zone["etat"],
+            "repondu_le": zone["repondu_le"],
+            "score": score,
+            "reponses_positives": sum(points),
+            "nb_questions": len(zone["questions_fermees"]),
+            "questions": [
+                {"libelle": q["libelle"], "reponse": q.get("reponse")}
+                for q in zone["questions_fermees"]
+            ],
+            "reponse_ouverte": zone["reponse_ouverte"],
+        })
+
+    scores_connus = {zone: s for zone, s in scores.items() if s is not None}
+    total = sum(scores_connus.values())
+
+    propositions = [
+        {"label": _FICHE8_LIBELLE_SCORE[zone], "valeur": f"{score} / 3"}
+        for zone, score in scores_connus.items()
+    ]
+    propositions.append({"label": "SCORE TOTAL", "valeur": f"{total} / 15"})
+
+    # Priorites : les 3 zones aux scores les plus bas (a egalite, l'ordre du parcours).
+    plus_faibles = sorted(scores_connus.items(), key=lambda item: item[1])[:3]
+
+    for rang, (zone, _score) in enumerate(plus_faibles, start=1):
+        propositions.append({"label": f"Priorité {rang}", "valeur": _PRIORITE_PAR_ZONE[zone]})
+
+    return {
+        "client": bundle["client"],
+        "fiche_8": bundle["fiche_8"],
+        "zones": zones,
+        "total": total,
+        "complet": len(scores_connus) == len(_DIAGNOSTIC_ZONES),
+        "propositions": propositions,
+    }
+
+
+def diagnostic_vient_de_se_terminer(client_page_id: str, fiche_client_id: str) -> dict | None:
+    """Appelee APRES la validation d'une fiche par le client.
+
+    Renvoie les infos du client si cette validation est celle qui termine les 5
+    fiches de zone du diagnostic (et que la fiche 8 n'est pas deja validee),
+    sinon None. Sert a alerter le coach une seule fois.
+    """
+    dashboard = get_client_dashboard(client_page_id)
+    fiche_id = fiche_client_id.replace("-", "")
+    validee = next((f for f in dashboard["fiches"] if f["id"].replace("-", "") == fiche_id), None)
+
+    if not validee or validee.get("master_id") not in _DIAGNOSTIC_ZONE_IDS:
+        return None
+
+    zones = [f for f in dashboard["fiches"] if f.get("master_id") in _DIAGNOSTIC_ZONE_IDS]
+    fiche8 = next((f for f in dashboard["fiches"] if f.get("master_id") == _DIAGNOSTIC_FICHE8_MASTER_ID), None)
+
+    # La fiche qu'on vient de valider est comptee comme terminee meme si Notion
+    # n'a pas encore propage son nouvel etat.
+    toutes_terminees = len(zones) == len(_DIAGNOSTIC_ZONES) and all(
+        f.get("etat") == "Terminé" or f["id"].replace("-", "") == fiche_id for f in zones
+    )
+
+    if not toutes_terminees or (fiche8 and fiche8.get("etat") == "Terminé"):
+        return None
+
+    return {"client_nom": dashboard["nom"], "client_email": (dashboard.get("identite") or {}).get("email")}
+
+
+def alerter_coach_diagnostic(client_nom: str, client_email: str | None) -> None:
+    # Best-effort : un probleme d'alerte ne doit jamais bloquer le client.
+    webhook_url = os.getenv("N8N_WEBHOOK_COACH_ALERT")
+
+    if not webhook_url:
+        logger.warning("N8N_WEBHOOK_COACH_ALERT manquant : alerte diagnostic non envoyee (%s).", client_nom)
+        return
+
+    portail = os.getenv("PORTAL_FRONTEND_URL", "https://portail.rl-evolution.fr").rstrip("/")
+    payload = {
+        "event": "diagnostic_termine",
+        "client_nom": client_nom,
+        "client_email": client_email,
+        "coach_url": f"{portail}/coach",
+        "subject": f"Diagnostic terminé : {client_nom} (fiche 8 à valider)",
+        "message": (
+            f"{client_nom} vient de terminer son diagnostic (fiches 3 à 7).\n\n"
+            f"Ouvre l'Espace Coach, onglet Diagnostics : le rapport et les scores proposés sont prêts.\n"
+            f"{portail}/coach"
+        ),
+    }
+
+    try:
+        requests.post(webhook_url, json=payload, timeout=15).raise_for_status()
+        logger.info("Alerte diagnostic envoyee au coach : %s", client_nom)
+
+    except requests.RequestException as error:
+        logger.warning("Alerte diagnostic non envoyee (%s) : %s", client_nom, error)
 
 
 def send_portal_invite(email: str, client_page_id: str, client_nom: str) -> None:
