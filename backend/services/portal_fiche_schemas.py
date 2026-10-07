@@ -161,7 +161,7 @@ FICHE_SCHEMAS = {
 
     # 10. MA CIBLE PRIORITAIRE
     "39ffaffd875880deb56ce1395ae32687": {
-        "nom": "10. MA CIBLE PRIORITAIRE",
+        "nom": "12. MA CIBLE PRIORITAIRE",
         "mode": "unique",
         "champs": [
             {"cle": "portrait_client_ideal", "libelle": "Qui est-il précisément ? (Secteur d'activité, taille d'entreprise, rôle de votre interlocuteur...)", "type": "texte", "ordre": 1},
@@ -173,7 +173,7 @@ FICHE_SCHEMAS = {
 
     # 11. MA PHRASE DE POSITIONNEMENT
     "39ffaffd875880f980a9f99a718d4141": {
-        "nom": "11. MA PHRASE DE POSITIONNEMENT",
+        "nom": "10. MA PHRASE DE POSITIONNEMENT",
         "mode": "unique",
         "champs": [
             {"cle": "phrase_positionnement_officielle", "libelle": "Ma phrase officielle (J'aide [cible] à obtenir [résultat] sans [frustration] grâce à [méthode])", "type": "texte", "ordre": 1},
@@ -184,7 +184,7 @@ FICHE_SCHEMAS = {
 
     # 12. VALIDATION TERRAIN DE MON POSITIONNEMENT
     "39ffaffd875880d7bf80c72c865a88b2": {
-        "nom": "12. VALIDATION TERRAIN DE MON POSITIONNEMENT",
+        "nom": "13. VALIDATION TERRAIN DE MON POSITIONNEMENT",
         "mode": "unique",
         "champs": [
             {"cle": "retour_personne_1", "libelle": "Retour Personne 1 : est-ce clair pour elle ? Qu'a-t-elle compris ?", "type": "texte", "ordre": 1},
@@ -200,7 +200,7 @@ FICHE_SCHEMAS = {
     # contenu Notion mais est nécessaire pour distinguer les soumissions
     # hebdomadaires dans "[DB] Entrées Portail".
     "39ffaffd875880ebbcdde70a29c35269": {
-        "nom": "13. MON PLAN DE PROSPECTION DE LA SEMAINE",
+        "nom": "15. MON PLAN DE PROSPECTION DE LA SEMAINE",
         "mode": "recurrent",
         "champs": [
             {"cle": "semaine_du", "libelle": "Semaine du (identifiant de l'entrée)", "type": "date", "ordre": 1},
@@ -213,7 +213,7 @@ FICHE_SCHEMAS = {
 
     # 14. MON TABLEAU DE PROSPECTION
     "39ffaffd875880f7aee1e8b138416d0a": {
-        "nom": "14. MON TABLEAU DE PROSPECTION",
+        "nom": "11. MON TABLEAU DE PROSPECTION",
         "mode": "recurrent",
         "champs": [
             {"cle": "date_contact", "libelle": "Date", "type": "date", "ordre": 1},
@@ -226,7 +226,7 @@ FICHE_SCHEMAS = {
 
     # 15. SCRIPT D'APPROCHE (MODÈLE)
     "39ffaffd875880f9a066e6a7e1dc7d37": {
-        "nom": "15. SCRIPT D'APPROCHE (MODÈLE)",
+        "nom": "14. SCRIPT D'APPROCHE (MODÈLE)",
         "mode": "unique",
         "champs": [
             {"cle": "script_personnalise", "libelle": "Mon script personnalisé (adaptez la structure d'accroche / qualification / appel à l'action à votre voix)", "type": "texte", "ordre": 1},
@@ -235,7 +235,7 @@ FICHE_SCHEMAS = {
 
     # 16. GESTION DES OBJECTIONS
     "39ffaffd8758808c91dfdd277b66fa2a": {
-        "nom": "16. GESTION DES OBJECTIONS",
+        "nom": "18. GESTION DES OBJECTIONS",
         "mode": "unique",
         "champs": [
             {"cle": "reponse_objection_trop_cher", "libelle": "Objection \"C'est trop cher\" : ma réponse", "type": "texte", "ordre": 1},
@@ -249,7 +249,7 @@ FICHE_SCHEMAS = {
     # identifiant temporel de l'entrée (non listé explicitement comme champ dans
     # le contenu Notion, mais nécessaire pour distinguer les bilans dans le temps).
     "39ffaffd875880708581d60c234aab45": {
-        "nom": "17. BILAN HEBDOMADAIRE : PROSPECTION",
+        "nom": "16. BILAN HEBDOMADAIRE : PROSPECTION",
         "mode": "recurrent",
         "champs": [
             {"cle": "semaine_du", "libelle": "Semaine du (identifiant de l'entrée)", "type": "date", "ordre": 1},
@@ -267,7 +267,7 @@ FICHE_SCHEMAS = {
     # Page informative (structure en 4 phases), aucun champ de saisie libre
     # identifié dans le contenu -> liste de champs vide.
     "39ffaffd87588001b983e13aa1a06cda": {
-        "nom": "18. TRAME D'ENTRETIEN DE VENTE",
+        "nom": "17. TRAME D'ENTRETIEN DE VENTE",
         "mode": "unique",
         "champs": [],
     },
@@ -319,7 +319,7 @@ FICHE_SCHEMAS = {
 
     # 21. MA VISION LONG TERME : eVolution 2.0
     "39ffaffd875880448c4fe3287b893bf1": {
-        "nom": "21. MA VISION LONG TERME : eVolution 2.0",
+        "nom": "23. MA VISION LONG TERME : eVolution 2.0",
         "mode": "unique",
         "champs": [
             {"cle": "objectif_ca_1an", "libelle": "Objectif financier (Chiffre d'affaires) à horizon 1 an", "type": "texte", "ordre": 1},
@@ -332,7 +332,7 @@ FICHE_SCHEMAS = {
 
     # 22. MES RECOMMANDATIONS (accompagne le Module 7, ajoutee le 05/10/2026)
     "3f0faffd875881778743eb169a6915fb": {
-        "nom": "22. MES RECOMMANDATIONS",
+        "nom": "21. MES RECOMMANDATIONS",
         "mode": "unique",
         "champs": [
             {"cle": "clients_satisfaits", "libelle": "Quels sont les 3 clients les plus satisfaits à qui tu peux demander une recommandation ?", "type": "texte", "ordre": 1},
@@ -345,7 +345,7 @@ FICHE_SCHEMAS = {
 
     # 23. MON BILAN J90 (fin de parcours, ajoutee le 05/10/2026)
     "3f0faffd87588137927fda435c873a9f": {
-        "nom": "23. MON BILAN J90",
+        "nom": "22. MON BILAN J90",
         "mode": "unique",
         "champs": [
             {"cle": "nb_prospects_contactes", "libelle": "Nombre de prospects contactés :", "type": "texte", "ordre": 1},
