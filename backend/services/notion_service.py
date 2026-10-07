@@ -295,7 +295,33 @@ def find_client_by_email(email: str) -> dict | None:
     return results[0] if results else None
 
 
+# Renumerotation de "[DB] Fiches Master" (07/10/2026) : les fiches gardent
+# leur identifiant interne historique (utilise par le parcours, Sheets, les
+# alertes), seul l'affichage suit la nouvelle numerotation. Les fiches client
+# deja creees portent encore l'ancien titre : on les reconnait aussi par lui.
+_ANCIENS_NOMS = {
+    "39ffaffd875880deb56ce1395ae32687": "10. MA CIBLE PRIORITAIRE",
+    "39ffaffd875880f980a9f99a718d4141": "11. MA PHRASE DE POSITIONNEMENT",
+    "39ffaffd875880d7bf80c72c865a88b2": "12. VALIDATION TERRAIN DE MON POSITIONNEMENT",
+    "39ffaffd875880ebbcdde70a29c35269": "13. MON PLAN DE PROSPECTION DE LA SEMAINE",
+    "39ffaffd875880f7aee1e8b138416d0a": "14. MON TABLEAU DE PROSPECTION",
+    "39ffaffd875880f9a066e6a7e1dc7d37": "15. SCRIPT D'APPROCHE (MODÈLE)",
+    "39ffaffd8758808c91dfdd277b66fa2a": "16. GESTION DES OBJECTIONS",
+    "39ffaffd875880708581d60c234aab45": "17. BILAN HEBDOMADAIRE : PROSPECTION",
+    "39ffaffd87588001b983e13aa1a06cda": "18. TRAME D'ENTRETIEN DE VENTE",
+    "39ffaffd875880448c4fe3287b893bf1": "21. MA VISION LONG TERME : eVolution 2.0",
+    "3f0faffd875881778743eb169a6915fb": "22. MES RECOMMANDATIONS",
+    "3f0faffd87588137927fda435c873a9f": "23. MON BILAN J90"
+}
+for _mid, _ancien in _ANCIENS_NOMS.items():
+    FICHE_SCHEMAS[_mid]["numero_interne"] = re.match(r"^\s*(\d+)", _ancien).group(1)
+
 _NOM_TO_MASTER_ID = {schema["nom"]: master_id for master_id, schema in FICHE_SCHEMAS.items()}
+_NOM_TO_MASTER_ID.update({ancien: mid for mid, ancien in _ANCIENS_NOMS.items()})
+
+
+def _num_interne(schema: dict) -> str | None:
+    return schema.get("numero_interne") or _leading_number(schema["nom"])
 
 
 def _leading_number(text: str) -> str | None:
@@ -304,9 +330,9 @@ def _leading_number(text: str) -> str | None:
 
 
 _NUMERO_TO_MASTER_ID = {
-    _leading_number(schema["nom"]): master_id
+    _num_interne(schema): master_id
     for master_id, schema in FICHE_SCHEMAS.items()
-    if _leading_number(schema["nom"]) is not None
+    if _num_interne(schema) is not None
 }
 
 # Regroupement par module, source : "[DB] Modules" (collection
@@ -493,6 +519,12 @@ def _fiche_summary_from_page(page: dict) -> dict:
 
     schema = FICHE_SCHEMAS.get(master_id) if master_id else None
     module = FICHE_MODULES.get(master_id) if master_id else None
+
+    if schema and nom:
+        # Affichage : toujours le nom a jour du master (nouvelle numerotation),
+        # meme si la fiche client a ete creee avec l'ancien titre.
+        prefixe = nom.rsplit(" - ", 1)[0] + " - " if " - " in nom else ""
+        nom = prefixe + schema["nom"]
 
     if master_id and module is None:
         logger.warning(
@@ -1745,7 +1777,7 @@ def _reporter_vers_sheets_sync(schema: dict, client_page_id: str, client_nom: st
     try:
         props = _get_page(client_page_id).get("properties", {})
         sheets_service.sync_entry_async(
-            _leading_number(schema["nom"]),
+            _num_interne(schema),
             data,
             client_page_id,
             client_nom,
