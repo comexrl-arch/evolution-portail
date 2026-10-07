@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from backend.services import notion_service
 from backend.services import portal_auth_service
+from backend.services import sheets_service
 from backend.services import systeme_io_service
 
 
@@ -54,6 +55,7 @@ def health_check():
         "project": "eVolution-Portail-Client",
         "version": "0.1.0",
         "started_at": _STARTED_AT,
+        "sheets_sync": sheets_service.enabled(),
     }
 
 
