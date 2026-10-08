@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import requests
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 
 import portal_main
 from backend.services import notion_service as ns
@@ -143,7 +143,7 @@ def reseau_interdit(*args, **kwargs):
 
 
 @contextmanager
-def environnement(reseau=reseau_interdit):
+def environnement(reseau=reseau_interdit, sans=()):
     variables = {
         "COACH_ONBOARD_KEY": CLE_COACH,
         "COACH_DIAGNOSTIC_API_KEY": CLE_DIAG,
@@ -152,6 +152,9 @@ def environnement(reseau=reseau_interdit):
     }
 
     with patch.dict(os.environ, variables), patch.object(requests.Session, "request", side_effect=reseau):
+        for nom in sans:
+            os.environ.pop(nom, None)
+
         ns._cache_clear()
         yield
 
@@ -207,7 +210,7 @@ def verifier_503(libelle, contexte, appel, cible, message=MSG_NOTION, patch_dash
 # --- Tests ---------------------------------------------------------------------------
 
 print("=" * 80)
-print("TEST 1/11 : routes client /portal/* - erreur du service -> 503 generique, log nettoye")
+print("TEST 1/14 : routes client /portal/* - erreur du service -> 503 generique, log nettoye")
 print("=" * 80)
 
 fake_dash = lambda *_: dashboard_ouvert()
@@ -245,7 +248,7 @@ with patch.object(ns, "get_client_dashboard", side_effect=fake_dash):
 
 
 print("\n" + "=" * 80)
-print("TEST 2/11 : routes coach /coach/* - erreur du service -> 503 generique, log nettoye")
+print("TEST 2/14 : routes coach /coach/* - erreur du service -> 503 generique, log nettoye")
 print("=" * 80)
 
 verifier_503("[K1] /coach/diagnostics", "coach_diagnostics",
@@ -272,7 +275,7 @@ verifier_503("[K9] /coach/leads/systeme-io (URL avec l'email recherche)", "coach
 
 
 print("\n" + "=" * 80)
-print("TEST 3/11 : 404 d'identifiant introuvable - « Client introuvable. », sans echo de l'identifiant")
+print("TEST 3/14 : 404 d'identifiant introuvable - « Client introuvable. », sans echo de l'identifiant")
 print("=" * 80)
 
 for libelle, contexte, appel, cible in (
@@ -293,7 +296,7 @@ for libelle, contexte, appel, cible in (
 
 
 print("\n" + "=" * 80)
-print("TEST 4/11 : onboarding coach - 503 generique, rollback et pages orphelines uniquement dans les logs")
+print("TEST 4/14 : onboarding coach - 503 generique, rollback et pages orphelines uniquement dans les logs")
 print("=" * 80)
 
 with environnement(), patch.object(ns, "onboard_client", side_effect=RuntimeError(MSG_ONBOARD)):
@@ -318,7 +321,7 @@ check("[O1] aucune trace d'exception (exc_info)", all(r.exc_info is None for r i
 
 
 print("\n" + "=" * 80)
-print("TEST 5/11 : de bout en bout - vraies exceptions `requests` (reseau mocke)")
+print("TEST 5/14 : de bout en bout - vraies exceptions `requests` (reseau mocke)")
 print("=" * 80)
 
 erreur_http = requests.exceptions.HTTPError(f"404 Client Error: Not Found for url: {URL_NOTION}")
@@ -354,7 +357,7 @@ for libelle, exception, appel, contexte in (
 
 
 print("\n" + "=" * 80)
-print("TEST 6/11 : la journalisation ne modifie jamais la reponse HTTP")
+print("TEST 6/14 : la journalisation ne modifie jamais la reponse HTTP")
 print("=" * 80)
 
 pannes = {
@@ -380,7 +383,7 @@ for libelle, creer_panne in pannes.items():
 
 
 print("\n" + "=" * 80)
-print("TEST 7/11 : les deux 401 restent inchanges (messages fixes)")
+print("TEST 7/14 : les deux 401 restent inchanges (messages fixes)")
 print("=" * 80)
 
 with environnement(), patch.object(portal_auth_service, "verify_magic_link_token", side_effect=ValueError("Ce lien a expire.")):
@@ -401,7 +404,7 @@ with environnement():
 
 
 print("\n" + "=" * 80)
-print("TEST 8/11 : comportements inchanges (succes, 403/404 metier, autres exceptions)")
+print("TEST 8/14 : comportements inchanges (succes, 403/404 metier, autres exceptions)")
 print("=" * 80)
 
 with environnement(), patch.object(ns, "get_client_dashboard", return_value={"nom": "Client", "fiches": []}):
@@ -448,7 +451,108 @@ for libelle, appel, cible in (
 
 
 print("\n" + "=" * 80)
-print("TEST 9/11 : structure du code - plus aucun detail=str(error) hors des deux 401")
+print("TEST 9/14 : variable d'environnement absente - 503 generique, nom de la variable uniquement dans les logs")
+print("=" * 80)
+
+NOMS_VARIABLES = ["COACH_ONBOARD_KEY", "COACH_DIAGNOSTIC_API_KEY", "DOCUSEAL_WEBHOOK_SECRET", "manquant"]
+
+for libelle, contexte, variable, appel in (
+    ("[G1] cle coach absente (/coach/diagnostics)", "coach_cle_manquante", "COACH_ONBOARD_KEY",
+     lambda: portal_main.coach_diagnostics(**COACH)),
+    ("[G2] cle diagnostic absente (/coach/diagnostic/{id})", "coach_diagnostic_cle_manquante", "COACH_DIAGNOSTIC_API_KEY",
+     lambda: portal_main.coach_diagnostic_bundle(ID_SAISI, **DIAG)),
+):
+    with environnement(sans=(variable,)):
+        debut = repere()
+        code, detail, sortie = appeler(appel)
+        ecrits = erreurs(logs_depuis(debut))
+        t = texte(logs_depuis(debut))
+
+    check(f"{libelle} : 503 et message generique exact, aucune exception", (code, detail, sortie) == (503, GENERIQUE_503, None))
+    check(f"{libelle} : le nom de la variable n'apparait pas dans la reponse ({', '.join(fuites(detail, NOMS_VARIABLES)) or 'aucune'})",
+          not fuites(detail, NOMS_VARIABLES))
+    check(f"{libelle} : un seul log error [portal-error] contexte={contexte}, avec le nom de la variable",
+          len(ecrits) == 1 and ecrits[0].getMessage() == f"[portal-error] contexte={contexte} erreur=RuntimeError: {variable} manquant")
+    check(f"{libelle} : aucune valeur de cle dans les logs", CLE_COACH not in t and CLE_DIAG not in t)
+    check(f"{libelle} : aucune trace d'exception (exc_info)", all(r.exc_info is None for r in logs_depuis(debut)))
+
+with environnement(sans=("DOCUSEAL_WEBHOOK_SECRET",)):
+    debut = repere()
+    code, detail, sortie = appeler(portal_main.webhook_docuseal, {}, BackgroundTasks(), "secret-envoye")
+    t = texte(logs_depuis(debut))
+
+check("[G3] webhook DocuSeal, secret serveur absent : 503 et message generique exact, aucune exception",
+      (code, detail, sortie) == (503, GENERIQUE_503, None))
+check("[G3] le nom de la variable n'apparait pas dans la reponse", not fuites(detail, NOMS_VARIABLES))
+check("[G3] le log existant « secret serveur non configure » est conserve (error), sans valeur de secret",
+      "[docuseal] webhook refuse : secret serveur non configure" in t and "secret-envoye" not in t)
+
+
+print("\n" + "=" * 80)
+print("TEST 10/14 : refus d'acces 401 inchanges quand les cles sont configurees")
+print("=" * 80)
+
+with environnement():
+    code, detail, sortie = appeler(portal_main.coach_diagnostics, x_coach_key="mauvaise-cle")
+    check("[H1] mauvaise cle coach : 401 « Code d'acces invalide. »", (code, detail) == (401, "Code d'acces invalide."))
+    code, detail, sortie = appeler(portal_main.coach_diagnostic_bundle, ID_SAISI, authorization="Bearer mauvaise-cle")
+    check("[H2] mauvaise cle diagnostic : 401 « Cle API invalide. »", (code, detail) == (401, "Cle API invalide."))
+
+with environnement(), patch.dict(os.environ, {"DOCUSEAL_WEBHOOK_SECRET": "secret-docuseal-factice"}):
+    code, detail, sortie = appeler(portal_main.webhook_docuseal, {}, BackgroundTasks(), "mauvais-secret")
+    check("[H3] mauvais secret DocuSeal : 401 « Secret invalide. »", (code, detail) == (401, "Secret invalide."))
+
+
+print("\n" + "=" * 80)
+print("TEST 11/14 : echec d'alerte coach en tache de fond - warning nettoye, sans exception")
+print("=" * 80)
+
+for libelle, fonction, lecture, alerte, contexte, infos in (
+    ("diagnostic", portal_main._alerter_si_diagnostic_termine, "diagnostic_vient_de_se_terminer",
+     "alerter_coach_diagnostic", "alerte_diagnostic", {"client_nom": NOM, "client_email": EMAIL}),
+    ("bonus", portal_main._alerter_si_bonus_termine, "bonus_vient_de_se_terminer",
+     "alerter_coach_bonus", "alerte_bonus", {"client_nom": NOM, "resultat": "resultat"}),
+):
+    for etape in ("lecture Notion en echec", "envoi de l'alerte en echec"):
+        lecture_en_echec = etape.startswith("lecture")
+
+        with environnement(), \
+             patch.object(ns, lecture, side_effect=RuntimeError(MSG_NOTION) if lecture_en_echec else None,
+                          return_value=infos), \
+             patch.object(ns, alerte, side_effect=RuntimeError(MSG_NOTION)):
+            debut = repere()
+
+            try:
+                fonction(CLIENT_ID, FICHE_ID)
+                sortie = "aucune exception"
+            except Exception as exc:
+                sortie = type(exc).__name__
+
+            enregistrements = logs_depuis(debut)
+            t = texte(enregistrements)
+
+        check(f"[W] alerte {libelle}, {etape} : aucune exception ne sort", sortie == "aucune exception")
+        check(f"[W] alerte {libelle}, {etape} : un seul log warning [portal-error] contexte={contexte}",
+              len(enregistrements) == 1 and enregistrements[0].levelno == logging.WARNING
+              and enregistrements[0].getMessage().startswith(f"[portal-error] contexte={contexte} erreur=RuntimeError: "))
+        check(f"[W] alerte {libelle}, {etape} : log sans fuite ({', '.join(fuites(t, INTERDITS_LOG)) or 'aucune'})",
+              not fuites(t, INTERDITS_LOG))
+        check(f"[W] alerte {libelle}, {etape} : ancien format brut supprime", "impossible :" not in t)
+        check(f"[W] alerte {libelle}, {etape} : aucune trace d'exception (exc_info)", all(r.exc_info is None for r in enregistrements))
+
+    with environnement(), patch.object(ns, lecture, side_effect=RuntimeError(MSG_NOTION)), \
+         patch.object(portal_main, "_journal_docuseal", MagicMock(warning=MagicMock(side_effect=Exception("boom")))):
+        try:
+            fonction(CLIENT_ID, FICHE_ID)
+            sortie = "aucune exception"
+        except Exception as exc:
+            sortie = type(exc).__name__
+
+    check(f"[W] alerte {libelle}, panne du logger : aucune exception ne sort", sortie == "aucune exception")
+
+
+print("\n" + "=" * 80)
+print("TEST 12/14 : structure du code - plus aucun detail=str(error) hors des deux 401")
 print("=" * 80)
 
 source = open("portal_main.py", encoding="utf-8").read().splitlines()
@@ -462,19 +566,19 @@ check("[Z3] et a la limite demandee si elle est fournie", len(portal_main._netto
 
 
 print("\n" + "=" * 80)
-print("TEST 10/11 : isolation - aucun appel reseau reel")
+print("TEST 13/14 : isolation - aucun appel reseau reel")
 print("=" * 80)
 
 check("[R1] aucune tentative reseau imprevue pendant tous les tests", not tentatives_reseau)
 
 
 print("\n" + "=" * 80)
-print("TEST 11/11 : confidentialite globale des logs [portal-error]")
+print("TEST 14/14 : confidentialite globale des logs [portal-error]")
 print("=" * 80)
 
 lignes = [r.getMessage() for r in capture.records if "[portal-error]" in r.getMessage()]
 tout = "\n".join(lignes)
-check("[F1] 29 logs [portal-error] produits (11 client + 10 coach + 2 introuvable + 1 onboarding + 5 de bout en bout)", len(lignes) == 29)
+check("[F1] 35 logs [portal-error] produits (29 de P1-F + 2 cles absentes + 4 alertes en echec)", len(lignes) == 35)
 check("[F2] aucun log ne contient URL, hote, payload, email ou trace", not fuites(tout, INTERDITS_LOG))
 check("[F3] aucune trace d'exception ni exc_info dans l'ensemble des logs", all(r.exc_info is None for r in capture.records))
 check("[F4] chaque log suit le format [portal-error] contexte=<mot> erreur=<Classe>: <texte>",

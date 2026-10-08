@@ -384,7 +384,9 @@ with environnement(secret=None), patch.object(requests, "post", side_effect=gard
     nouveaux = logs_depuis(debut)
     t = texte(nouveaux)
     check("503 renvoye", code == 503)
-    check("detail inchange", detail == "DOCUSEAL_WEBHOOK_SECRET manquant.")
+    check("detail = message generique, sans nom de variable",
+          detail == "Le service est momentanément indisponible. Réessayez dans quelques minutes."
+          and "DOCUSEAL" not in str(detail))
     check("un log error 'secret serveur non configure'",
           any(r.levelname == "ERROR" and "non configure" in r.getMessage() for r in nouveaux))
     check("aucun secret dans les logs", SECRET not in t and MAUVAIS_SECRET not in t)
