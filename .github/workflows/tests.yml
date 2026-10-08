@@ -43,7 +43,8 @@ jobs:
           echec=0
           for f in "${scripts[@]}"; do
             echo "::group::$f"
-            sudo unshare --net -- env -i PATH="$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
+            sudo unshare --net -- env -i PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+              PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
               "$python_bin" "$f" || { echo "::error::$f a échoué"; echec=1; }
             echo "::endgroup::"
           done
