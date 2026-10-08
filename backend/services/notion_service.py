@@ -768,14 +768,56 @@ def _livrables_for_fiche(fiche_client_id: str, master_id: str) -> list[dict]:
     return livrables
 
 
-def get_livrable(livrable_id: str) -> dict:
+class LivrableNonAutorise(LookupError):
+    # Levee uniquement quand le livrable a ete lu avec succes mais n'est pas
+    # rattache a une fiche ouverte du client. Sous-classe dediee : une KeyError
+    # (autre LookupError) venant d'un vrai bug ne doit jamais devenir un 404.
+    pass
+
+
+def _livrable_autorise(props: dict, dashboard: dict) -> bool:
+    # Un livrable n'est lisible que s'il depend d'une fiche OUVERTE du client :
+    # soit lie directement a sa fiche client, soit au master de cette fiche
+    # (livrables generiques). Meme exclusion Atelier que get_fiche().
+    atelier = _est_parcours_atelier(dashboard.get("parcours"))
+    ouvertes = [
+        f for f in dashboard.get("fiches", [])
+        if "Bloqué" not in (f.get("acces") or "")
+        and not (atelier and f.get("master_id") in _ATELIER_SANS_LIVRABLES)
+    ]
+    ids_client = {
+        (i or "").replace("-", "") for i in (_prop_value(_prop(props, "Fiche Client")) or [])
+    }
+    ids_master = {
+        (i or "").replace("-", "") for i in (_prop_value(_prop(props, "Fiche Master (référence)")) or [])
+    }
+    ids_client.discard("")
+    ids_master.discard("")
+
+    for fiche in ouvertes:
+        fiche_id = (fiche.get("id") or "").replace("-", "")
+        master_id = (fiche.get("master_id") or "").replace("-", "")
+
+        if (fiche_id and fiche_id in ids_client) or (master_id and master_id in ids_master):
+            return True
+
+    return False
+
+
+def get_livrable(livrable_id: str, dashboard: dict) -> dict:
     # Contenu affiche tel quel dans le portail (sous-page de la fiche) via
     # le meme rendu que les fiches "Suivi recurrent" (_get_page_content).
     # Limite connue : les blocs "table" Notion ne remontent pas (le
     # comptage cellule par cellule n'est pas gere ici), seuls titres,
     # paragraphes, listes, callouts et to_do le sont.
+    # LivrableNonAutorise (un LookupError) uniquement quand la page a ete lue
+    # mais n'est pas autorisee pour ce client : les erreurs Notion restent des
+    # RuntimeError (503).
     page = _get_page(livrable_id)
     props = page.get("properties", {})
+
+    if not _livrable_autorise(props, dashboard):
+        raise LivrableNonAutorise("Livrable introuvable.")
 
     return {
         "id": page["id"],
