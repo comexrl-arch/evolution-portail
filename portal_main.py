@@ -158,6 +158,29 @@ def _erreur_client_introuvable(contexte: str, error: Exception) -> HTTPException
     return HTTPException(status_code=404, detail=_MESSAGE_CLIENT_INTROUVABLE)
 
 
+def _erreur_configuration(contexte: str, nom_variable: str) -> HTTPException:
+    # Variable d'environnement absente : 503 generique cote reponse, le nom de la
+    # variable (jamais sa valeur) reste dans les logs serveur uniquement.
+    _journaliser_erreur_portail(contexte, RuntimeError(f"{nom_variable} manquant"))
+    return HTTPException(status_code=503, detail=_MESSAGE_SERVICE_INDISPONIBLE)
+
+
+def _journaliser_alerte_impossible(contexte: str, error: Exception) -> None:
+    # Echec d'une alerte coach en tache de fond : meme format que les autres logs
+    # [portal-error], texte nettoye, niveau warning (best-effort). Ne doit jamais
+    # lever.
+    try:
+        _journal_docuseal.warning(
+            "[portal-error] contexte=%s erreur=%s: %s",
+            contexte,
+            type(error).__name__,
+            _nettoyer_erreur(error),
+        )
+
+    except Exception:
+        pass
+
+
 def _journaliser_filtre_lien(raison: str, email: str) -> None:
     # Demande filtree par la garde : categorie controlee + reference masquee,
     # jamais de donnee brute. Ne doit jamais modifier la reponse de la route.
@@ -346,7 +369,7 @@ def _alerter_si_diagnostic_termine(client_page_id: str, fiche_id: str) -> None:
             notion_service.alerter_coach_diagnostic(infos["client_nom"], infos["client_email"])
 
     except Exception as error:
-        logging.getLogger("uvicorn.error").warning("Alerte diagnostic impossible : %s", error)
+        _journaliser_alerte_impossible("alerte_diagnostic", error)
 
 
 def _alerter_si_bonus_termine(client_page_id: str, fiche_id: str) -> None:
@@ -357,7 +380,7 @@ def _alerter_si_bonus_termine(client_page_id: str, fiche_id: str) -> None:
             notion_service.alerter_coach_bonus(infos["client_nom"], infos["resultat"])
 
     except Exception as error:
-        logging.getLogger("uvicorn.error").warning("Alerte bonus impossible : %s", error)
+        _journaliser_alerte_impossible("alerte_bonus", error)
 
 
 @app.post("/portal/fiches/{fiche_id}/valider")
@@ -400,7 +423,7 @@ def _require_coach_key(x_coach_key: str) -> None:
     expected = os.getenv("COACH_ONBOARD_KEY")
 
     if not expected:
-        raise HTTPException(status_code=503, detail="COACH_ONBOARD_KEY manquant.")
+        raise _erreur_configuration("coach_cle_manquante", "COACH_ONBOARD_KEY")
 
     if x_coach_key != expected:
         raise HTTPException(status_code=401, detail="Code d'acces invalide.")
@@ -414,7 +437,7 @@ def _require_diagnostic_api_key(authorization: str) -> None:
     expected = os.getenv("COACH_DIAGNOSTIC_API_KEY")
 
     if not expected:
-        raise HTTPException(status_code=503, detail="COACH_DIAGNOSTIC_API_KEY manquant.")
+        raise _erreur_configuration("coach_diagnostic_cle_manquante", "COACH_DIAGNOSTIC_API_KEY")
 
     token = authorization.removeprefix("Bearer ").strip() if authorization else ""
 
@@ -825,7 +848,7 @@ def webhook_docuseal(
 
     if not expected:
         _journal_docuseal.error("[docuseal] webhook refuse : secret serveur non configure")
-        raise HTTPException(status_code=503, detail="DOCUSEAL_WEBHOOK_SECRET manquant.")
+        raise HTTPException(status_code=503, detail=_MESSAGE_SERVICE_INDISPONIBLE)
 
     if x_webhook_secret != expected:
         _journal_docuseal.warning("[docuseal] webhook refuse : secret invalide")
