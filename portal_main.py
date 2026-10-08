@@ -4,6 +4,7 @@
 # process/port pour ne jamais risquer d'interrompre le backend agents en
 # production lors d'un redemarrage ou d'un crash cote portail.
 
+import hashlib
 import logging
 import os
 import time
@@ -563,15 +564,160 @@ def _docuseal_extraire(payload: dict) -> dict | None:
     }
 
 
-def _docuseal_onboard(infos: dict) -> None:
+_journal_docuseal = logging.getLogger("uvicorn.error")  # visible dans les logs Render
+
+
+def _champ_log(valeur, limite: int = 40) -> str:
+    # Valeur venant du payload DocuSeal : jamais injectee telle quelle dans un
+    # log. On neutralise tout caractere inattendu (retours a la ligne, etc.) et
+    # on tronque.
+    return re.sub(r"[^\w.\-]", "?", str(valeur or ""))[:limite] or "?"
+
+
+def _masquer_email(email: str) -> str:
+    local, _, domaine = (email or "").strip().lower().partition("@")
+    return f"{local[:1]}***@{domaine}" if local and domaine else "***"
+
+
+def _reference_docuseal(email: str) -> str:
+    # Email masque + empreinte courte : permet de rapprocher plusieurs lignes
+    # de log d'un meme client sans donnee personnelle exploitable.
+    empreinte = hashlib.sha256((email or "").strip().lower().encode("utf-8")).hexdigest()[:8]
+    return f"{_masquer_email(email)}#{empreinte}"
+
+
+_STRUCTURE_FERMEE = re.compile(r"\{[^{}]*\}")  # structure {...} sans accolade imbriquee
+_NETTOYAGE_PASSES_MAX = 20
+
+
+def _nettoyer_erreur(texte, infos: dict | None = None) -> str:
+    # Retire d'un texte d'erreur tout ce qui ne doit pas finir dans un log :
+    # payload serialise, identite du client (nom, meme court, email, telephone),
+    # URL (avec ou sans schema), hote et chemin des erreurs de connexion,
+    # adresses email. Tronque a 300 caracteres. Reserve aux logs : ce texte
+    # n'est jamais repris dans une alerte coach.
+    texte = str(texte or "")
+
+    # Payload serialise (repr ou JSON) : les structures {...} sont remplacees par
+    # <donnees> en commencant par les plus internes, puis on repete (une
+    # structure imbriquee disparait entierement, de l'interieur vers
+    # l'exterieur) ; le texte qui suit une structure fermee est conserve. Le
+    # nombre de passes est borne. Pour une accolade jamais refermee (ou si la
+    # borne est atteinte), tout ce qui suit la premiere accolade restante est
+    # masque : aucune fuite possible, aucune boucle sans fin.
+    for _ in range(_NETTOYAGE_PASSES_MAX):
+        texte, remplacements = _STRUCTURE_FERMEE.subn("<donnees>", texte)
+
+        if not remplacements:
+            break
+
+    texte = re.sub(r"\{.*", "<donnees>", texte, flags=re.DOTALL)
+
+    for cle in ("email", "nom", "telephone"):
+        valeur = str((infos or {}).get(cle) or "").strip()
+
+        if not valeur:
+            continue
+
+        if len(valeur) >= 3:
+            motif = re.escape(valeur)
+        else:
+            # Nom court (1 ou 2 caracteres) : mot entier uniquement, pour ne pas
+            # alterer « livraison » ni « L'entreprise » en masquant leurs lettres.
+            motif = rf"(?<!\w){re.escape(valeur)}(?![\w'’])"
+
+        texte = re.sub(motif, "<masque>", texte, flags=re.IGNORECASE)
+
+    texte = re.sub(r"https?://\S+", "<url>", texte)
+    texte = re.sub(r"host='[^']*'", "host=<hote>", texte)
+    texte = re.sub(r"(?i)\burl:\s*\S+", "url: <url>", texte)
+    texte = re.sub(r"[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+", "<email>", texte)
+    return texte[:300]
+
+
+def _docuseal_alerter(sujet: str, lignes: list[str]) -> None:
+    # Best-effort : rien ne doit sortir de la tache de fond, quelle que soit
+    # l'erreur de l'alerte. On ne logue que la classe de l'exception.
     try:
-        notion_service.onboard_client(
+        notion_service.alerter_coach_onboarding(sujet, "\n".join(lignes))
+
+    except Exception as error:
+        _journal_docuseal.warning("[docuseal] alerte coach impossible (%s)", type(error).__name__)
+
+
+def _docuseal_onboard(infos: dict) -> None:
+    ref = _reference_docuseal(infos["email"])
+    parcours = infos.get("parcours")
+
+    try:
+        resultat = notion_service.onboard_client(
             infos["nom"], infos["email"], kpi_j0={},
             parcours=infos["parcours"], telephone=infos["telephone"],
             date_demarrage=infos["date_demarrage"],
         )
-    except Exception as error:  # doublon, Notion indisponible, etc.
-        print(f"[docuseal] onboarding non fait pour {infos['email']} : {error}")
+
+    except notion_service.ClientDejaExistant:
+        _journal_docuseal.warning(
+            "[docuseal] onboarding ignore, client deja existant parcours=%s ref=%s", parcours, ref
+        )
+        return
+
+    except Exception as error:  # Notion indisponible, rollback, bug, etc.
+        # Le detail technique (nettoye) reste dans les logs Render uniquement.
+        _journal_docuseal.error(
+            "[docuseal] onboarding echoue parcours=%s ref=%s erreur=%s: %s",
+            parcours, ref, type(error).__name__, _nettoyer_erreur(error, infos),
+        )
+        _docuseal_alerter(f"Onboarding DocuSeal échoué : {infos['nom']}", [
+            f"Le contrat de {infos['nom']} ({infos['email']}) est signé, mais le client n'a pas pu être créé automatiquement.",
+            f"Parcours : {parcours}",
+            "Cause technique : création automatique interrompue.",
+        ])
+        return
+
+    if not (resultat or {}).get("invite_envoyee"):
+        _journal_docuseal.error(
+            "[docuseal] client cree mais lien d'acces non envoye parcours=%s ref=%s erreur=%s",
+            parcours, ref, _nettoyer_erreur((resultat or {}).get("invite_erreur"), infos),
+        )
+        _docuseal_alerter(f"Onboarding DocuSeal : lien d'accès non envoyé ({infos['nom']})", [
+            f"Le client {infos['nom']} ({infos['email']}) a été créé dans Notion, mais son lien d'accès n'a pas été envoyé.",
+            f"Parcours : {parcours}",
+            "Cause technique : lien d'accès non envoyé.",
+            "Le client peut aussi demander un lien depuis la page de connexion.",
+        ])
+        return
+
+    _journal_docuseal.info(
+        "[docuseal] onboarding OK parcours=%s ref=%s fiches=%s kpi=%s",
+        parcours, ref, resultat.get("fiches_creees"), resultat.get("kpi_crees"),
+    )
+
+
+def _docuseal_signaler_non_reconnu(payload: dict) -> None:
+    # form.completed recu mais sans template connu ou sans email exploitable :
+    # un contrat signe reste sans client. Warning + alerte coach (best-effort).
+    # Ni nom ni email en clair, dans le log comme dans l'alerte.
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    modele = data.get("template") if isinstance(data.get("template"), dict) else {}
+    template_id = str(modele.get("id") or "")
+    email = str(data.get("email") or "").strip().lower()
+    raison = "template_inconnu" if template_id not in _DOCUSEAL_PARCOURS else "email_absent"
+    evenement = _champ_log(payload.get("event_type"))
+    template = _champ_log(template_id, 40)
+    reference = _reference_docuseal(email) if email else "sans-email"
+
+    _journal_docuseal.warning(
+        "[docuseal] contrat signe non reconnu event=%s template=%s raison=%s ref=%s",
+        evenement, template, raison, reference,
+    )
+    _docuseal_alerter("Contrat DocuSeal signé non reconnu", [
+        "Un contrat DocuSeal a été signé mais n'a pas pu être rattaché à un parcours.",
+        f"Événement : {evenement}",
+        f"Template : {template}",
+        f"Raison : {raison}",
+        f"Référence : {reference}",
+    ])
 
 
 @app.post("/webhooks/docuseal")
@@ -581,14 +727,19 @@ def webhook_docuseal(
     expected = os.getenv("DOCUSEAL_WEBHOOK_SECRET")
 
     if not expected:
+        _journal_docuseal.error("[docuseal] webhook refuse : secret serveur non configure")
         raise HTTPException(status_code=503, detail="DOCUSEAL_WEBHOOK_SECRET manquant.")
 
     if x_webhook_secret != expected:
+        _journal_docuseal.warning("[docuseal] webhook refuse : secret invalide")
         raise HTTPException(status_code=401, detail="Secret invalide.")
 
     infos = _docuseal_extraire(payload)
 
     if not infos:
+        if (payload or {}).get("event_type") == "form.completed":
+            background_tasks.add_task(_docuseal_signaler_non_reconnu, payload)
+
         return {"status": "ignore"}
 
     # L'onboarding enchaine une vingtaine d'appels Notion : on repond tout de
