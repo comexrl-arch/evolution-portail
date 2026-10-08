@@ -30,18 +30,37 @@ app = FastAPI(
     description="API du portail client interactif (auth lien magique + donnees Notion)",
     version="0.1.0",
 )
+# CORS : autorise le frontend Cloudflare Pages en production et Vite en local.
+# PORTAL_ALLOWED_ORIGINS peut remplacer la liste par défaut, par exemple :
+# https://portail.rl-evolution.fr,https://evolution-portail.pages.dev
+_default_origins = [
+    "https://portail.rl-evolution.fr",
+    "https://evolution-portail.pages.dev",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174",
+]
 
-# En dev, PORTAL_ALLOWED_ORIGINS est absent -> fallback localhost. En prod,
-# le definir dans .env avec le vrai domaine du frontend (ex. "https://portail.rl-evolution.fr").
-_default_origins = "http://localhost:5174,http://127.0.0.1:5174"
-_allowed_origins = os.getenv("PORTAL_ALLOWED_ORIGINS", _default_origins).split(",")
+_configured_origins = os.getenv("PORTAL_ALLOWED_ORIGINS", "")
 
-# Reponses JSON compressees (fiches longues) : moins de donnees a telecharger.
+_allowed_origins = (
+    [origin.strip() for origin in _configured_origins.split(",") if origin.strip()]
+    if _configured_origins
+    else _default_origins
+)
+
+# Autorise les URL de déploiement individuelles de Cloudflare Pages :
+# https://<deployment-id>.evolution-portail.pages.dev
+_cloudflare_pages_preview_pattern = (
+    r"^https://[a-z0-9-]+\.evolution-portail\.pages\.dev$"
+)
+
+# Réponses JSON compressées (fiches longues) : moins de données à télécharger.
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in _allowed_origins if origin.strip()],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=_cloudflare_pages_preview_pattern,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
