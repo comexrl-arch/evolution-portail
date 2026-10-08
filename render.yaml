@@ -25,6 +25,6 @@ services:
       - key: PORTAL_SECRET_KEY
         sync: false
       - key: PORTAL_FRONTEND_URL
-        value: https://evolution-portail.pages.dev
+        value: https://portail.rl-evolution.fr
       - key: PORTAL_ALLOWED_ORIGINS
-        value: https://evolution-portail.pages.dev
+        value: https://portail.rl-evolution.fr,https://evolution-portail.pages.dev
