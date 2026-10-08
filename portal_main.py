@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from backend.services import notion_service
 from backend.services import portal_auth_service
+from backend.services import request_link_guard
 from backend.services import sheets_service
 from backend.services import systeme_io_service
 
@@ -120,12 +121,44 @@ def _journaliser_echec_lien(contexte: str, error: Exception, email: str, nom: st
         pass
 
 
+def _journaliser_filtre_lien(raison: str, email: str) -> None:
+    # Demande filtree par la garde : categorie controlee + reference masquee,
+    # jamais de donnee brute. Ne doit jamais modifier la reponse de la route.
+    try:
+        _journal_docuseal.info(
+            "[request-link] demande filtree raison=%s ref_email=%s", raison, _reference_docuseal(email)
+        )
+
+    except Exception:
+        pass
+
+
+def _envoyer_lien_en_arriere_plan(email: str, client_page_id: str, client_nom: str) -> None:
+    # Tache de fond : la reponse HTTP est deja partie, un echec d'envoi ne peut
+    # plus la modifier. Toute exception est journalisee (texte nettoye) et
+    # capturee : sinon uvicorn journaliserait la trace complete, qui contient
+    # l'URL du webhook n8n.
+    try:
+        notion_service.send_portal_invite(email, client_page_id, client_nom)
+
+    except Exception as error:
+        _journaliser_echec_lien("envoi_lien", error, email, client_nom)
+
+
 @app.post("/portal/auth/request-link")
-def portal_request_link(request: PortalLoginRequest):
+def portal_request_link(request: PortalLoginRequest, background_tasks: BackgroundTasks):
     generic_response = {
         "status": "sent",
         "message": "Si cet email est enregistre, un lien d'acces a ete envoye.",
     }
+
+    # Garde evaluee AVANT la recherche : meme decision pour tout email, connu ou
+    # non. Une demande filtree recoit la meme reponse generique, sans envoi.
+    decision = request_link_guard.verifier_et_enregistrer(request.email)
+
+    if not decision.autorise:
+        _journaliser_filtre_lien(decision.raison, request.email)
+        return generic_response
 
     try:
         client = notion_service.find_client_by_email(request.email)
@@ -139,12 +172,9 @@ def portal_request_link(request: PortalLoginRequest):
 
     client_nom = notion_service.client_display_name(client)
 
-    try:
-        notion_service.send_portal_invite(request.email, client["id"], client_nom)
-
-    except RuntimeError as error:
-        _journaliser_echec_lien("envoi_lien", error, request.email, client_nom)
-        raise HTTPException(status_code=503, detail=_MESSAGE_LIEN_INDISPONIBLE)
+    # Envoi en tache de fond : la reponse ne depend plus de n8n (statut et delai
+    # identiques pour un email connu et inconnu).
+    background_tasks.add_task(_envoyer_lien_en_arriere_plan, request.email, client["id"], client_nom)
 
     return generic_response
 
