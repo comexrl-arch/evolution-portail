@@ -15,6 +15,7 @@ import re
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from backend.services import notion_service
@@ -123,6 +124,7 @@ def _journaliser_echec_lien(contexte: str, error: Exception, email: str, nom: st
 
 _MESSAGE_SERVICE_INDISPONIBLE = _MESSAGE_LIEN_INDISPONIBLE
 _MESSAGE_CLIENT_INTROUVABLE = "Client introuvable."
+_MESSAGE_CLIENT_DEJA_EXISTANT = "Un client existe déjà avec cet email."
 
 
 def _journaliser_erreur_portail(
@@ -606,6 +608,19 @@ def coach_onboard_client(
     try:
         result = notion_service.onboard_client(request.nom, request.email, kpi_j0=kpi_j0, **data)
 
+    except notion_service.ClientDejaExistant:
+        # Cas metier, pas une panne : 409 + code stable. Le message de
+        # l'exception (email, identifiant de page Notion) n'est ni renvoye ni
+        # journalise : reference masquee uniquement.
+        _journal_docuseal.warning(
+            "[portal] onboarding refuse contexte=coach_onboard_client raison=client_deja_existant ref=%s",
+            _reference_docuseal(request.email),
+        )
+        return JSONResponse(
+            status_code=409,
+            content={"detail": _MESSAGE_CLIENT_DEJA_EXISTANT, "code": "client_deja_existant"},
+        )
+
     except RuntimeError as error:
         # Rollback, pages orphelines et detail utile : logs uniquement (limite elargie
         # pour conserver la liste des pages a archiver a la main).
@@ -755,11 +770,11 @@ def _nettoyer_erreur(texte, infos: dict | None = None, limite: int = 300) -> str
     return texte[:limite]
 
 
-def _docuseal_alerter(sujet: str, lignes: list[str]) -> None:
+def _docuseal_alerter(sujet: str, lignes: list[str], event: str = "onboarding_docuseal_echec") -> None:
     # Best-effort : rien ne doit sortir de la tache de fond, quelle que soit
     # l'erreur de l'alerte. On ne logue que la classe de l'exception.
     try:
-        notion_service.alerter_coach_onboarding(sujet, "\n".join(lignes))
+        notion_service.alerter_coach_onboarding(sujet, "\n".join(lignes), event=event)
 
     except Exception as error:
         _journal_docuseal.warning("[docuseal] alerte coach impossible (%s)", type(error).__name__)
@@ -780,6 +795,15 @@ def _docuseal_onboard(infos: dict) -> None:
         _journal_docuseal.warning(
             "[docuseal] onboarding ignore, client deja existant parcours=%s ref=%s", parcours, ref
         )
+        # Alerte assainie : evenement, reference masquee et parcours uniquement
+        # (ni nom, ni email, ni identifiant de page Notion).
+        _docuseal_alerter("Contrat DocuSeal signé : client déjà existant", [
+            "Un contrat DocuSeal a été signé pour un email déjà associé à un client.",
+            "Aucun nouveau dossier n'a été créé.",
+            "Événement : docuseal_client_deja_existant",
+            f"Référence : {ref}",
+            f"Parcours : {parcours}",
+        ], event="docuseal_client_deja_existant")
         return
 
     except Exception as error:  # Notion indisponible, rollback, bug, etc.
@@ -788,10 +812,12 @@ def _docuseal_onboard(infos: dict) -> None:
             "[docuseal] onboarding echoue parcours=%s ref=%s erreur=%s: %s",
             parcours, ref, type(error).__name__, _nettoyer_erreur(error, infos),
         )
-        _docuseal_alerter(f"Onboarding DocuSeal échoué : {infos['nom']}", [
-            f"Le contrat de {infos['nom']} ({infos['email']}) est signé, mais le client n'a pas pu être créé automatiquement.",
-            f"Parcours : {parcours}",
+        _docuseal_alerter("Onboarding DocuSeal échoué", [
+            "Un contrat DocuSeal est signé, mais le client n'a pas pu être créé automatiquement.",
             "Cause technique : création automatique interrompue.",
+            "Événement : onboarding_docuseal_echec",
+            f"Référence : {ref}",
+            f"Parcours : {parcours}",
         ])
         return
 
@@ -800,11 +826,13 @@ def _docuseal_onboard(infos: dict) -> None:
             "[docuseal] client cree mais lien d'acces non envoye parcours=%s ref=%s erreur=%s",
             parcours, ref, _nettoyer_erreur((resultat or {}).get("invite_erreur"), infos),
         )
-        _docuseal_alerter(f"Onboarding DocuSeal : lien d'accès non envoyé ({infos['nom']})", [
-            f"Le client {infos['nom']} ({infos['email']}) a été créé dans Notion, mais son lien d'accès n'a pas été envoyé.",
-            f"Parcours : {parcours}",
+        _docuseal_alerter("Onboarding DocuSeal : lien d'accès non envoyé", [
+            "Le client a été créé dans Notion, mais son lien d'accès n'a pas été envoyé.",
             "Cause technique : lien d'accès non envoyé.",
-            "Le client peut aussi demander un lien depuis la page de connexion.",
+            "Le client peut demander un nouveau lien depuis la page de connexion.",
+            "Événement : onboarding_docuseal_echec",
+            f"Référence : {ref}",
+            f"Parcours : {parcours}",
         ])
         return
 

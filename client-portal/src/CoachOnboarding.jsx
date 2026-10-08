@@ -4,6 +4,11 @@ import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, Chev
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 const COACH_KEY_STORAGE = 'coach_onboard_key'
 
+// Messages fixes : aucun detail technique ni donnee du client n'est affiche.
+const MESSAGE_SERVICE_INDISPONIBLE = 'Service momentanément indisponible. Réessayez dans quelques minutes.'
+const MESSAGE_FORMULAIRE_INVALIDE = 'Formulaire incomplet ou invalide.'
+const MESSAGE_REPONSE_INATTENDUE = 'Réponse inattendue du serveur. Vérifiez la liste des clients avant de réessayer.'
+
 const emptyForm = {
   nom: '', email: '', telephone: '', activite: '', secteur: '', territoire: '',
   contact: '', site_reseaux: '', offre_principale: '', client_cible: '',
@@ -202,21 +207,43 @@ export default function CoachOnboarding() {
       for (const k of ['leads_j0', 'rdv_j0', 'nouveaux_clients_j0', 'ca_j0']) {
         payload[k] = payload[k] === '' ? null : Number(payload[k])
       }
-      const res = await fetch(`${API_BASE}/coach/clients/onboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Coach-Key': coachKey },
-        body: JSON.stringify(payload),
-      })
+      let res
+      try {
+        res = await fetch(`${API_BASE}/coach/clients/onboard`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Coach-Key': coachKey },
+          body: JSON.stringify(payload),
+        })
+      } catch {
+        setResult({ kind: 'erreur', message: MESSAGE_SERVICE_INDISPONIBLE })
+        return
+      }
       if (res.status === 401) return handleAuthFailure()
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Erreur onboarding')
-      setResult({ ok: true, data })
-      setSelectedLeadId(null)
-      setForm(emptyForm)
-      setLeads([])
-      setLeadsQuery('')
-    } catch (err) {
-      setResult({ ok: false, message: err.message })
+      let data = null
+      try {
+        data = await res.json()
+      } catch {
+        data = null
+      }
+      if (res.ok) {
+        if (!data) {
+          setResult({ kind: 'erreur', message: MESSAGE_REPONSE_INATTENDUE })
+          return
+        }
+        setResult({ kind: data.invite_envoyee === false ? 'invitation_echouee' : 'succes', data })
+        setSelectedLeadId(null)
+        setForm(emptyForm)
+        setLeads([])
+        setLeadsQuery('')
+      } else if (res.status === 409 && data?.code === 'client_deja_existant') {
+        // Formulaire conserve : le coach peut corriger l'email saisi.
+        setResult({ kind: 'client_existant' })
+      } else {
+        setResult({
+          kind: 'erreur',
+          message: res.status === 422 ? MESSAGE_FORMULAIRE_INVALIDE : MESSAGE_SERVICE_INDISPONIBLE,
+        })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -382,7 +409,7 @@ export default function CoachOnboarding() {
 
       {tab === 'onboarding' && (<>
 
-      {result?.ok && (
+      {result?.kind === 'succes' && (
         <div className="card-glass p-4 mb-4 flex gap-3" style={{ borderRadius: 'var(--radius-md)' }}>
           <CheckCircle2 color="var(--success)" size={20} />
           <div>
@@ -394,7 +421,33 @@ export default function CoachOnboarding() {
           </div>
         </div>
       )}
-      {result && !result.ok && (
+      {result?.kind === 'invitation_echouee' && (
+        <div className="card-glass p-4 mb-4 flex gap-3" style={{ borderRadius: 'var(--radius-md)' }}>
+          <AlertCircle color="var(--warning)" size={20} />
+          <div>
+            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Client créé — lien d'accès non envoyé</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+              {result.data.fiches_creees ?? 0} fiches créées
+              {result.data.kpi_a_completer?.length ? ` — KPI à compléter : ${result.data.kpi_a_completer.join(', ')}` : ''}
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+              Le client peut demander un nouveau lien depuis la page de connexion du portail.
+            </p>
+          </div>
+        </div>
+      )}
+      {result?.kind === 'client_existant' && (
+        <div className="card-glass p-4 mb-4 flex gap-3" style={{ borderRadius: 'var(--radius-md)' }}>
+          <AlertCircle color="var(--warning)" size={20} />
+          <div>
+            <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Ce client existe déjà</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+              Aucun nouveau dossier n'a été créé. Vérifiez l'email saisi.
+            </p>
+          </div>
+        </div>
+      )}
+      {result?.kind === 'erreur' && (
         <div className="card-glass p-4 mb-4 flex gap-3" style={{ borderRadius: 'var(--radius-md)' }}>
           <AlertCircle color="var(--danger)" size={20} />
           <p className="text-sm" style={{ color: 'var(--text-primary)' }}>{result.message}</p>
