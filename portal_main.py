@@ -99,6 +99,27 @@ class PortalLoginRequest(BaseModel):
     email: str
 
 
+_MESSAGE_LIEN_INDISPONIBLE = "Le service est momentanément indisponible. Réessayez dans quelques minutes."
+
+
+def _journaliser_echec_lien(contexte: str, error: Exception, email: str, nom: str = "") -> None:
+    # Detail technique de l'echec (nettoye) : logs Render uniquement, jamais dans
+    # la reponse HTTP. Pas de trace d'exception (exc_info) : le texte d'une
+    # erreur `requests` contient l'URL du webhook n8n. La journalisation ne doit
+    # jamais modifier la reponse de la route, meme si elle echoue.
+    try:
+        _journal_docuseal.error(
+            "[request-link] echec contexte=%s ref_email=%s erreur=%s: %s",
+            contexte,
+            _reference_docuseal(email),
+            type(error).__name__,
+            _nettoyer_erreur(error, {"email": (email or "").strip().lower(), "nom": nom}),
+        )
+
+    except Exception:
+        pass
+
+
 @app.post("/portal/auth/request-link")
 def portal_request_link(request: PortalLoginRequest):
     generic_response = {
@@ -110,7 +131,8 @@ def portal_request_link(request: PortalLoginRequest):
         client = notion_service.find_client_by_email(request.email)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        _journaliser_echec_lien("recherche_client", error, request.email)
+        raise HTTPException(status_code=503, detail=_MESSAGE_LIEN_INDISPONIBLE)
 
     if not client:
         return generic_response
@@ -121,7 +143,8 @@ def portal_request_link(request: PortalLoginRequest):
         notion_service.send_portal_invite(request.email, client["id"], client_nom)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        _journaliser_echec_lien("envoi_lien", error, request.email, client_nom)
+        raise HTTPException(status_code=503, detail=_MESSAGE_LIEN_INDISPONIBLE)
 
     return generic_response
 
