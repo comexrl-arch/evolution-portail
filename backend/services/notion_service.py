@@ -2438,7 +2438,7 @@ def alerter_coach_bonus(client_nom: str, r: dict) -> None:
         logger.warning("Alerte bonus non envoyee : %s", _resume_erreur(error))
 
 
-def alerter_coach_onboarding(sujet: str, message: str) -> None:
+def alerter_coach_onboarding(sujet: str, message: str, event: str = "onboarding_docuseal_echec") -> None:
     # Best-effort, sur le modele de alerter_coach_diagnostic : un probleme
     # d'alerte ne doit jamais bloquer l'onboarding ni le webhook. En cas
     # d'echec reseau on ne logue QUE la classe de l'exception : le texte d'une
@@ -2455,7 +2455,7 @@ def alerter_coach_onboarding(sujet: str, message: str) -> None:
 
     try:
         requests.post(webhook_url, json={
-            "event": "onboarding_docuseal_echec",
+            "event": event,
             "subject": sujet,
             "message": f"{message}\n{portail}/coach",
             "coach_url": f"{portail}/coach",
@@ -2698,10 +2698,12 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
         send_portal_invite(email, client_id, nom)
         invite_envoyee = True
 
-    except RuntimeError as error:
-        # Code fixe uniquement : ce resultat est renvoye au navigateur du coach,
-        # et le texte de l'erreur contient l'URL du webhook n8n. Le diagnostic
-        # (resume sans URL ni identite) reste dans les logs serveur.
+    except Exception as error:
+        # Le client est deja cree : aucun echec d'envoi, quel qu'il soit, ne doit
+        # transformer l'onboarding en erreur. Code fixe uniquement : ce resultat
+        # est renvoye au navigateur du coach, et le texte de l'erreur contient
+        # l'URL du webhook n8n. Le diagnostic (resume sans URL ni identite) reste
+        # dans les logs serveur.
         invite_erreur = "envoi_invitation_echoue"
         logger.warning("Invitation portail non envoyee : %s", _resume_erreur(error))
 

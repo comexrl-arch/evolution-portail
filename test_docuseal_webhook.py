@@ -194,7 +194,9 @@ with environnement(), patch.object(requests, "post", side_effect=garde_reseau), 
     check("une alerte coach envoyee", alerte.call_count == 1)
     sujet, message = alerte.call_args[0]
     check("l'alerte annonce le lien non envoye", "lien d'accès non envoyé" in sujet)
-    check("l'alerte contient le nom et l'email (destinee au coach)", NOM in message and EMAIL in message)
+    check("l'alerte contient la reference masquee et le parcours, ni nom ni email",
+          f"Référence : {portal_main._reference_docuseal(EMAIL)}" in message and "Parcours : Coaching 90 jours" in message
+          and NOM not in message and EMAIL not in message and NOM not in sujet and EMAIL not in sujet)
     check("l'alerte contient la cause technique generique", "Cause technique : lien d'accès non envoyé." in message)
     check("l'alerte ne contient aucun detail technique",
           URL_N8N not in message and HOTE not in message and "500" not in message
@@ -227,7 +229,9 @@ with environnement(), patch.object(requests, "post", side_effect=garde_reseau), 
     check("une alerte coach envoyee", alerte.call_count == 1)
     sujet, message = alerte.call_args[0]
     check("l'alerte annonce l'echec d'onboarding", "échoué" in sujet)
-    check("l'alerte contient le nom et l'email (destinee au coach)", NOM in message and EMAIL in message)
+    check("l'alerte contient la reference masquee et le parcours, ni nom ni email",
+          f"Référence : {portal_main._reference_docuseal(EMAIL)}" in message and "Parcours : Coaching 90 jours" in message
+          and NOM not in message and EMAIL not in message and NOM not in sujet and EMAIL not in sujet)
     check("l'alerte contient la cause technique generique", "Cause technique : création automatique interrompue." in message)
     check("l'alerte ne contient aucun detail technique",
           "RuntimeError" not in message and "Notion" not in message and "https" not in message
@@ -235,7 +239,7 @@ with environnement(), patch.object(requests, "post", side_effect=garde_reseau), 
 
 
 print("\n" + "=" * 80)
-print("TEST 4/11 : doublon - warning, aucune alerte, message actuel preserve")
+print("TEST 4/11 : doublon - warning, alerte coach assainie, message actuel preserve")
 print("=" * 80)
 
 MESSAGE_DOUBLON_ACTUEL = (
@@ -266,7 +270,11 @@ with environnement(), patch.object(requests, "post", side_effect=garde_reseau), 
     check("un warning 'client deja existant'",
           any(r.levelname == "WARNING" and "client deja existant" in r.getMessage() for r in nouveaux))
     check("aucun log error", "ERROR" not in niveaux(nouveaux))
-    check("aucune alerte coach", alerte.call_count == 0)
+    check("une seule alerte coach, evenement docuseal_client_deja_existant",
+          alerte.call_count == 1 and alerte.call_args.kwargs.get("event") == "docuseal_client_deja_existant")
+    sujet, message = alerte.call_args[0]
+    check("l'alerte ne contient ni email, ni nom, ni id de page",
+          all(v not in sujet + message for v in (EMAIL, NOM, "existing-123")))
     check("le log ne contient ni email, ni nom, ni id de page", EMAIL not in t and NOM not in t and "existing-123" not in t)
 
 
