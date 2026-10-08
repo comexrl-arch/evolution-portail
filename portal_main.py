@@ -93,7 +93,7 @@ def _session_from_header(authorization: str) -> dict:
         raise HTTPException(status_code=401, detail=str(error))
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("session", error)
 
 
 class PortalLoginRequest(BaseModel):
@@ -119,6 +119,43 @@ def _journaliser_echec_lien(contexte: str, error: Exception, email: str, nom: st
 
     except Exception:
         pass
+
+
+_MESSAGE_SERVICE_INDISPONIBLE = _MESSAGE_LIEN_INDISPONIBLE
+_MESSAGE_CLIENT_INTROUVABLE = "Client introuvable."
+
+
+def _journaliser_erreur_portail(
+    contexte: str, error: Exception, infos: dict | None = None, limite: int = 300
+) -> None:
+    # Detail technique de l'echec (nettoye) : logs Render uniquement, jamais dans
+    # la reponse HTTP. `contexte` est un libelle fixe choisi par le code, jamais
+    # une donnee venant de la requete. Pas de trace d'exception (exc_info) : le
+    # texte d'une erreur `requests` contient des URL. La journalisation ne doit
+    # jamais modifier la reponse, meme si elle echoue.
+    try:
+        _journal_docuseal.error(
+            "[portal-error] contexte=%s erreur=%s: %s",
+            contexte,
+            type(error).__name__,
+            _nettoyer_erreur(error, infos, limite),
+        )
+
+    except Exception:
+        pass
+
+
+def _erreur_service_indisponible(
+    contexte: str, error: Exception, infos: dict | None = None, limite: int = 300
+) -> HTTPException:
+    _journaliser_erreur_portail(contexte, error, infos, limite)
+    return HTTPException(status_code=503, detail=_MESSAGE_SERVICE_INDISPONIBLE)
+
+
+def _erreur_client_introuvable(contexte: str, error: Exception) -> HTTPException:
+    # Pas d'echo de l'identifiant saisi dans la reponse.
+    _journaliser_erreur_portail(contexte, error)
+    return HTTPException(status_code=404, detail=_MESSAGE_CLIENT_INTROUVABLE)
 
 
 def _journaliser_filtre_lien(raison: str, email: str) -> None:
@@ -192,7 +229,7 @@ def portal_verify(request: PortalVerifyRequest):
         raise HTTPException(status_code=401, detail=str(error))
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("verify", error)
 
     session_token = portal_auth_service.create_session_token(
         data["email"], data["client_page_id"]
@@ -240,7 +277,7 @@ def portal_me(authorization: str = Header(default="")):
         dashboard = notion_service.get_client_dashboard(session["client_page_id"])
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("portal_me", error)
 
     return dashboard
 
@@ -255,7 +292,7 @@ def portal_get_fiche(fiche_id: str, authorization: str = Header(default="")):
         return notion_service.get_fiche(fiche["id"], session["client_page_id"])
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("portal_get_fiche", error)
 
 
 @app.get("/portal/livrables/{livrable_id}")
@@ -271,7 +308,7 @@ def portal_get_livrable(livrable_id: str, authorization: str = Header(default=""
         raise HTTPException(status_code=404, detail="Livrable introuvable.")
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("portal_get_livrable", error)
 
 
 class PortalEntryRequest(BaseModel):
@@ -294,7 +331,7 @@ def portal_create_entry(
         )
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("portal_create_entry", error)
 
     return {"status": "saved", "entry": entry}
 
@@ -339,7 +376,7 @@ def portal_valider_fiche(
         notion_service.validate_fiche(fiche_id)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("portal_valider_fiche", error)
 
     if not deja_terminee:
         background_tasks.add_task(_alerter_si_diagnostic_termine, session["client_page_id"], fiche_id)
@@ -393,7 +430,7 @@ def coach_diagnostics(x_coach_key: str = Header(default="")):
         return {"diagnostics": notion_service.list_diagnostics_fiche8()}
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_diagnostics", error)
 
 
 @app.get("/coach/diagnostic-rapport/{client_page_id}")
@@ -404,10 +441,10 @@ def coach_diagnostic_rapport(client_page_id: str, x_coach_key: str = Header(defa
         return notion_service.get_diagnostic_rapport(client_page_id)
 
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+        raise _erreur_client_introuvable("coach_diagnostic_rapport", error)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_diagnostic_rapport", error)
 
 
 @app.get("/coach/bonus/{client_page_id}")
@@ -418,7 +455,7 @@ def coach_bonus(client_page_id: str, x_coach_key: str = Header(default="")):
         return notion_service.get_bonus_resultat(client_page_id) or {}
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_bonus", error)
 
 
 @app.get("/coach/diagnostic/{client_id}")
@@ -429,10 +466,10 @@ def coach_diagnostic_bundle(client_id: str, authorization: str = Header(default=
         return notion_service.get_coach_diagnostic_bundle(client_id)
 
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error))
+        raise _erreur_client_introuvable("coach_diagnostic_bundle", error)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_diagnostic_bundle", error)
 
 
 @app.get("/coach/fiches/{fiche_client_id}")
@@ -445,7 +482,7 @@ def coach_get_fiche(
         return notion_service.get_fiche(fiche_client_id, client_page_id)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_get_fiche", error)
 
 
 @app.get("/coach/fiches/{fiche_client_id}/diagnostic-champs")
@@ -456,7 +493,7 @@ def coach_get_diagnostic_champs(fiche_client_id: str, x_coach_key: str = Header(
         return {"champs": notion_service.get_diagnostic_fiche8(fiche_client_id)}
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_get_diagnostic_champs", error)
 
 
 class DiagnosticUpdate(BaseModel):
@@ -480,7 +517,7 @@ def coach_update_diagnostic_champs(
         notion_service.update_diagnostic_fiche8([u.model_dump() for u in request.updates])
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_update_diagnostic_champs", error)
 
     return {"status": "mis a jour"}
 
@@ -493,7 +530,7 @@ def coach_valider_fiche(fiche_client_id: str, x_coach_key: str = Header(default=
         notion_service.validate_fiche(fiche_client_id)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_valider_fiche", error)
 
     return {"status": "validee"}
 
@@ -506,7 +543,7 @@ def coach_leads_systeme_io(query: str = "", x_coach_key: str = Header(default=""
         return {"leads": systeme_io_service.search_contacts(query)}
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        raise _erreur_service_indisponible("coach_leads_systeme_io", error, {"email": query, "nom": query})
 
 
 class CoachClientOnboardRequest(BaseModel):
@@ -547,7 +584,14 @@ def coach_onboard_client(
         result = notion_service.onboard_client(request.nom, request.email, kpi_j0=kpi_j0, **data)
 
     except RuntimeError as error:
-        raise HTTPException(status_code=503, detail=str(error))
+        # Rollback, pages orphelines et detail utile : logs uniquement (limite elargie
+        # pour conserver la liste des pages a archiver a la main).
+        raise _erreur_service_indisponible(
+            "coach_onboard_client",
+            error,
+            {"nom": request.nom, "email": request.email, "telephone": request.telephone},
+            limite=1500,
+        )
 
     return result
 
@@ -643,11 +687,11 @@ _STRUCTURE_FERMEE = re.compile(r"\{[^{}]*\}")  # structure {...} sans accolade i
 _NETTOYAGE_PASSES_MAX = 20
 
 
-def _nettoyer_erreur(texte, infos: dict | None = None) -> str:
+def _nettoyer_erreur(texte, infos: dict | None = None, limite: int = 300) -> str:
     # Retire d'un texte d'erreur tout ce qui ne doit pas finir dans un log :
     # payload serialise, identite du client (nom, meme court, email, telephone),
     # URL (avec ou sans schema), hote et chemin des erreurs de connexion,
-    # adresses email. Tronque a 300 caracteres. Reserve aux logs : ce texte
+    # adresses email. Tronque a `limite` caracteres (300 par defaut). Reserve aux logs : ce texte
     # n'est jamais repris dans une alerte coach.
     texte = str(texte or "")
 
@@ -685,7 +729,7 @@ def _nettoyer_erreur(texte, infos: dict | None = None) -> str:
     texte = re.sub(r"host='[^']*'", "host=<hote>", texte)
     texte = re.sub(r"(?i)\burl:\s*\S+", "url: <url>", texte)
     texte = re.sub(r"[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+", "<email>", texte)
-    return texte[:300]
+    return texte[:limite]
 
 
 def _docuseal_alerter(sujet: str, lignes: list[str]) -> None:
