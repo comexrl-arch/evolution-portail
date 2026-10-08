@@ -19,6 +19,27 @@ from backend.services import portal_auth_service, sheets_service
 
 logger = logging.getLogger(__name__)
 
+
+def _resume_erreur(error: BaseException) -> str:
+    # Resume d'erreur sans danger pour les logs : classe de l'exception, puis
+    # classe et statut HTTP de l'erreur `requests` en cause si disponibles.
+    # Jamais str(error) : son texte contient l'URL appelee (webhook n8n, API
+    # Notion) et parfois des donnees du client.
+    origine = error if isinstance(error, requests.RequestException) else error.__cause__
+    details = []
+
+    if isinstance(origine, requests.RequestException):
+        if origine is not error:
+            details.append(type(origine).__name__)
+
+        statut = getattr(getattr(origine, "response", None), "status_code", None)
+
+        if isinstance(statut, int):
+            details.append(str(statut))
+
+    return f"{type(error).__name__} ({' '.join(details)})" if details else type(error).__name__
+
+
 load_dotenv()
 
 NOTION_API_KEY = os.getenv("NOTION_API_KEY")
@@ -2288,7 +2309,7 @@ def alerter_coach_diagnostic(client_nom: str, client_email: str | None) -> None:
     webhook_url = os.getenv("N8N_WEBHOOK_COACH_ALERT")
 
     if not webhook_url:
-        logger.warning("N8N_WEBHOOK_COACH_ALERT manquant : alerte diagnostic non envoyee (%s).", client_nom)
+        logger.warning("N8N_WEBHOOK_COACH_ALERT manquant : alerte diagnostic non envoyee.")
         return
 
     portail = os.getenv("PORTAL_FRONTEND_URL", "https://portail.rl-evolution.fr").rstrip("/")
@@ -2307,10 +2328,10 @@ def alerter_coach_diagnostic(client_nom: str, client_email: str | None) -> None:
 
     try:
         requests.post(webhook_url, json=payload, timeout=15).raise_for_status()
-        logger.info("Alerte diagnostic envoyee au coach : %s", client_nom)
+        logger.info("Alerte diagnostic envoyee au coach.")
 
     except requests.RequestException as error:
-        logger.warning("Alerte diagnostic non envoyee (%s) : %s", client_nom, error)
+        logger.warning("Alerte diagnostic non envoyee : %s", _resume_erreur(error))
 
 
 def _calculer_bonus(champs: list[dict], valeurs: dict) -> dict:
@@ -2414,7 +2435,7 @@ def alerter_coach_bonus(client_nom: str, r: dict) -> None:
             "message": "\n".join(lignes),
         }, timeout=15).raise_for_status()
     except requests.RequestException as error:
-        logger.warning("Alerte bonus non envoyee (%s) : %s", client_nom, error)
+        logger.warning("Alerte bonus non envoyee : %s", _resume_erreur(error))
 
 
 def alerter_coach_onboarding(sujet: str, message: str) -> None:
@@ -2491,7 +2512,7 @@ def log_portal_connection(email: str, client_page_id: str) -> None:
     try:
         _create_page(CONNEXIONS_DATA_SOURCE_ID, properties)
     except RuntimeError as error:
-        logger.warning("Echec journalisation connexion portail (%s) : %s", email, error)
+        logger.warning("Echec journalisation connexion portail : %s", _resume_erreur(error))
 
 
 # Champs optionnels que le coach peut renseigner des l'onboarding minimal
@@ -2678,7 +2699,11 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
         invite_envoyee = True
 
     except RuntimeError as error:
-        invite_erreur = str(error)
+        # Code fixe uniquement : ce resultat est renvoye au navigateur du coach,
+        # et le texte de l'erreur contient l'URL du webhook n8n. Le diagnostic
+        # (resume sans URL ni identite) reste dans les logs serveur.
+        invite_erreur = "envoi_invitation_echoue"
+        logger.warning("Invitation portail non envoyee : %s", _resume_erreur(error))
 
     return {
         "client_id": client_id,
