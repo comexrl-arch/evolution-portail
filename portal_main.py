@@ -164,6 +164,20 @@ def _exiger_fiche_ouverte(dashboard: dict, fiche_id: str) -> None:
     raise HTTPException(status_code=403, detail="Fiche inconnue pour ce client.")
 
 
+def _fiche_du_client(dashboard: dict, fiche_id: str) -> dict:
+    # Lecture : la fiche doit appartenir au client (404 sinon, on ne confirme
+    # pas l'existence chez un autre client) et etre ouverte (403 sinon).
+    cible = fiche_id.replace("-", "")
+
+    for fiche in dashboard.get("fiches", []):
+        if (fiche.get("id") or "").replace("-", "") == cible:
+            if "Bloqué" in (fiche.get("acces") or ""):
+                raise HTTPException(status_code=403, detail="Cette fiche n'est pas encore ouverte.")
+            return fiche
+
+    raise HTTPException(status_code=404, detail="Fiche introuvable.")
+
+
 @app.get("/portal/me")
 def portal_me(authorization: str = Header(default="")):
     session = _session_from_header(authorization)
@@ -182,7 +196,9 @@ def portal_get_fiche(fiche_id: str, authorization: str = Header(default="")):
     session = _session_from_header(authorization)
 
     try:
-        return notion_service.get_fiche(fiche_id, session["client_page_id"])
+        dashboard = notion_service.get_client_dashboard(session["client_page_id"])
+        fiche = _fiche_du_client(dashboard, fiche_id)
+        return notion_service.get_fiche(fiche["id"], session["client_page_id"])
 
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error))
@@ -190,10 +206,15 @@ def portal_get_fiche(fiche_id: str, authorization: str = Header(default="")):
 
 @app.get("/portal/livrables/{livrable_id}")
 def portal_get_livrable(livrable_id: str, authorization: str = Header(default="")):
-    _session_from_header(authorization)
+    session = _session_from_header(authorization)
 
     try:
-        return notion_service.get_livrable(livrable_id)
+        dashboard = notion_service.get_client_dashboard(session["client_page_id"])
+        return notion_service.get_livrable(livrable_id, dashboard)
+
+    except notion_service.LivrableNonAutorise:
+        # Levee uniquement quand le livrable a ete lu mais n'est pas autorise.
+        raise HTTPException(status_code=404, detail="Livrable introuvable.")
 
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error))
