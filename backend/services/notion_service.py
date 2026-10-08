@@ -2417,6 +2417,33 @@ def alerter_coach_bonus(client_nom: str, r: dict) -> None:
         logger.warning("Alerte bonus non envoyee (%s) : %s", client_nom, error)
 
 
+def alerter_coach_onboarding(sujet: str, message: str) -> None:
+    # Best-effort, sur le modele de alerter_coach_diagnostic : un probleme
+    # d'alerte ne doit jamais bloquer l'onboarding ni le webhook. En cas
+    # d'echec reseau on ne logue QUE la classe de l'exception : le texte d'une
+    # erreur `requests` contient l'URL du webhook n8n (jamais journalisee ici,
+    # pas plus que le payload ou l'email).
+    journal = logging.getLogger("uvicorn.error")  # visible dans les logs Render
+    webhook_url = os.getenv("N8N_WEBHOOK_COACH_ALERT")
+
+    if not webhook_url:
+        journal.warning("N8N_WEBHOOK_COACH_ALERT manquant : alerte onboarding non envoyee.")
+        return
+
+    portail = os.getenv("PORTAL_FRONTEND_URL", "https://portail.rl-evolution.fr").rstrip("/")
+
+    try:
+        requests.post(webhook_url, json={
+            "event": "onboarding_docuseal_echec",
+            "subject": sujet,
+            "message": f"{message}\n{portail}/coach",
+            "coach_url": f"{portail}/coach",
+        }, timeout=15).raise_for_status()
+
+    except requests.RequestException as error:
+        journal.warning("Alerte onboarding non envoyee (%s).", type(error).__name__)
+
+
 def send_portal_invite(email: str, client_page_id: str, client_nom: str) -> None:
     # Factorise la logique utilisee par /portal/auth/request-link : partagee
     # avec onboard_client() pour que le lien d'acces parte automatiquement
@@ -2509,6 +2536,12 @@ def _fiche_master_items_sorted() -> list[tuple[str, dict]]:
     return items
 
 
+class ClientDejaExistant(RuntimeError):
+    # Doublon d'onboarding. Sous-classe de RuntimeError : tous les appelants et
+    # tests existants continuent de fonctionner, le message reste inchange.
+    pass
+
+
 def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) -> dict:
     # Remplace entierement la procedure manuelle "[Procedure] Nouveau client -
     # copie & acces" (creation client + duplication des 22 fiches + KPI J0)
@@ -2530,7 +2563,7 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
     client_existant = find_client_by_email(email)
 
     if client_existant:
-        raise RuntimeError(
+        raise ClientDejaExistant(
             f"Un client existe deja avec l'email {email} "
             f"(page Notion {client_existant['id']}). Onboarding annule pour eviter un doublon."
         )
