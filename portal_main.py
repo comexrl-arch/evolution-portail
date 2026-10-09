@@ -8,7 +8,7 @@ import hashlib
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import re
 
@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from backend.services import cockpit_service
+from backend.services import docuseal_service
 from backend.services import notion_service
 from backend.services import portal_auth_service
 from backend.services import request_link_guard
@@ -705,6 +706,42 @@ def _docuseal_date_iso(texte: str) -> str:
     return ""
 
 
+def _docuseal_date_session(values: list) -> str:
+    # Atelier : "Date de la session 1" (champ du coach), au format AAAA-MM-JJ,
+    # ou "" si absente ou impossible (ex. 31/02).
+    texte = _docuseal_date_iso(_docuseal_valeur(values, "session 1", "date de la session", "champ de date"))
+
+    try:
+        date.fromisoformat(texte)
+    except ValueError:
+        return ""
+
+    return texte
+
+
+def _docuseal_soumission_id(payload: dict) -> str:
+    data = (payload or {}).get("data")
+    data = data if isinstance(data, dict) else {}
+    soumission = data.get("submission") if isinstance(data.get("submission"), dict) else {}
+    valeur = soumission.get("id") or data.get("submission_id")
+    return str(valeur) if isinstance(valeur, int) or str(valeur or "").isdigit() else ""
+
+
+def _docuseal_session_coach(payload: dict) -> tuple[str, str] | None:
+    # Signature du coach sur un contrat Atelier portant la date de la session 1 :
+    # (identifiant de soumission, date) a reporter chez le participant.
+    data = (payload or {}).get("data")
+    data = data if isinstance(data, dict) else {}
+    modele = data.get("template") if isinstance(data.get("template"), dict) else {}
+
+    if _DOCUSEAL_PARCOURS.get(str(modele.get("id") or "")) != "Atelier":
+        return None
+
+    date_iso = _docuseal_date_session(data.get("values") or [])
+    submission_id = _docuseal_soumission_id(payload)
+    return (submission_id, date_iso) if date_iso and submission_id else None
+
+
 def _docuseal_extraire(payload: dict) -> dict | None:
     if (payload or {}).get("event_type") != "form.completed":
         return None
@@ -725,8 +762,7 @@ def _docuseal_extraire(payload: dict) -> dict | None:
         "email": email,
         "parcours": parcours,
         "telephone": _docuseal_valeur(values, "téléphone", "telephone") or str(data.get("phone") or "").strip(),
-        "date_demarrage": _docuseal_date_iso(_docuseal_valeur(values, "session 1", "date de la session", "champ de date"))
-        if parcours == "Atelier" else "",
+        "date_demarrage": _docuseal_date_session(values) if parcours == "Atelier" else "",
         "completed_at": str(data.get("completed_at") or "").strip(),
         "modalite_paiement": _docuseal_valeur(values, "paiement", "règlement", "reglement", "modalit"),
     }
@@ -934,6 +970,101 @@ def _cockpit_signature(infos: dict) -> None:
     _journal_docuseal.info("[cockpit] signature reportee resultat=%s parcours=%s ref=%s", resultat, parcours, ref)
 
 
+def _docuseal_lire_session(submission_id: str) -> tuple[str, str]:
+    # Relit la soumission DocuSeal : (email du participant, date de la session 1
+    # saisie par le coach). Chaine vide pour une donnee absente.
+    soumission = docuseal_service.lire_soumission(submission_id)
+    email, date_iso = "", ""
+
+    for signataire in soumission.get("submitters") or []:
+        if not isinstance(signataire, dict):
+            continue
+
+        role = str(signataire.get("role") or "").strip().lower()
+
+        if role in _DOCUSEAL_ROLES_IGNORES:
+            date_iso = date_iso or _docuseal_date_session(signataire.get("values") or [])
+        elif not email:
+            email = str(signataire.get("email") or "").strip().lower()
+
+    return email, date_iso
+
+
+def _docuseal_completer_date(infos: dict, submission_id: str) -> None:
+    # Participant Atelier sans date de session 1 (champ du coach) : si le coach
+    # a deja signe, on la reprend de la soumission. Tache planifiee avant le
+    # cockpit et l'onboarding, qui lisent ensuite infos["date_demarrage"].
+    ref = _reference_docuseal(infos["email"])
+
+    try:
+        _email, date_iso = _docuseal_lire_session(submission_id)
+
+    except Exception as error:
+        _journal_docuseal.warning("[docuseal] date session 1 non lue ref=%s erreur=%s", ref, type(error).__name__)
+        return
+
+    if date_iso:
+        infos["date_demarrage"] = date_iso
+        _journal_docuseal.info("[docuseal] date session 1 reprise du coach ref=%s", ref)
+
+
+# Le coach signe souvent juste apres le participant, pendant l'onboarding
+# Notion de celui-ci (une vingtaine d'appels) : on reessaie quelques fois.
+_SESSION_ATTENTES = (0, 20, 40, 60)  # secondes
+
+
+def _docuseal_reporter_session(submission_id: str, date_iso: str) -> None:
+    # Signature du coach (Atelier) : reporte la date de la session 1 dans le
+    # cockpit (Contrats!D) et sur la fiche Notion du participant (Date de
+    # demarrage, J0 du parcours). Best-effort, logs uniquement.
+    if not docuseal_service.enabled():
+        _journal_docuseal.warning("[docuseal] date session 1 non reportee : DOCUSEAL_API_KEY absente")
+        return
+
+    try:
+        email, _date = _docuseal_lire_session(submission_id)
+
+    except Exception as error:
+        _journal_docuseal.warning("[docuseal] date session 1 non reportee : soumission illisible (%s)", type(error).__name__)
+        return
+
+    if not email:
+        _journal_docuseal.warning("[docuseal] date session 1 non reportee : participant sans email")
+        return
+
+    ref = _reference_docuseal(email)
+    cibles = {"notion": lambda: notion_service.definir_date_demarrage(email, date_iso)}
+
+    if cockpit_service.enabled():
+        cibles["cockpit"] = lambda: cockpit_service.reporter_demarrage(email, date.fromisoformat(date_iso))
+
+    for attente in _SESSION_ATTENTES:
+        if not cibles:
+            return
+
+        if attente:
+            time.sleep(attente)
+
+        for cible, reporter in list(cibles.items()):
+            try:
+                resultat = reporter()
+
+            except Exception as error:
+                _journal_docuseal.warning(
+                    "[docuseal] date session 1 non reportee cible=%s ref=%s erreur=%s: %s",
+                    cible, ref, type(error).__name__, _nettoyer_erreur(error, {"email": email}),
+                )
+                del cibles[cible]
+                continue
+
+            if resultat != "absent":
+                _journal_docuseal.info("[docuseal] date session 1 cible=%s resultat=%s ref=%s", cible, resultat, ref)
+                del cibles[cible]
+
+    for cible in cibles:
+        _journal_docuseal.warning("[docuseal] date session 1 non reportee cible=%s ref=%s : client introuvable", cible, ref)
+
+
 def _docuseal_signaler_non_reconnu(payload: dict) -> None:
     # form.completed recu mais sans template connu ou sans email exploitable :
     # un contrat signe reste sans client. Warning + alerte coach (best-effort).
@@ -975,6 +1106,15 @@ def webhook_docuseal(
         raise HTTPException(status_code=401, detail="Secret invalide.")
 
     if _docuseal_signature_coach(payload):
+        session = _docuseal_session_coach(payload)
+
+        if session:
+            # Atelier : seule la date de la session 1, saisie par le coach, est
+            # reportee chez le participant (ni onboarding, ni nouvelle ligne).
+            background_tasks.add_task(_docuseal_reporter_session, *session)
+            _journal_docuseal.info("[docuseal] signature coach : date session 1 a reporter")
+            return {"status": "accepte", "raison": "date_session"}
+
         # Ni onboarding, ni cockpit, ni alerte : seul le signataire client compte.
         modele = (payload.get("data") or {}).get("template")
         template = _champ_log((modele or {}).get("id") if isinstance(modele, dict) else "", 40)
@@ -988,6 +1128,13 @@ def webhook_docuseal(
             background_tasks.add_task(_docuseal_signaler_non_reconnu, payload)
 
         return {"status": "ignore"}
+
+    submission_id = _docuseal_soumission_id(payload)
+
+    if infos["parcours"] == "Atelier" and not infos["date_demarrage"] and submission_id and docuseal_service.enabled():
+        # Avant tout le reste : complete infos["date_demarrage"] si le coach a
+        # deja signe (sa date de session 1 n'est pas dans ce webhook).
+        background_tasks.add_task(_docuseal_completer_date, infos, submission_id)
 
     # Le cockpit d'abord (les taches de fond s'executent dans l'ordre) : la
     # ligne du client existe ainsi quand l'onboarding y reporte AF/AG.

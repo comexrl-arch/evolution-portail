@@ -329,3 +329,38 @@ def _marquer(email: str, client_notion: bool, acces_envoye_le: date | None) -> s
     _ecrire(sheet_id, cellules)
     return "marque"
 
+
+def reporter_demarrage(email: str, demarrage: date) -> str:
+    # Atelier : la date de la session 1 arrive avec la signature du coach, apres
+    # celle du participant. Remplace Contrats!D seulement s'il est vide ou s'il
+    # vaut encore la date de signature (O), mise par defaut a la creation de la
+    # ligne : une date saisie a la main est conservee.
+    # Renvoie "reporte", "deja_a_jour" ou "absent".
+    with _verrou:
+        return _reporter_demarrage(email, demarrage)
+
+
+def _reporter_demarrage(email: str, demarrage: date) -> str:
+    sheet_id = os.getenv("COCKPIT_SPREADSHEET_ID", "").strip()
+    email = str(email or "").strip().lower()
+    fin = DERNIERE_LIGNE_CONTRATS
+
+    emails, debuts, signes = _lire_colonnes(sheet_id, [
+        _plage(ONGLET_CONTRATS, f"M{PREMIERE_LIGNE}:M{fin}"),
+        _plage(ONGLET_CONTRATS, f"D{PREMIERE_LIGNE}:D{fin}"),
+        _plage(ONGLET_CONTRATS, f"O{PREMIERE_LIGNE}:O{fin}"),
+    ])
+    index = _index_email(emails, email)
+
+    if index is None:
+        return "absent"
+
+    actuel = _cellule(debuts, index)
+    nouveau = _serie(demarrage)
+
+    if actuel == str(nouveau) or (actuel and actuel != _cellule(signes, index)):
+        return "deja_a_jour"
+
+    _ecrire(sheet_id, {_plage(ONGLET_CONTRATS, f"D{PREMIERE_LIGNE + index}"): nouveau})
+    return "reporte"
+
