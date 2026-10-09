@@ -762,6 +762,44 @@ check("nettoyage : adresse email inconnue masquee", "@" not in portal_main._nett
 check("email masque sans arobase", portal_main._masquer_email("pas-un-email") == "***")
 
 
+
+print("=" * 80)
+print("TEST 12/12 : signature du coach (role 'Coach') ignoree, signature client traitee")
+print("=" * 80)
+
+EMAIL_COACH = "coach@exemple.test"
+
+for role in ("Coach", " COACH "):
+    donnees = payload(email=EMAIL_COACH, nom="Coach")
+    donnees["data"]["role"] = role
+
+    with environnement(), patch.object(requests, "post", side_effect=garde_reseau), \
+         patch.dict(os.environ, {"COCKPIT_SPREADSHEET_ID": "classeur-factice"}), \
+         patch.object(portal_main.cockpit_service, "enabled", return_value=True), \
+         patch.object(ns, "onboard_client", return_value=RESULTAT_OK) as onboard, \
+         patch.object(ns, "alerter_coach_onboarding") as alerte:
+        debut = repere()
+        reponse, bt = appeler(donnees)
+        executer(bt)
+        nouveaux = logs_depuis(debut)
+        check(f"role {role!r} : reponse 'ignore' / signature_coach",
+              reponse == {"status": "ignore", "raison": "signature_coach"})
+        check(f"role {role!r} : aucune tache (ni onboarding, ni cockpit)", len(bt.tasks) == 0 and onboard.call_count == 0)
+        check(f"role {role!r} : aucune alerte coach", alerte.call_count == 0)
+        check(f"role {role!r} : un log info, sans email", any(r.levelname == "INFO" and "signature coach ignoree" in r.getMessage()
+              for r in nouveaux) and EMAIL_COACH not in texte(nouveaux))
+
+donnees = payload()
+donnees["data"]["role"] = "Client"
+
+with environnement(), patch.object(requests, "post", side_effect=garde_reseau), \
+     patch.object(ns, "onboard_client", return_value=RESULTAT_OK) as onboard:
+    reponse, bt = appeler(donnees)
+    executer(bt)
+    check("role 'Client' : traite normalement (accepte + onboarding)",
+          reponse == {"status": "accepte", "parcours": "Coaching 90 jours"} and onboard.call_count == 1)
+
+
 print("\n" + "=" * 80)
 print(f"RESULTAT FINAL : {passed}/{passed + failed} assertions reussies")
 print("=" * 80)

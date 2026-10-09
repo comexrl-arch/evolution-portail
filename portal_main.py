@@ -664,6 +664,16 @@ _DOCUSEAL_PARCOURS = {
     "6152105": "Coaching 90 jours",
 }
 
+# form.completed part a chaque signataire. Les deux modeles ont un signataire
+# "Coach" (Rony) : sa signature n'est pas celle d'un nouveau client.
+_DOCUSEAL_ROLES_IGNORES = {"coach"}
+
+
+def _docuseal_signature_coach(payload: dict) -> bool:
+    data = (payload or {}).get("data")
+    role = str(data.get("role") or "").strip().lower() if isinstance(data, dict) else ""
+    return (payload or {}).get("event_type") == "form.completed" and role in _DOCUSEAL_ROLES_IGNORES
+
 
 def _docuseal_valeur(values: list, *mots: str) -> str:
     for item in values or []:
@@ -938,6 +948,13 @@ def webhook_docuseal(
     if x_webhook_secret != expected:
         _journal_docuseal.warning("[docuseal] webhook refuse : secret invalide")
         raise HTTPException(status_code=401, detail="Secret invalide.")
+
+    if _docuseal_signature_coach(payload):
+        # Ni onboarding, ni cockpit, ni alerte : seul le signataire client compte.
+        modele = (payload.get("data") or {}).get("template")
+        template = _champ_log((modele or {}).get("id") if isinstance(modele, dict) else "", 40)
+        _journal_docuseal.info("[docuseal] signature coach ignoree template=%s", template)
+        return {"status": "ignore", "raison": "signature_coach"}
 
     infos = _docuseal_extraire(payload)
 
