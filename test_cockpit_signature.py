@@ -299,6 +299,42 @@ check("Coaching sans indication : montant vide", cs.montant("Coaching 90 jours",
 
 
 print("=" * 80)
+print("TEST 11b : retours de revue (email vide, nom vide sur ligne existante, date impossible)")
+print("=" * 80)
+
+classeur = FauxClasseur({(K, "A", 5): "Client 1", (K, "F", 5): 500})
+
+try:
+    lancer(classeur, infos(email="  "))
+    leve = False
+except ValueError:
+    leve = True
+
+check("email vide : refuse, rien n'est ecrit (pas de correspondance avec une cellule vide)",
+      leve and classeur.ecritures == [] and (K, "O", 5) not in classeur.cellules)
+
+classeur = FauxClasseur({(C, "A", 5): "Jean Dupont", (C, "AD", 5): "homonyme@exemple.test", (C, "AD", 6): EMAIL})
+
+try:
+    lancer(classeur, infos())
+    leve = False
+except cs.NomDejaPris:
+    leve = True
+
+check("email connu sans nom, nom deja pris par un autre client : NomDejaPris, rien n'est ecrit",
+      leve and classeur.ecritures == [])
+
+classeur = FauxClasseur({(C, "AD", 6): EMAIL})
+lancer(classeur, infos())
+check("email connu sans nom, nom libre : nom complete sur la meme ligne", classeur.cellules.get((C, "A", 6)) == NOM)
+
+classeur = FauxClasseur()
+resultat = lancer(classeur, infos(parcours="Atelier", date_demarrage="2026-02-31"))
+check("date de demarrage impossible : ecriture faite, demarrage = date de signature",
+      resultat == "cree" and classeur.cellules.get((K, "D", 5)) == SIGNE)
+
+
+print("=" * 80)
 print("TEST 12 : webhook DocuSeal -> tache cockpit (activee / desactivee / en echec)")
 print("=" * 80)
 

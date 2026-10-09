@@ -145,11 +145,18 @@ def _cellule(colonne: list, index: int) -> str:
 
 
 def _index_email(colonne: list, email: str) -> int | None:
+    if not email:
+        return None
+
     for index, valeur in enumerate(colonne):
         if str(valeur or "").strip().lower() == email:
             return index
 
     return None
+
+
+def _nom_pris(noms: list, nom: str, sauf: int | None = None) -> bool:
+    return any(i != sauf and _cellule(noms, i).lower() == nom.lower() for i in range(len(noms)))
 
 
 def _premiere_ligne_libre(colonnes: list[list], nb_lignes: int) -> int | None:
@@ -187,6 +194,11 @@ def _enregistrer(infos: dict) -> str:
     email = str(infos.get("email") or "").strip().lower()
     nom = str(infos.get("nom") or "").strip()
     parcours = infos.get("parcours")
+
+    if not email or not nom:
+        # Garde-fou : un email vide correspondrait a la premiere cellule vide.
+        raise ValueError("Email ou nom absent")
+
     offre_client, formule = _OFFRES[parcours]
     signe_le = _serie(date_signature(infos.get("completed_at")))
 
@@ -215,7 +227,7 @@ def _enregistrer(infos: dict) -> str:
     client = _index_email(emails_clients, email)
 
     if client is None:
-        if any(_cellule(noms_clients, i).lower() == nom.lower() for i in range(len(noms_clients))):
+        if _nom_pris(noms_clients, nom):
             raise NomDejaPris("Nom de client deja utilise dans Suivi clients")
 
         client = _premiere_ligne_libre([noms_clients, emails_clients], nb_clients)
@@ -232,6 +244,9 @@ def _enregistrer(infos: dict) -> str:
         nom_client = _cellule(noms_clients, client)
 
         if not nom_client:
+            if _nom_pris(noms_clients, nom, sauf=client):
+                raise NomDejaPris("Nom de client deja utilise dans Suivi clients")
+
             nom_client = nom
             cellules[_plage(ONGLET_CLIENTS, f"A{PREMIERE_LIGNE + client}")] = nom
 
@@ -243,8 +258,12 @@ def _enregistrer(infos: dict) -> str:
     ligne = PREMIERE_LIGNE + libre
     demarrage = signe_le
 
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(infos.get("date_demarrage") or "")):
-        demarrage = _serie(date.fromisoformat(infos["date_demarrage"]))
+    try:
+        demarrage = _serie(date.fromisoformat(str(infos.get("date_demarrage") or "")))
+    except ValueError:
+        # Date absente ou impossible (ex. 31/02 saisi dans le contrat) : on
+        # retombe sur la date de signature plutot que d'abandonner l'ecriture.
+        pass
 
     prix, mode, note = montant(parcours, infos.get("modalite_paiement") or "")
     cellules[_plage(ONGLET_CONTRATS, f"A{ligne}")] = nom_client
