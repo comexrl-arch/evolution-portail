@@ -813,6 +813,28 @@ def _docuseal_alerter(sujet: str, lignes: list[str], event: str = "onboarding_do
         _journal_docuseal.warning("[docuseal] alerte coach impossible (%s)", type(error).__name__)
 
 
+def _cockpit_onboarding(infos: dict, client_notion: bool, acces_envoye: bool) -> None:
+    # Reporte le resultat de l'onboarding dans le cockpit (Suivi clients AF/AG).
+    # Best-effort : un echec est journalise sans alerte, car le cockpit affiche
+    # deja l'action « Vérifier la création du client dans Notion » au coach.
+    if not cockpit_service.enabled():
+        return
+
+    ref = _reference_docuseal(infos["email"])
+
+    try:
+        resultat = cockpit_service.marquer_onboarding(
+            infos["email"], client_notion, cockpit_service.aujourd_hui() if acces_envoye else None,
+        )
+        _journal_docuseal.info("[cockpit] onboarding reporte resultat=%s ref=%s", resultat, ref)
+
+    except Exception as error:
+        _journal_docuseal.warning(
+            "[cockpit] onboarding non reporte ref=%s erreur=%s: %s",
+            ref, type(error).__name__, _nettoyer_erreur(error, infos),
+        )
+
+
 def _docuseal_onboard(infos: dict) -> None:
     ref = _reference_docuseal(infos["email"])
     parcours = infos.get("parcours")
@@ -837,6 +859,7 @@ def _docuseal_onboard(infos: dict) -> None:
             f"Référence : {ref}",
             f"Parcours : {parcours}",
         ], event="docuseal_client_deja_existant")
+        _cockpit_onboarding(infos, client_notion=True, acces_envoye=False)
         return
 
     except Exception as error:  # Notion indisponible, rollback, bug, etc.
@@ -867,12 +890,14 @@ def _docuseal_onboard(infos: dict) -> None:
             f"Référence : {ref}",
             f"Parcours : {parcours}",
         ])
+        _cockpit_onboarding(infos, client_notion=True, acces_envoye=False)
         return
 
     _journal_docuseal.info(
         "[docuseal] onboarding OK parcours=%s ref=%s fiches=%s kpi=%s",
         parcours, ref, resultat.get("fiches_creees"), resultat.get("kpi_crees"),
     )
+    _cockpit_onboarding(infos, client_notion=True, acces_envoye=True)
 
 
 def _cockpit_signature(infos: dict) -> None:
@@ -964,12 +989,14 @@ def webhook_docuseal(
 
         return {"status": "ignore"}
 
+    # Le cockpit d'abord (les taches de fond s'executent dans l'ordre) : la
+    # ligne du client existe ainsi quand l'onboarding y reporte AF/AG.
+    if cockpit_service.enabled():
+        background_tasks.add_task(_cockpit_signature, infos)
+
     # L'onboarding enchaine une vingtaine d'appels Notion : on repond tout de
     # suite a DocuSeal et on cree le client en arriere-plan.
     background_tasks.add_task(_docuseal_onboard, infos)
-
-    if cockpit_service.enabled():
-        background_tasks.add_task(_cockpit_signature, infos)
 
     return {"status": "accepte", "parcours": infos["parcours"]}
 

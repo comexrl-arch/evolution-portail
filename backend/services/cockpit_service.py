@@ -284,3 +284,48 @@ def _enregistrer(infos: dict) -> str:
 
     _ecrire(sheet_id, cellules)
     return "cree"
+
+
+def aujourd_hui() -> date:
+    return date_signature(None)
+
+
+def marquer_onboarding(email: str, client_notion: bool, acces_envoye_le: date | None) -> str:
+    # Apres l'onboarding Notion : coche Suivi clients!AF (client Notion cree)
+    # et date AG (acces portail envoye le) sur la ligne du client, retrouvee
+    # par email (AD). Ne remplace jamais une valeur deja saisie.
+    # Renvoie "marque", "deja_a_jour" ou "absent".
+    with _verrou:
+        return _marquer(email, client_notion, acces_envoye_le)
+
+
+def _marquer(email: str, client_notion: bool, acces_envoye_le: date | None) -> str:
+    sheet_id = os.getenv("COCKPIT_SPREADSHEET_ID", "").strip()
+    email = str(email or "").strip().lower()
+    fin = DERNIERE_LIGNE_CLIENTS
+
+    emails, coches, acces = _lire_colonnes(sheet_id, [
+        _plage(ONGLET_CLIENTS, f"AD{PREMIERE_LIGNE}:AD{fin}"),
+        _plage(ONGLET_CLIENTS, f"AF{PREMIERE_LIGNE}:AF{fin}"),
+        _plage(ONGLET_CLIENTS, f"AG{PREMIERE_LIGNE}:AG{fin}"),
+    ])
+    index = _index_email(emails, email)
+
+    if index is None:
+        return "absent"
+
+    ligne = PREMIERE_LIGNE + index
+    cellules: dict[str, object] = {}
+
+    if client_notion and not (index < len(coches) and coches[index] is True):
+        cellules[_plage(ONGLET_CLIENTS, f"AF{ligne}")] = True
+
+    if acces_envoye_le is not None and not _cellule(acces, index):
+        cellules[_plage(ONGLET_CLIENTS, f"AG{ligne}")] = _serie(acces_envoye_le)
+
+    if not cellules:
+        return "deja_a_jour"
+
+    _ecrire(sheet_id, cellules)
+    return "marque"
+
