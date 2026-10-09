@@ -48,6 +48,7 @@ _OFFRES = {
 MONTANT_ATELIER = 390
 MONTANT_COACHING_COMPTANT = 1720
 MONTANT_COACHING_3_FOIS = 1800  # 3 x 600 EUR
+MONTANT_COACHING_REDUIT = 1520  # ancien participant Atelier ou filleul
 
 _FUSEAU_DEFAUT = "America/Guadeloupe"
 
@@ -113,10 +114,15 @@ def montant(parcours: str, modalite: str = "") -> tuple[int | None, str, str]:
 
     texte = (modalite or "").lower()
 
+    # Option du contrat Coaching "Ancien participant Atelier ou filleul : 1 520 €
+    # (comptant ou 3 × 506,67 €)" : testee en premier, elle contient "comptant".
+    if "filleul" in texte or "ancien participant" in texte or re.search(r"1[\s\u00a0\u202f.]?520\b", texte):
+        return MONTANT_COACHING_REDUIT, "", "Tarif ancien participant / filleul : comptant ou 3 × 506,67 € (à confirmer)"
+
     if "comptant" in texte:
         return MONTANT_COACHING_COMPTANT, "Comptant", ""
 
-    if re.search(r"\b3\s*(x|fois|×)", texte):
+    if re.search(r"\b3\s*(x|fois|×|mensualit)", texte):
         return MONTANT_COACHING_3_FOIS, "", "Paiement en 3 × 600 €"
 
     return None, "", "Montant à confirmer : 1 720 € comptant ou 1 800 € en 3 × 600 €"
