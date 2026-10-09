@@ -296,6 +296,14 @@ check("Coaching 3 x 600 : 1800 + note", cs.montant("Coaching 90 jours", "3 x 600
       and "3 × 600" in cs.montant("Coaching 90 jours", "3 x 600 €")[2])
 check("Coaching '3 fois' : 1800", cs.montant("Coaching 90 jours", "En 3 fois")[0] == 1800)
 check("Coaching sans indication : montant vide", cs.montant("Coaching 90 jours", "")[0] is None)
+check("option reelle 'Comptant : 1 720 €' : 1720 comptant",
+      cs.montant("Coaching 90 jours", "Comptant : 1 720 €")[:2] == (1720, "Comptant"))
+check("option reelle '3 mensualités de 600 € (1 800 €)' : 1800 + note 3 × 600",
+      cs.montant("Coaching 90 jours", "3 mensualités de 600 € (1 800 €)") == (1800, "", "Paiement en 3 × 600 €"))
+reduit = cs.montant("Coaching 90 jours", "Ancien participant Atelier ou filleul : 1 520 € (comptant ou 3 × 506,67 €)")
+check("option reelle ancien participant / filleul : 1520, mode non devine, note",
+      reduit[:2] == (1520, "") and "506,67" in reduit[2])
+check("1 520 avec espace insecable reconnu", cs.montant("Coaching 90 jours", "Tarif 1\u202f520 €")[0] == 1520)
 
 
 print("=" * 80)
