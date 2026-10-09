@@ -486,6 +486,170 @@ with patch.dict(os.environ, {"DOCUSEAL_WEBHOOK_SECRET": SECRET, "COCKPIT_SPREADS
           classeur.cellules.get((C, "A", 5)) == NOM and (C, "AF", 5) not in classeur.cellules)
 
 
+print("=" * 80)
+print("TEST 14 : Atelier - date de la session 1 saisie par le coach (Contrats!D + Notion)")
+print("=" * 80)
+
+from backend.services import docuseal_service as ds
+
+
+def reporter(classeur, email, jour):
+    with patch.dict(os.environ, {"COCKPIT_SPREADSHEET_ID": SHEET_ID}), \
+         patch.object(sheets_service, "_http", return_value=classeur):
+        return cs.reporter_demarrage(email, jour)
+
+
+SESSION = date(2026, 10, 16)
+classeur = FauxClasseur({(K, "M", 5): EMAIL, (K, "D", 5): SIGNE, (K, "O", 5): SIGNE})
+check("D = date de signature (valeur par defaut) -> remplacee par la session 1",
+      reporter(classeur, " Jean.Dupont@exemple.test ", SESSION) == "reporte"
+      and classeur.cellules[(K, "D", 5)] == serie(SESSION) and list(classeur.ecrit()) == [f"'{K}'!D5"])
+check("deuxieme passage : rien a ecrire", reporter(classeur, EMAIL, SESSION) == "deja_a_jour" and len(classeur.ecritures) == 1)
+
+manuel = serie(date(2026, 11, 2))
+classeur = FauxClasseur({(K, "M", 5): EMAIL, (K, "D", 5): manuel, (K, "O", 5): SIGNE})
+check("date saisie a la main conservee", reporter(classeur, EMAIL, SESSION) == "deja_a_jour"
+      and classeur.cellules[(K, "D", 5)] == manuel and classeur.ecritures == [])
+
+classeur = FauxClasseur({(K, "M", 7): EMAIL})
+check("D vide -> ecrite", reporter(classeur, EMAIL, SESSION) == "reporte" and classeur.cellules[(K, "D", 7)] == serie(SESSION))
+check("email absent / vide -> rien", reporter(FauxClasseur({(K, "M", 5): "autre@exemple.test"}), EMAIL, SESSION) == "absent"
+      and reporter(FauxClasseur(), "", SESSION) == "absent")
+
+print("-- Notion : Date de demarrage")
+with patch.object(ns, "find_client_by_email", return_value={"id": "page-1", "properties": {
+        "Date de démarrage": {"type": "date", "date": None}}}), patch.object(ns, "_update_page") as maj:
+    check("date vide -> reportee", ns.definir_date_demarrage(EMAIL, "2026-10-16") == "reporte"
+          and maj.call_args.args == ("page-1", {"Date de démarrage": {"date": {"start": "2026-10-16"}}}))
+with patch.object(ns, "find_client_by_email", return_value={"id": "page-1", "properties": {
+        "Date de démarrage": {"type": "date", "date": {"start": "2026-10-20"}}}}), patch.object(ns, "_update_page") as maj:
+    check("date deja presente -> conservee", ns.definir_date_demarrage(EMAIL, "2026-10-16") == "deja_a_jour" and maj.call_count == 0)
+with patch.object(ns, "find_client_by_email", return_value=None), patch.object(ns, "_update_page") as maj:
+    check("client introuvable -> absent", ns.definir_date_demarrage(EMAIL, "2026-10-16") == "absent" and maj.call_count == 0)
+try:
+    ns.definir_date_demarrage(EMAIL, "16/10/2026")
+    check("date mal formee refusee", False)
+except ValueError:
+    check("date mal formee refusee", True)
+
+print("-- API DocuSeal")
+with patch.dict(os.environ, {"DOCUSEAL_API_KEY": ""}):
+    check("desactive sans DOCUSEAL_API_KEY", ds.enabled() is False)
+with patch.dict(os.environ, {"DOCUSEAL_API_KEY": "cle-factice", "DOCUSEAL_API_URL": ""}), \
+     patch.object(requests, "get", return_value=Reponse({"id": 42})) as get:
+    Reponse.raise_for_status = lambda self: None
+    check("lecture de la soumission", ds.enabled() and ds.lire_soumission("42") == {"id": 42}
+          and get.call_args.args[0] == "https://api.docuseal.com/submissions/42"
+          and get.call_args.kwargs["headers"] == {"X-Auth-Token": "cle-factice"})
+
+TEMPLATE_ATELIER = next(k for k, v in portal_main._DOCUSEAL_PARCOURS.items() if v == "Atelier")
+SOUMISSION = {"id": 4242, "submitters": [
+    {"role": "Coach", "email": "coach@exemple.test", "values": [{"field": "Date de la session 1", "value": "2026-10-16"}]},
+    {"role": "Participant", "email": EMAIL, "values": [{"field": "Nom / Raison sociale", "value": NOM}]},
+]}
+coach = {"event_type": "form.completed", "data": {
+    "email": "coach@exemple.test", "role": "Coach", "template": {"id": TEMPLATE_ATELIER}, "submission": {"id": 4242},
+    "values": [{"field": "Date de la session 1", "value": "2026-10-16"}]}}
+participant = {"event_type": "form.completed", "data": {
+    "email": EMAIL, "name": NOM, "role": "Participant", "template": {"id": TEMPLATE_ATELIER}, "submission": {"id": 4242},
+    "completed_at": "2026-10-09T15:00:00Z", "values": [{"field": "Nom / Raison sociale", "value": NOM}]}}
+ENV = {"DOCUSEAL_WEBHOOK_SECRET": SECRET, "COCKPIT_SPREADSHEET_ID": SHEET_ID, "DOCUSEAL_API_KEY": "cle-factice"}
+
+
+def executer(bt):
+    for tache in bt.tasks:
+        tache.func(*tache.args, **tache.kwargs)
+
+
+print("-- webhook : le participant signe d'abord, puis le coach")
+with patch.dict(os.environ, ENV), patch.object(requests, "post", side_effect=AssertionError("reseau interdit")), \
+     patch.object(sheets_service, "enabled", return_value=True), \
+     patch.object(ns, "alerter_coach_onboarding"), patch.object(portal_main.time, "sleep") as dort:
+    classeur = FauxClasseur()
+
+    with patch.object(sheets_service, "_http", return_value=classeur), \
+         patch.object(ds, "lire_soumission", return_value={"submitters": [dict(SOUMISSION["submitters"][0], values=[]),
+                                                                          SOUMISSION["submitters"][1]]}), \
+         patch.object(ns, "onboard_client", return_value=RESULTAT_OK) as onboard, \
+         patch.object(ns, "definir_date_demarrage") as notion_date:
+        bt = BackgroundTasks()
+        portal_main.webhook_docuseal(participant, bt, x_webhook_secret=SECRET)
+        check("participant : date cherchee dans la soumission avant cockpit et onboarding",
+              [t.func.__name__ for t in bt.tasks] == ["_docuseal_completer_date", "_cockpit_signature", "_docuseal_onboard"])
+        executer(bt)
+        check("coach pas encore signe : D = date de signature, onboarding sans date",
+              classeur.cellules.get((K, "D", 5)) == SIGNE and onboard.call_args.kwargs["date_demarrage"] == "")
+
+    with patch.object(sheets_service, "_http", return_value=classeur), \
+         patch.object(ds, "lire_soumission", return_value=SOUMISSION), \
+         patch.object(ns, "onboard_client") as onboard, \
+         patch.object(ns, "definir_date_demarrage", return_value="reporte") as notion_date:
+        bt = BackgroundTasks()
+        reponse = portal_main.webhook_docuseal(coach, bt, x_webhook_secret=SECRET)
+        check("coach : reponse accepte / date_session, une seule tache",
+              reponse == {"status": "accepte", "raison": "date_session"} and [t.func.__name__ for t in bt.tasks] == ["_docuseal_reporter_session"])
+        executer(bt)
+        check("coach : D = session 1, aucune nouvelle ligne, pas d'onboarding",
+              classeur.cellules[(K, "D", 5)] == serie(SESSION) and (K, "A", 6) not in classeur.cellules and onboard.call_count == 0)
+        check("coach : Notion recoit l'email du participant et la date", notion_date.call_args.args == (EMAIL, "2026-10-16"))
+        check("aucune attente quand tout est trouve", dort.call_count == 0)
+
+print("-- webhook : le coach signe pendant l'onboarding (client Notion pas encore cree)")
+with patch.dict(os.environ, ENV), patch.object(requests, "post", side_effect=AssertionError("reseau interdit")), \
+     patch.object(sheets_service, "enabled", return_value=True), \
+     patch.object(sheets_service, "_http", return_value=FauxClasseur()), \
+     patch.object(ds, "lire_soumission", return_value=SOUMISSION), \
+     patch.object(ns, "definir_date_demarrage", side_effect=["absent", "reporte"]) as notion_date, \
+     patch.object(portal_main.time, "sleep") as dort:
+    bt = BackgroundTasks()
+    portal_main.webhook_docuseal(coach, bt, x_webhook_secret=SECRET)
+    executer(bt)
+    check("Notion reessaye puis reporte ; cockpit sans ligne -> abandon apres les essais",
+          notion_date.call_count == 2 and dort.call_count == len(portal_main._SESSION_ATTENTES) - 1)
+
+print("-- webhook : le coach signe d'abord (contrat ouvert par lien)")
+with patch.dict(os.environ, ENV), patch.object(requests, "post", side_effect=AssertionError("reseau interdit")), \
+     patch.object(sheets_service, "enabled", return_value=True), \
+     patch.object(ns, "alerter_coach_onboarding"):
+    classeur = FauxClasseur()
+
+    with patch.object(sheets_service, "_http", return_value=classeur), \
+         patch.object(ds, "lire_soumission", return_value=SOUMISSION), \
+         patch.object(ns, "onboard_client", return_value=RESULTAT_OK) as onboard:
+        bt = BackgroundTasks()
+        portal_main.webhook_docuseal(participant, bt, x_webhook_secret=SECRET)
+        executer(bt)
+        check("participant ensuite : D = session 1 et onboarding Notion avec la date",
+              classeur.cellules.get((K, "D", 5)) == serie(SESSION) and onboard.call_args.kwargs["date_demarrage"] == "2026-10-16")
+
+print("-- garde-fous")
+with patch.dict(os.environ, ENV), patch.object(requests, "post", side_effect=AssertionError("reseau interdit")):
+    sans_date = {"event_type": "form.completed", "data": dict(coach["data"], values=[{"field": "Date de la session 1", "value": "2026-02-31"}])}
+    bt = BackgroundTasks()
+    check("coach Atelier sans date valide -> ignore comme avant",
+          portal_main.webhook_docuseal(sans_date, bt, x_webhook_secret=SECRET) == {"status": "ignore", "raison": "signature_coach"}
+          and len(bt.tasks) == 0)
+    coach_coaching = {"event_type": "form.completed", "data": dict(coach["data"], template={"id": TEMPLATE_COACHING})}
+    bt = BackgroundTasks()
+    check("coach Coaching -> ignore comme avant",
+          portal_main.webhook_docuseal(coach_coaching, bt, x_webhook_secret=SECRET)["status"] == "ignore" and len(bt.tasks) == 0)
+
+with patch.dict(os.environ, dict(ENV, DOCUSEAL_API_KEY="")), \
+     patch.object(ds, "lire_soumission") as lecture, patch.object(ns, "definir_date_demarrage") as notion_date:
+    bt = BackgroundTasks()
+    portal_main.webhook_docuseal(participant, bt, x_webhook_secret=SECRET)
+    check("sans cle API : pas de recherche de date pour le participant", "_docuseal_completer_date" not in [t.func.__name__ for t in bt.tasks])
+    portal_main._docuseal_reporter_session("4242", "2026-10-16")
+    check("sans cle API : rien n'est lu ni ecrit", lecture.call_count == 0 and notion_date.call_count == 0)
+
+with patch.dict(os.environ, ENV), patch.object(ds, "lire_soumission", side_effect=RuntimeError("DocuSeal indisponible")), \
+     patch.object(ns, "definir_date_demarrage") as notion_date:
+    infos_p = infos(parcours="Atelier")
+    portal_main._docuseal_completer_date(infos_p, "4242")
+    portal_main._docuseal_reporter_session("4242", "2026-10-16")
+    check("DocuSeal indisponible : aucune exception, rien d'ecrit", infos_p["date_demarrage"] == "" and notion_date.call_count == 0)
+
+
 print("\n" + "=" * 80)
 print(f"RESULTAT FINAL : {passed}/{passed + failed} assertions reussies")
 print("=" * 80)

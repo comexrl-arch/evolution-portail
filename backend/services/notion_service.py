@@ -316,6 +316,29 @@ def find_client_by_email(email: str) -> dict | None:
     return results[0] if results else None
 
 
+def definir_date_demarrage(email: str, date_iso: str) -> str:
+    # Atelier : la date de la session 1 (J0 du parcours) est saisie par le coach
+    # dans DocuSeal, souvent apres la creation du client. On la reporte sur sa
+    # fiche Notion sans jamais remplacer une date deja presente.
+    # Renvoie "reporte", "deja_a_jour" ou "absent".
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_iso or ""):
+        raise ValueError("Date de demarrage invalide")
+
+    client = find_client_by_email(email) if (email or "").strip() else None
+
+    if not client:
+        return "absent"
+
+    props = client.get("properties", {})
+
+    if _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage")):
+        return "deja_a_jour"
+
+    _update_page(client["id"], {"Date de démarrage": {"date": {"start": date_iso}}})
+    _cache_clear("dashboard:")
+    return "reporte"
+
+
 # Renumerotation de "[DB] Fiches Master" (07/10/2026) : les fiches gardent
 # leur identifiant interne historique (utilise par le parcours, Sheets, les
 # alertes), seul l'affichage suit la nouvelle numerotation. Les fiches client
