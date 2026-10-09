@@ -406,6 +406,86 @@ with patch.dict(os.environ, {"DOCUSEAL_WEBHOOK_SECRET": SECRET}), \
         check("ni email ni nom dans les logs", EMAIL not in logs and NOM not in logs and "[cockpit]" in logs)
 
 
+
+print("=" * 80)
+print("TEST 13 : report de l'onboarding Notion dans Suivi clients (AF / AG)")
+print("=" * 80)
+
+
+def marquer(classeur, email, client_notion, acces):
+    with patch.dict(os.environ, {"COCKPIT_SPREADSHEET_ID": SHEET_ID}), \
+         patch.object(sheets_service, "_http", return_value=classeur):
+        return cs.marquer_onboarding(email, client_notion, acces)
+
+
+JOUR = date(2026, 10, 9)
+classeur = FauxClasseur({(C, "A", 6): NOM, (C, "AD", 6): EMAIL, (C, "AF", 6): False})
+resultat = marquer(classeur, " Jean.Dupont@exemple.test ", True, JOUR)
+check("ligne retrouvee par email (casse, espaces) : AF coche, AG date du jour",
+      resultat == "marque" and classeur.cellules[(C, "AF", 6)] is True and classeur.cellules[(C, "AG", 6)] == serie(JOUR))
+check("seules AF6 et AG6 sont ecrites, en mode RAW", sorted(classeur.ecrit()) == [f"'{C}'!AF6", f"'{C}'!AG6"]
+      and classeur.ecritures[0]["valueInputOption"] == "RAW")
+
+ecritures = len(classeur.ecritures)
+check("deuxieme passage : rien a ecrire", marquer(classeur, EMAIL, True, date(2026, 10, 12)) == "deja_a_jour"
+      and len(classeur.ecritures) == ecritures and classeur.cellules[(C, "AG", 6)] == serie(JOUR))
+
+classeur = FauxClasseur({(C, "AD", 5): EMAIL, (C, "AG", 5): serie(date(2026, 10, 1))})
+marquer(classeur, EMAIL, True, JOUR)
+check("date d'acces deja saisie conservee, seule AF est cochee",
+      classeur.cellules[(C, "AG", 5)] == serie(date(2026, 10, 1)) and list(classeur.ecrit()) == [f"'{C}'!AF5"])
+
+classeur = FauxClasseur({(C, "AD", 5): EMAIL})
+marquer(classeur, EMAIL, True, None)
+check("client deja existant / acces non envoye : AF coche, AG vide",
+      classeur.cellules.get((C, "AF", 5)) is True and (C, "AG", 5) not in classeur.cellules)
+
+classeur = FauxClasseur({(C, "AD", 5): "autre@exemple.test"})
+check("email absent du cockpit : rien n'est ecrit", marquer(classeur, EMAIL, True, JOUR) == "absent" and classeur.ecritures == [])
+check("email vide : jamais rattache a une ligne vide", marquer(FauxClasseur(), "", True, JOUR) == "absent")
+
+print("-- webhook complet : contrat signe -> ligne cockpit -> onboarding -> AF/AG")
+
+with patch.dict(os.environ, {"DOCUSEAL_WEBHOOK_SECRET": SECRET, "COCKPIT_SPREADSHEET_ID": SHEET_ID}), \
+     patch.object(requests, "post", side_effect=AssertionError("reseau interdit")):
+    for invite, attendu_ag in ((True, True), (False, False)):
+        classeur = FauxClasseur()
+        resultat_onboard = dict(RESULTAT_OK, invite_envoyee=invite, invite_erreur=None if invite else "envoi_invitation_echoue")
+
+        with patch.object(sheets_service, "enabled", return_value=True), \
+             patch.object(sheets_service, "_http", return_value=classeur), \
+             patch.object(cs, "aujourd_hui", return_value=JOUR), \
+             patch.object(ns, "onboard_client", return_value=resultat_onboard), \
+             patch.object(ns, "alerter_coach_onboarding"):
+            bt = BackgroundTasks()
+            portal_main.webhook_docuseal(payload, bt, x_webhook_secret=SECRET)
+            check(f"invite={invite} : tache cockpit planifiee avant l'onboarding",
+                  [t.func.__name__ for t in bt.tasks] == ["_cockpit_signature", "_docuseal_onboard"])
+
+            for tache in bt.tasks:
+                tache.func(*tache.args, **tache.kwargs)
+
+        check(f"invite={invite} : ligne creee puis AF coche", classeur.cellules.get((C, "A", 5)) == NOM
+              and classeur.cellules.get((C, "AF", 5)) is True)
+        check(f"invite={invite} : AG {'= date du jour' if attendu_ag else 'vide (acces non envoye)'}",
+              (classeur.cellules.get((C, "AG", 5)) == serie(JOUR)) if attendu_ag else ((C, "AG", 5) not in classeur.cellules))
+
+    classeur = FauxClasseur()
+
+    with patch.object(sheets_service, "enabled", return_value=True), \
+         patch.object(sheets_service, "_http", return_value=classeur), \
+         patch.object(ns, "onboard_client", side_effect=RuntimeError("Notion indisponible")), \
+         patch.object(ns, "alerter_coach_onboarding"):
+        bt = BackgroundTasks()
+        portal_main.webhook_docuseal(payload, bt, x_webhook_secret=SECRET)
+
+        for tache in bt.tasks:
+            tache.func(*tache.args, **tache.kwargs)
+
+    check("onboarding Notion en echec : ligne creee mais AF reste decoche",
+          classeur.cellules.get((C, "A", 5)) == NOM and (C, "AF", 5) not in classeur.cellules)
+
+
 print("\n" + "=" * 80)
 print(f"RESULTAT FINAL : {passed}/{passed + failed} assertions reussies")
 print("=" * 80)
