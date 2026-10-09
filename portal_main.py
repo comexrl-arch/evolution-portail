@@ -18,6 +18,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from backend.services import cockpit_service
 from backend.services import notion_service
 from backend.services import portal_auth_service
 from backend.services import request_link_guard
@@ -97,6 +98,7 @@ def health_check():
         "version": "0.1.0",
         "started_at": _STARTED_AT,
         "sheets_sync": sheets_service.enabled(),
+        "cockpit_sync": cockpit_service.enabled(),
     }
 
 
@@ -715,6 +717,8 @@ def _docuseal_extraire(payload: dict) -> dict | None:
         "telephone": _docuseal_valeur(values, "téléphone", "telephone") or str(data.get("phone") or "").strip(),
         "date_demarrage": _docuseal_date_iso(_docuseal_valeur(values, "session 1", "date de la session", "champ de date"))
         if parcours == "Atelier" else "",
+        "completed_at": str(data.get("completed_at") or "").strip(),
+        "modalite_paiement": _docuseal_valeur(values, "paiement", "règlement", "reglement", "modalit"),
     }
 
 
@@ -861,6 +865,40 @@ def _docuseal_onboard(infos: dict) -> None:
     )
 
 
+def _cockpit_signature(infos: dict) -> None:
+    # Tache de fond independante de l'onboarding Notion : le contrat est signe,
+    # il doit apparaitre dans le cockpit meme si Notion echoue. Best-effort :
+    # aucune erreur ne remonte, le coach est alerte.
+    ref = _reference_docuseal(infos["email"])
+    parcours = infos.get("parcours")
+
+    try:
+        resultat = cockpit_service.enregistrer_signature(infos)
+
+    except Exception as error:
+        if isinstance(error, cockpit_service.NomDejaPris):
+            cause = "nom de client déjà utilisé par un autre client"
+        elif isinstance(error, cockpit_service.CockpitPlein):
+            cause = "plus de ligne libre dans le cockpit"
+        else:
+            cause = "écriture dans le cockpit interrompue"
+
+        _journal_docuseal.error(
+            "[cockpit] signature non reportee parcours=%s ref=%s erreur=%s: %s",
+            parcours, ref, type(error).__name__, _nettoyer_erreur(error, infos),
+        )
+        _docuseal_alerter("Cockpit : contrat signé non reporté", [
+            "Un contrat DocuSeal est signé, mais il n'a pas pu être ajouté au cockpit.",
+            f"Cause : {cause}.",
+            "Événement : cockpit_signature_echec",
+            f"Référence : {ref}",
+            f"Parcours : {parcours}",
+        ], event="cockpit_signature_echec")
+        return
+
+    _journal_docuseal.info("[cockpit] signature reportee resultat=%s parcours=%s ref=%s", resultat, parcours, ref)
+
+
 def _docuseal_signaler_non_reconnu(payload: dict) -> None:
     # form.completed recu mais sans template connu ou sans email exploitable :
     # un contrat signe reste sans client. Warning + alerte coach (best-effort).
@@ -912,6 +950,9 @@ def webhook_docuseal(
     # L'onboarding enchaine une vingtaine d'appels Notion : on repond tout de
     # suite a DocuSeal et on cree le client en arriere-plan.
     background_tasks.add_task(_docuseal_onboard, infos)
+
+    if cockpit_service.enabled():
+        background_tasks.add_task(_cockpit_signature, infos)
 
     return {"status": "accepte", "parcours": infos["parcours"]}
 
