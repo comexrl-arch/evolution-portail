@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown } from 'lucide-react'
+import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks } from 'lucide-react'
+import CoachSuiviClients from './CoachSuiviClients.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 const COACH_KEY_STORAGE = 'coach_onboard_key'
@@ -313,7 +314,20 @@ export default function CoachOnboarding() {
         >
           <ClipboardCheck size={15} /> Diagnostics
         </button>
+        <button
+          onClick={() => setTab('suivi')}
+          className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5"
+          style={{
+            background: tab === 'suivi' ? 'var(--accent)' : 'transparent',
+            color: tab === 'suivi' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+            border: tab === 'suivi' ? 'none' : 'var(--border-subtle)',
+          }}
+        >
+          <ListChecks size={15} /> Suivi client
+        </button>
       </div>
+
+      {tab === 'suivi' && <CoachSuiviClients coachKey={coachKey} onAuthFailure={handleAuthFailure} />}
 
       {tab === 'diagnostics' && (
         <div>

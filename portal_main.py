@@ -5,6 +5,7 @@
 # production lors d'un redemarrage ou d'un crash cote portail.
 
 import hashlib
+import hmac
 import logging
 import os
 import time
@@ -449,7 +450,8 @@ def _require_coach_key(x_coach_key: str) -> None:
     if not expected:
         raise _erreur_configuration("coach_cle_manquante", "COACH_ONBOARD_KEY")
 
-    if x_coach_key != expected:
+    # Comparaison a temps constant : meme resultat qu'une egalite simple.
+    if not hmac.compare_digest(x_coach_key.encode("utf-8"), expected.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Code d'acces invalide.")
 
 
@@ -580,6 +582,23 @@ def coach_valider_fiche(fiche_client_id: str, x_coach_key: str = Header(default=
         raise _erreur_service_indisponible("coach_valider_fiche", error)
 
     return {"status": "validee"}
+
+
+@app.get("/coach/suivi-clients")
+def coach_suivi_clients(x_coach_key: str = Header(default="")):
+    # Onglet "Suivi client" : lecture seule de "Suivi clients" du cockpit Google
+    # Sheets. Uniquement les champs de la fiche (voir cockpit_service) : ni email,
+    # ni notes, ni montants, ni autre onglet.
+    _require_coach_key(x_coach_key)
+
+    if not cockpit_service.enabled():
+        raise _erreur_configuration("coach_suivi_clients", "COCKPIT_SPREADSHEET_ID")
+
+    try:
+        return {"clients": cockpit_service.lire_suivi_clients()}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_suivi_clients", error)
 
 
 @app.get("/coach/leads/systeme-io")
