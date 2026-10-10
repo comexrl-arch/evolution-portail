@@ -283,7 +283,7 @@ with environnement(), patch.object(ns, "find_client_by_email", return_value=PAGE
     check("[A] lien magique valide, du bon type, au nom du client",
           lien.startswith("https://portail.exemple.test/verify?token=") and donnees["client_page_id"] == CLIENT_ID
           and donnees["email"] == SAISI and donnees["type"] == "magic_link")
-    check("[A] duree de validite inchangee (15 minutes)", portal_auth_service.MAGIC_LINK_MAX_AGE == 15 * 60)
+    check("[A] duree de validite du lien de creation du mot de passe (48 heures)", portal_auth_service.MAGIC_LINK_MAX_AGE == 48 * 60 * 60)
     check("[A] aucun log warning/error", not any(r.levelno >= logging.WARNING for r in logs_depuis(debut)))
 
 

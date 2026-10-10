@@ -410,6 +410,11 @@ function LivrablesSection({ livrables, onOpen }) {
 export default function App() {
   const [screen, setScreen] = useState('loading')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [linkToken, setLinkToken] = useState('')
+  const [linkInfo, setLinkInfo] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [dashboard, setDashboard] = useState(null)
   const [activeFicheId, setActiveFicheId] = useState(null)
@@ -457,6 +462,11 @@ export default function App() {
       return
     }
 
+    // Lien recu par email (ouverture de l'espace ou mot de passe oublie) : il
+    // sert uniquement a creer le mot de passe, la connexion se fait ensuite
+    // par email + mot de passe.
+    window.history.replaceState({}, '', window.location.pathname)
+
     ;(async () => {
       try {
         const response = await fetch(`${API_BASE}/portal/auth/verify`, {
@@ -465,12 +475,16 @@ export default function App() {
           body: JSON.stringify({ token }),
         })
 
-        if (!response.ok) throw new Error('Ce lien est invalide ou a expiré.')
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          throw new Error(response.status === 401 && data.detail ? data.detail : 'Ce lien est invalide ou a expiré.')
+        }
 
         const data = await response.json()
-        localStorage.setItem(SESSION_KEY, data.session_token)
-        window.history.replaceState({}, '', window.location.pathname)
-        loadDashboard()
+        setLinkToken(token)
+        setLinkInfo(data)
+        setEmail(data.email || '')
+        setScreen('set-password')
       } catch (err) {
         setError(err.message)
         setScreen('login')
@@ -478,9 +492,74 @@ export default function App() {
     })()
   }, [loadDashboard])
 
+  const openSession = (sessionToken) => {
+    localStorage.setItem(SESSION_KEY, sessionToken)
+    setPassword('')
+    setPasswordConfirm('')
+    setLinkToken('')
+    setLinkInfo(null)
+    setScreen('loading')
+    loadDashboard()
+  }
+
+  const login = async (event) => {
+    event.preventDefault()
+    setError('')
+    setSubmitting(true)
+
+    try {
+      const response = await fetch(`${API_BASE}/portal/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) throw new Error(data.detail || 'Une erreur est survenue, réessayez.')
+
+      openSession(data.session_token)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const savePassword = async (event) => {
+    event.preventDefault()
+    setError('')
+
+    if (password !== passwordConfirm) {
+      setError('Les deux mots de passe ne sont pas identiques.')
+      return
+    }
+
+    setSubmitting(true)
+
+    try {
+      const response = await fetch(`${API_BASE}/portal/auth/set-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: linkToken, password }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) throw new Error(data.detail || 'Une erreur est survenue, réessayez.')
+
+      openSession(data.session_token)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const requestLink = async (event) => {
     event.preventDefault()
     setError('')
+    setSubmitting(true)
 
     try {
       const response = await fetch(`${API_BASE}/portal/auth/request-link`, {
@@ -497,6 +576,8 @@ export default function App() {
       setScreen('check-email')
     } catch (err) {
       setError(err.message)
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -646,45 +727,131 @@ export default function App() {
     )
   }
 
-  if (screen === 'login' || screen === 'check-email') {
+  if (['login', 'forgot', 'check-email', 'set-password'].includes(screen)) {
+    const goTo = (next) => {
+      setError('')
+      setPassword('')
+      setPasswordConfirm('')
+      setScreen(next)
+    }
+
+    const submitButton = (label) => (
+      <button
+        type="submit"
+        disabled={submitting}
+        className="w-full font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2"
+        style={{ background: 'var(--gold)', color: 'var(--bg-dark)', opacity: submitting ? 0.7 : 1 }}
+      >
+        {submitting && <Loader2 className="animate-spin" size={16} />}
+        {label}
+      </button>
+    )
+
+    const emailField = (
+      <div className="flex items-center gap-2 field-input">
+        <Mail size={18} color="var(--text-soft)" />
+        <input
+          type="email"
+          required
+          autoComplete="email"
+          placeholder="nom@exemple.com"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          className="bg-transparent outline-none flex-1"
+        />
+      </div>
+    )
+
+    const passwordField = (value, setValue, placeholder, autoComplete) => (
+      <div className="flex items-center gap-2 field-input">
+        <Lock size={18} color="var(--text-soft)" />
+        <input
+          type="password"
+          required
+          minLength={autoComplete === 'new-password' ? 8 : undefined}
+          autoComplete={autoComplete}
+          placeholder={placeholder}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          className="bg-transparent outline-none flex-1"
+        />
+      </div>
+    )
+
+    const linkButton = (label, next) => (
+      <button
+        type="button"
+        onClick={() => goTo(next)}
+        className="text-sm underline"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {label}
+      </button>
+    )
+
+    const errorText = error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
+
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="card-glass w-full max-w-md p-8" style={{ borderRadius: 'var(--radius-lg)' }}>
           <h1 className="gold-title text-2xl font-extrabold mb-2">Espace Client eVolution 2.0</h1>
 
-          {screen === 'login' ? (
+          {screen === 'login' && (
             <>
               <p className="text-sm mb-6" style={{ color: 'var(--text-soft)' }}>
-                Entre ton email pour recevoir ton lien d'accès sécurisé.
+                Connecte-toi avec ton email et ton mot de passe.
+              </p>
+              <form onSubmit={login} className="space-y-4">
+                {emailField}
+                {passwordField(password, setPassword, 'Mot de passe', 'current-password')}
+                {errorText}
+                {submitButton('Se connecter')}
+              </form>
+              <div className="mt-5 text-center">
+                {linkButton('Première connexion ou mot de passe oublié ?', 'forgot')}
+              </div>
+            </>
+          )}
+
+          {screen === 'forgot' && (
+            <>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-soft)' }}>
+                Entre ton email : tu recevras un lien pour créer ton mot de passe.
               </p>
               <form onSubmit={requestLink} className="space-y-4">
-                <div className="flex items-center gap-2 field-input">
-                  <Mail size={18} color="var(--text-soft)" />
-                  <input
-                    type="email"
-                    required
-                    placeholder="nom@exemple.com"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    className="bg-transparent outline-none flex-1"
-                  />
-                </div>
-                {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
-                <button
-                  type="submit"
-                  className="w-full font-semibold py-2.5 rounded-xl"
-                  style={{ background: 'var(--gold)', color: 'var(--bg-dark)' }}
-                >
-                  Recevoir mon lien d'accès
-                </button>
+                {emailField}
+                {errorText}
+                {submitButton('Recevoir le lien')}
+              </form>
+              <div className="mt-5 text-center">{linkButton('Retour à la connexion', 'login')}</div>
+            </>
+          )}
+
+          {screen === 'set-password' && (
+            <>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-soft)' }}>
+                {linkInfo?.mot_de_passe_existant ? 'Choisis ton nouveau mot de passe' : 'Bienvenue ! Crée ton mot de passe'}
+                {linkInfo?.email ? ` pour ${linkInfo.email}` : ''}. Tu l'utiliseras pour tes prochaines connexions
+                (8 caractères minimum).
+              </p>
+              <form onSubmit={savePassword} className="space-y-4">
+                <input type="email" value={email} autoComplete="username" readOnly hidden />
+                {passwordField(password, setPassword, 'Mot de passe', 'new-password')}
+                {passwordField(passwordConfirm, setPasswordConfirm, 'Confirme le mot de passe', 'new-password')}
+                {errorText}
+                {submitButton('Enregistrer et accéder à mon espace')}
               </form>
             </>
-          ) : (
+          )}
+
+          {screen === 'check-email' && (
             <div className="text-center py-4">
               <CheckCircle2 className="mx-auto mb-3" color="var(--green)" size={36} />
               <p style={{ color: 'var(--text-dimmed)' }}>
-                Vérifie tes emails — un lien d'accès t'a été envoyé s'il correspond à un compte.
+                Vérifie tes emails : si ton adresse correspond à un compte, un lien pour créer ton mot de passe
+                t'a été envoyé.
               </p>
+              <div className="mt-5">{linkButton('Retour à la connexion', 'login')}</div>
             </div>
           )}
         </div>
