@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from backend.services import cockpit_service
 from backend.services import docuseal_service
+from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
 from backend.services import request_link_guard
@@ -268,10 +269,17 @@ class PortalVerifyRequest(BaseModel):
     token: str
 
 
-@app.post("/portal/auth/verify")
-def portal_verify(request: PortalVerifyRequest):
+_MESSAGE_LIEN_UTILISE = (
+    "Ce lien a déjà servi. Connecte-toi avec ton mot de passe, "
+    "ou demande un nouveau lien si tu l'as oublié."
+)
+
+
+def _client_du_lien(token: str) -> tuple[dict, dict]:
+    # Lien recu par email (ouverture de l'espace ou mot de passe oublie) : il
+    # ne sert qu'a definir le mot de passe, et une seule fois.
     try:
-        data = portal_auth_service.verify_magic_link_token(request.token)
+        data = portal_auth_service.verify_magic_link_token(token)
 
     except ValueError as error:
         raise HTTPException(status_code=401, detail=str(error))
@@ -279,11 +287,100 @@ def portal_verify(request: PortalVerifyRequest):
     except RuntimeError as error:
         raise _erreur_service_indisponible("verify", error)
 
-    session_token = portal_auth_service.create_session_token(
-        data["email"], data["client_page_id"]
-    )
+    try:
+        client = notion_service.get_client_page(data["client_page_id"])
 
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("verify_client", error)
+
+    if portal_auth_service.lien_deja_utilise(data, notion_service.client_password_hash(client)):
+        raise HTTPException(status_code=401, detail=_MESSAGE_LIEN_UTILISE)
+
+    return data, client
+
+
+@app.post("/portal/auth/verify")
+def portal_verify(request: PortalVerifyRequest):
+    # Verifie le lien avant d'afficher l'ecran "Cree ton mot de passe" : aucune
+    # session n'est ouverte ici.
+    data, client = _client_du_lien(request.token)
+
+    return {
+        "status": "verified",
+        "email": data["email"],
+        "nom": notion_service.client_display_name(client),
+        "mot_de_passe_existant": portal_auth_service.mot_de_passe_defini(
+            notion_service.client_password_hash(client)
+        ),
+    }
+
+
+class PortalSetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+@app.post("/portal/auth/set-password")
+def portal_set_password(request: PortalSetPasswordRequest):
+    refus = portal_auth_service.erreur_mot_de_passe(request.password)
+
+    if refus:
+        raise HTTPException(status_code=400, detail=refus)
+
+    data, _ = _client_du_lien(request.token)
+
+    try:
+        empreinte = portal_auth_service.hash_password(request.password)
+        notion_service.definir_mot_de_passe_client(data["client_page_id"], empreinte)
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("set_password", error)
+
+    login_guard.reinitialiser(data["email"])
+    session_token = portal_auth_service.create_session_token(data["email"], data["client_page_id"])
     notion_service.log_portal_connection(data["email"], data["client_page_id"])
+
+    return {"status": "password_set", "session_token": session_token}
+
+
+class PortalPasswordLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+_MESSAGE_IDENTIFIANTS_INVALIDES = "Email ou mot de passe incorrect."
+_MESSAGE_TROP_DE_TENTATIVES = (
+    "Trop de tentatives. Réessaie dans quelques minutes, "
+    "ou utilise « Mot de passe oublié »."
+)
+
+
+@app.post("/portal/auth/login")
+def portal_login(request: PortalPasswordLoginRequest):
+    email = (request.email or "").strip().lower()
+
+    # Garde evaluee AVANT la recherche : meme decision pour un email connu ou non.
+    if login_guard.bloque(email):
+        _journaliser_filtre_lien("login_bloque", email)
+        raise HTTPException(status_code=429, detail=_MESSAGE_TROP_DE_TENTATIVES)
+
+    try:
+        client = notion_service.find_client_by_email(email) if email else None
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("login", error)
+
+    # Meme reponse (et meme duree de calcul) pour un email inconnu, un compte
+    # sans mot de passe et un mauvais mot de passe.
+    stocke = notion_service.client_password_hash(client) if client else ""
+
+    if not portal_auth_service.verify_password(request.password or "", stocke) or not client:
+        login_guard.enregistrer_echec(email)
+        raise HTTPException(status_code=401, detail=_MESSAGE_IDENTIFIANTS_INVALIDES)
+
+    login_guard.reinitialiser(email)
+    session_token = portal_auth_service.create_session_token(email, client["id"])
+    notion_service.log_portal_connection(email, client["id"])
 
     return {"status": "verified", "session_token": session_token}
 

@@ -316,6 +316,23 @@ def find_client_by_email(email: str) -> dict | None:
     return results[0] if results else None
 
 
+# Propriete "Texte" de "[DB] Clients" qui recoit l'empreinte du mot de passe du
+# portail (jamais le mot de passe en clair, voir portal_auth_service).
+PASSWORD_PROPERTY = os.getenv("NOTION_CLIENT_PASSWORD_PROPERTY", "Mot de passe portail")
+
+
+def client_password_hash(client_page: dict) -> str:
+    return _prop_value(_prop((client_page or {}).get("properties", {}), PASSWORD_PROPERTY)) or ""
+
+
+def get_client_page(client_page_id: str) -> dict:
+    return _get_page(client_page_id)
+
+
+def definir_mot_de_passe_client(client_page_id: str, empreinte: str) -> None:
+    _update_page(client_page_id, {PASSWORD_PROPERTY: {"rich_text": [{"text": {"content": empreinte}}]}})
+
+
 def definir_date_demarrage(email: str, date_iso: str) -> str:
     # Atelier : la date de la session 1 (J0 du parcours) est saisie par le coach
     # dans DocuSeal, souvent apres la creation du client. On la reporte sur sa
