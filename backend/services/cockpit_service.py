@@ -22,7 +22,7 @@ import logging
 import os
 import re
 import threading
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from backend.services import sheets_service
 
@@ -370,3 +370,250 @@ def _reporter_demarrage(email: str, demarrage: date) -> str:
     _ecrire(sheet_id, {_plage(ONGLET_CONTRATS, f"D{PREMIERE_LIGNE + index}"): nouveau})
     return "reporte"
 
+
+
+# --- Lecture seule : onglet « Suivi client » de l'Espace Coach ----------------
+#
+# Uniquement des lectures (values.get / values:batchGet), jamais d'ecriture.
+# Les colonnes sont retrouvees par le texte de leur en-tete (ligne 4), jamais
+# par leur lettre. Seules les colonnes listees ci-dessous sont lues : Notes,
+# Reste a encaisser, Email et le suivi portail (AE a AN) ne sont jamais demandes
+# a Google, donc jamais renvoyes.
+
+LIGNE_EN_TETES = 4
+
+# cle de la reponse -> en-tete exact du cockpit (le "☐" des cases est ignore).
+EN_TETES_SUIVI = {
+    "nom": "Client",
+    "offre": "Offre",
+    "date_rdv_qualifie": "Date RDV qualifié",
+    "rdv_qualifie": "☐ RDV qualifié",
+    "questionnaire_envoye": "☐ Questionnaire envoyé",
+    "date_premiere_session": "Date 1re session",
+    "premiere_session_faite": "☐ 1re session faite",
+    "synthese_envoyee": "☐ Synthèse envoyée",
+    "date_j7": "J+7",
+    "j7_fait": "☐ J+7 fait",
+    "date_j15": "J+15",
+    "j15_fait": "☐ J+15 fait",
+    "date_j30": "J+30",
+    "bilan_j30_fait": "☐ Bilan J+30 fait",
+    "decision": "Décision",
+    "suite_cloture_envoyee": "☐ Suite ou clôture envoyée",
+    "etape": "Étape en cours",
+    "prochaine_action": "Prochaine action",
+    "echeance": "Échéance",
+    "alerte": "Alerte",
+    "leads": "Leads",
+    "rdv": "RDV",
+    "ventes": "Ventes",
+    "conversion": "Conversion",
+    "panier_moyen": "Panier moyen (€)",
+    "reachat": "Réachat",
+    "etape_numero": "n",
+}
+
+# Etapes du process, dans l'ordre du cockpit : (cle, libelle, case, date prevue).
+# "Fait" = case cochee (valeur booleenne vraie). La decision n'a pas de case :
+# elle est faite quand la colonne Décision est renseignee, comme dans la formule
+# de l'etape en cours (colonne n) du cockpit.
+ETAPES_SUIVI = [
+    ("rdv_qualifie", "RDV qualifié", "rdv_qualifie", "date_rdv_qualifie"),
+    ("questionnaire_envoye", "Questionnaire envoyé", "questionnaire_envoye", None),
+    ("premiere_session", "1re session faite", "premiere_session_faite", "date_premiere_session"),
+    ("synthese_envoyee", "Synthèse envoyée", "synthese_envoyee", None),
+    ("j7", "Suivi J+7", "j7_fait", "date_j7"),
+    ("j15", "Suivi J+15", "j15_fait", "date_j15"),
+    ("bilan_j30", "Bilan J+30", "bilan_j30_fait", "date_j30"),
+    ("decision", "Décision", None, None),
+    ("suite_cloture", "Suite ou clôture envoyée", "suite_cloture_envoyee", None),
+]
+
+INDICATEURS_SUIVI = ["leads", "rdv", "ventes", "conversion", "panier_moyen", "reachat"]
+
+# Valeurs de la colonne n du cockpit : 1 a 7 = etape en cours, 8 = termine.
+ETAPE_TERMINEE = 8
+
+
+class StructureCockpitInvalide(RuntimeError):
+    pass
+
+
+def _normaliser_en_tete(texte) -> str:
+    return " ".join(str(texte or "").replace("☐", " ").split()).casefold()
+
+
+def _lettre_colonne(index: int) -> str:
+    lettres = ""
+    index += 1
+
+    while index:
+        index, reste = divmod(index - 1, 26)
+        lettres = chr(65 + reste) + lettres
+
+    return lettres
+
+
+def _colonnes_suivi(en_tetes: list) -> dict[str, str]:
+    # Associe chaque cle a la lettre de sa colonne. En-tete absent ou en double :
+    # erreur, plutot que de lire une autre colonne. Le message ne cite que des
+    # en-tetes, jamais une donnee client.
+    positions: dict[str, list[int]] = {}
+
+    for index, texte in enumerate(en_tetes):
+        cle = _normaliser_en_tete(texte)
+
+        if cle:
+            positions.setdefault(cle, []).append(index)
+
+    colonnes, manquants, doublons = {}, [], []
+
+    for cle, en_tete in EN_TETES_SUIVI.items():
+        trouves = positions.get(_normaliser_en_tete(en_tete), [])
+
+        if not trouves:
+            manquants.append(en_tete)
+        elif len(trouves) > 1:
+            doublons.append(en_tete)
+        else:
+            colonnes[cle] = _lettre_colonne(trouves[0])
+
+    if manquants or doublons:
+        raise StructureCockpitInvalide(
+            f"En-tetes de {ONGLET_CLIENTS} non reconnus : manquants={manquants} doublons={doublons}"
+        )
+
+    return colonnes
+
+
+def _lire_en_tetes(sheet_id: str) -> list:
+    reponse = sheets_service._check(
+        sheets_service._http().get(
+            f"{_SHEETS}/{sheet_id}/values/{_plage(ONGLET_CLIENTS, f'{LIGNE_EN_TETES}:{LIGNE_EN_TETES}')}",
+            params={"majorDimension": "ROWS", "valueRenderOption": "UNFORMATTED_VALUE"},
+            timeout=30,
+        ),
+        "lecture en-tetes cockpit",
+    )
+    lignes = reponse.json().get("values") or [[]]
+    return lignes[0]
+
+
+def _brut(colonne: list, index: int):
+    return colonne[index] if index < len(colonne) else None
+
+
+def _texte(valeur) -> str | None:
+    if valeur is None or isinstance(valeur, bool):
+        return None
+
+    texte = str(valeur).strip()
+    return texte or None
+
+
+def _date_iso(valeur) -> str | None:
+    # Les dates arrivent en numero de serie (UNFORMATTED_VALUE). Un texte libre
+    # n'est jamais interprete : la date reste vide.
+    if isinstance(valeur, bool) or not isinstance(valeur, (int, float)):
+        return None
+
+    if not 1 <= valeur < 2958466:
+        return None
+
+    return (date(1899, 12, 30) + timedelta(days=int(valeur))).isoformat()
+
+
+def _indicateur(valeur):
+    if isinstance(valeur, bool):
+        return None
+
+    if isinstance(valeur, (int, float)):
+        return valeur
+
+    return _texte(valeur)
+
+
+def _etape_numero(valeur) -> int | None:
+    if isinstance(valeur, bool) or not isinstance(valeur, (int, float)):
+        return None
+
+    numero = int(valeur)
+    return numero if numero == valeur and 1 <= numero <= ETAPE_TERMINEE else None
+
+
+def _fiche_suivi(valeurs: dict[str, list], index: int) -> dict | None:
+    def brut(cle):
+        return _brut(valeurs[cle], index)
+
+    nom = _texte(brut("nom"))
+
+    if not nom:
+        return None
+
+    etapes = []
+
+    for cle, libelle, case, colonne_date in ETAPES_SUIVI:
+        etape = {"cle": cle, "libelle": libelle}
+
+        if case is None:
+            decision = _texte(brut("decision"))
+            etape["fait"] = decision is not None
+            etape["valeur"] = decision
+        else:
+            etape["fait"] = brut(case) is True
+
+        if colonne_date:
+            etape["date"] = _date_iso(brut(colonne_date))
+
+        etapes.append(etape)
+
+    indicateurs = {}
+
+    for cle in INDICATEURS_SUIVI:
+        valeur = _indicateur(brut(cle))
+
+        if valeur is not None:
+            indicateurs[cle] = valeur
+
+    return {
+        "ligne": PREMIERE_LIGNE + index,
+        "nom": nom,
+        "offre": _texte(brut("offre")),
+        "etape_numero": _etape_numero(brut("etape_numero")),
+        "etape": _texte(brut("etape")),
+        "date_premiere_session": _date_iso(brut("date_premiere_session")),
+        "etapes": etapes,
+        "prochaine_action": _texte(brut("prochaine_action")),
+        "echeance": _date_iso(brut("echeance")),
+        "alerte": _texte(brut("alerte")),
+        "indicateurs": indicateurs,
+    }
+
+
+def lire_suivi_clients() -> list[dict]:
+    # Une fiche par ligne de "Suivi clients" dont la colonne Client est remplie.
+    sheet_id = os.getenv("COCKPIT_SPREADSHEET_ID", "").strip()
+
+    try:
+        colonnes = _colonnes_suivi(_lire_en_tetes(sheet_id))
+        cles = list(colonnes)
+        lues = _lire_colonnes(sheet_id, [
+            _plage(ONGLET_CLIENTS, f"{colonnes[c]}{PREMIERE_LIGNE}:{colonnes[c]}{DERNIERE_LIGNE_CLIENTS}")
+            for c in cles
+        ])
+
+    except RuntimeError:
+        raise
+
+    except Exception as error:
+        # Erreur reseau ou d'authentification Google : seul le type remonte
+        # (le texte d'une erreur requests contient l'URL appelee).
+        raise RuntimeError(f"Google (lecture suivi clients) {type(error).__name__}") from None
+
+    if len(lues) != len(cles):
+        raise RuntimeError("Google (lecture suivi clients) reponse incomplete")
+
+    valeurs = dict(zip(cles, lues))
+    nb_lignes = DERNIERE_LIGNE_CLIENTS - PREMIERE_LIGNE + 1
+    fiches = (_fiche_suivi(valeurs, index) for index in range(nb_lignes))
+    return [fiche for fiche in fiches if fiche]
