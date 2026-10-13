@@ -1240,8 +1240,8 @@ def _block_lines(block: dict, depth: int = 0, checks: bool = False) -> list[str]
         url = _file_block_url(data)
 
         if url:
-            legende = _rich_text_md(data.get("caption", [])).strip() or "Voir l'image"
-            lines.append(f"[{legende}]({url})")
+            legende = _rich_text_md(data.get("caption", [])).strip().replace("|", " ")
+            lines.append(f"{_IMAGE_LINE_PREFIX}{url}|{legende}")
 
     elif block_type == "child_page":
         titre = (data.get("title") or "").strip()
@@ -1268,6 +1268,7 @@ def _block_lines(block: dict, depth: int = 0, checks: bool = False) -> list[str]
 
 
 _CHECK_LINE_PREFIX = "##CHECK## "
+_IMAGE_LINE_PREFIX = "##IMAGE## "
 
 
 def _blocks_to_text(blocks: list[dict], checks: bool = False) -> str:

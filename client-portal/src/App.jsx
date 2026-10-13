@@ -89,14 +89,40 @@ function ProgressStat({ pct, children }) {
 
 const TABLE_LINE_PREFIX = '##TABLE## '
 
+const IMAGE_LINE_PREFIX = '##IMAGE## '
+
 function renderInline(texte) {
-  if (typeof texte !== 'string' || !texte.includes('**')) return texte
-  return texte.split(/\*\*(.+?)\*\*/g).map((part, i) =>
-    i % 2 === 1 ? <strong key={i}>{part}</strong> : part
-  )
+  if (typeof texte !== 'string') return texte
+  if (!texte.includes('**') && !texte.includes('](')) return texte
+  return texte
+    .split(/(\*\*.+?\*\*|\[[^\]]*\]\((?:https?:|mailto:|tel:)[^)\s]+\))/g)
+    .map((part, i) => {
+      const bold = part.match(/^\*\*(.+)\*\*$/)
+      if (bold) return <strong key={i}>{bold[1]}</strong>
+      const link = part.match(/^\[([^\]]*)\]\(([^)\s]+)\)$/)
+      if (link) {
+        return (
+          <a key={i} href={link[2]} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--gold)', textDecoration: 'underline' }}>
+            {link[1] || 'Ouvrir'}
+          </a>
+        )
+      }
+      return part
+    })
 }
 
 function renderTextLine(ligne, key) {
+  if (ligne.startsWith(IMAGE_LINE_PREFIX)) {
+    const [src, ...rest] = ligne.slice(IMAGE_LINE_PREFIX.length).split('|')
+    const legende = rest.join('|').trim()
+
+    return (
+      <figure key={key} className="my-3">
+        <img src={src} alt={legende || 'Illustration'} loading="lazy" style={{ maxWidth: '100%', height: 'auto', borderRadius: 8 }} />
+        {legende && <figcaption className="text-sm italic" style={{ color: 'var(--text-soft)' }}>{legende}</figcaption>}
+      </figure>
+    )
+  }
   if (ligne.startsWith(TABLE_LINE_PREFIX)) {
     let table = null
 
