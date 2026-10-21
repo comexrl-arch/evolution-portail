@@ -1073,7 +1073,7 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "sessions": _client_sessions(props),
         "fiches": fiches,
         "kpi": kpi_future.result(),
-        "syntheses": syntheses_du_client(client_page_id) if autonome else [],
+        "syntheses": syntheses_du_client(client_page_id, fiches) if autonome else [],
     }
 
 
@@ -2521,7 +2521,59 @@ def _syntheses_brutes(client_page_id: str) -> list[dict]:
     return syntheses
 
 
-def syntheses_du_client(client_page_id: str) -> list[dict]:
+# Reponses du client mises en avant sur sa derniere synthese : ce qu'il a
+# pose sur la periode (phrase d'accroche, cible). Fiches reperees par leur
+# nom, la numerotation ayant change le 07/10.
+_SYNTHESE_REPONSES_CLES = [
+    ("Ta phrase d'accroche", "PHRASE DE POSITIONNEMENT", 2),
+    ("Ta cible prioritaire", "CIBLE PRIORITAIRE", 2),
+]
+
+
+def _reponses_fiche(fiche: dict, client_page_id: str, maximum: int) -> list[dict]:
+    detail = get_fiche(fiche["id"], client_page_id)
+    entrees = [e for e in detail.get("entrees") or [] if e.get("id")]
+
+    if not entrees:
+        return []
+
+    donnees = entrees[-1].get("donnees") or {}
+    reponses = []
+
+    for champ in detail.get("champs") or []:
+        valeur = donnees.get(champ.get("cle"))
+
+        if isinstance(valeur, str) and valeur.strip():
+            reponses.append({"libelle": (champ.get("libelle") or "").strip().rstrip(" :"), "valeur": valeur.strip()})
+
+        if len(reponses) >= maximum:
+            break
+
+    return reponses
+
+
+def _resultats_periode(fiches: list[dict], client_page_id: str) -> list[dict]:
+    resultats = []
+
+    for titre, mot_cle, maximum in _SYNTHESE_REPONSES_CLES:
+        fiche = next((f for f in fiches if mot_cle in (f.get("nom") or "").upper()), None)
+
+        if not fiche:
+            continue
+
+        try:
+            reponses = _reponses_fiche(fiche, client_page_id, maximum)
+        except Exception as error:
+            logger.warning("Synthese : reponses %s illisibles (%s)", mot_cle, _resume_erreur(error))
+            continue
+
+        if reponses:
+            resultats.append({"titre": titre, "reponses": reponses})
+
+    return resultats
+
+
+def syntheses_du_client(client_page_id: str, fiches: list[dict] | None = None) -> list[dict]:
     # Affichage portail : seulement les syntheses envoyees. Ne fait jamais
     # tomber le tableau de bord (base absente, non partagee, Notion en panne).
     try:
@@ -2531,8 +2583,7 @@ def syntheses_du_client(client_page_id: str) -> list[dict]:
         return []
 
     par_mois = {s.get("mois"): s for s in syntheses}
-
-    return [
+    affichees = [
         {
             **{k: s[k] for k in ("mois", "date", "axe", "texte")},
             **_realisation_synthese(s, par_mois.get((s.get("mois") or 0) - 1)),
@@ -2540,6 +2591,13 @@ def syntheses_du_client(client_page_id: str) -> list[dict]:
         for s in syntheses
         if s.get("statut") == "Envoyée"
     ]
+
+    if affichees and fiches:
+        # Etat actuel des reponses : n'a de sens que sur la synthese la plus
+        # recente (les anciennes restent telles qu'envoyees).
+        affichees[0]["resultats"] = _resultats_periode(fiches, client_page_id)
+
+    return affichees
 
 
 def _fiches_prevues(jour: int) -> int:

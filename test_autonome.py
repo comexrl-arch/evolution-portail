@@ -286,6 +286,32 @@ with patch.object(ns, "_syntheses_brutes", side_effect=RuntimeError("Notion")):
 
 
 print("\n" + "=" * 80)
+print("TEST 9 : reponses cles du client sur la derniere synthese")
+print("=" * 80)
+
+fiches_dash = [
+    {"id": "f10", "nom": "TEST - 10. MA PHRASE DE POSITIONNEMENT"},
+    {"id": "f12", "nom": "TEST - 12. MA CIBLE PRIORITAIRE"},
+    {"id": "f13", "nom": "TEST - 13. VALIDATION TERRAIN DE MON POSITIONNEMENT"},
+]
+details = {
+    "f10": {"champs": [{"cle": "a", "libelle": "Ma phrase officielle :"}, {"cle": "b", "libelle": "Présentation flash"}, {"cle": "c", "libelle": "Bio"}],
+            "entrees": [{"id": "e1", "donnees": {"a": "J'aide les TPE", "b": "", "c": "Bio courte"}}]},
+    "f12": {"champs": [{"cle": "q", "libelle": "Qui est-il ?"}], "entrees": [{"id": None, "donnees": {"q": "prerempli"}}]},
+}
+
+with patch.object(ns, "_syntheses_brutes", return_value=brutes), \
+        patch.object(ns, "get_fiche", side_effect=lambda fid, cid: details[fid]):
+    affichees = ns.syntheses_du_client("c", fiches_dash)
+
+resultats = affichees[0].get("resultats")
+check("phrase d'accroche : reponses non vides, libelle sans ':'", resultats and resultats[0]["reponses"] == [
+    {"libelle": "Ma phrase officielle", "valeur": "J'aide les TPE"}, {"libelle": "Bio", "valeur": "Bio courte"}])
+check("cible pre-remplie mais jamais enregistree : ignoree", len(resultats) == 1)
+check("seule la synthese la plus recente porte les reponses", "resultats" not in affichees[1])
+
+
+print("\n" + "=" * 80)
 print(f"{passed} PASS / {failed} FAIL")
 print("=" * 80)
 sys.exit(1 if failed else 0)
