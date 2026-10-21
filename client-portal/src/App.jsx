@@ -663,11 +663,36 @@ function casseDePhrase(texte) {
     .join(' ')
 }
 
+// Libelles reels des modules (notion_service._PARCOURS et _PARCOURS_ATELIER) :
+// "Démarrage · J0", "Clarifier · Module 1 · Mon offre (J4)",
+// "Session 1 · Clarifier ton offre (J0)", "Bonus · Aides publiques"...
+// On en tire un surtitre (etape, jalon) et un titre court.
 function lireModule(label) {
   // "\u2060" (separateur invisible) parasite certains noms Notion.
   const propre = (label || '').replace(/\u2060/g, '').trim()
-  const numero = propre.match(/^(\d+)\s*[.)]\s*(.*)$/)
-  return numero ? { numero: Number(numero[1]), titre: numero[2] } : { numero: null, titre: propre }
+  const parties = propre.split(' · ').map((p) => p.trim()).filter(Boolean)
+  if (parties.length < 2) return { surtitre: 'Étape', titre: propre }
+
+  const dernier = parties[parties.length - 1]
+  if (/^J\d/.test(dernier)) {
+    return { surtitre: dernier, titre: parties.slice(0, -1).join(' · ') }
+  }
+  const jalon = dernier.match(/^(.*?)\s*\((J[^)]*)\)$/)
+  const titre = jalon ? jalon[1] : dernier
+  const surtitre = [...parties.slice(0, -1), ...(jalon ? [jalon[2]] : [])].join(' · ')
+  return { surtitre, titre }
+}
+
+// Croquis choisi d'apres le theme du module (ordre des tests important :
+// "Suivre tes prospects" est du suivi, pas de la prospection).
+function illustrationDuModule(label) {
+  const texte = (label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (/clarifi|offre|cible|pitch|positionnement/.test(texte)) return ILLUSTRATIONS_MODULES[2]
+  if (/stabilis|bilan|suivre|suivi|kpi|pilotage|aides/.test(texte)) return ILLUSTRATIONS_MODULES[5]
+  if (/convertir|rendez-vous|rdv|prix|proposition/.test(texte)) return ILLUSTRATIONS_MODULES[4]
+  if (/prospect|routine|planifier/.test(texte)) return ILLUSTRATIONS_MODULES[3]
+  if (/diagnostic/.test(texte)) return ILLUSTRATIONS_MODULES[1]
+  return ILLUSTRATIONS_MODULES[0]
 }
 
 function lireFiche(nom) {
@@ -676,9 +701,10 @@ function lireFiche(nom) {
   return numero ? { numero: numero[1], titre: casseDePhrase(numero[2]) } : { numero: null, titre: casseDePhrase(propre) }
 }
 
-function ModuleCarte({ module, onOpen }) {
-  const { numero, titre } = lireModule(module.label)
-  const illustration = numero != null ? ILLUSTRATIONS_MODULES[numero] : null
+function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
+  const { surtitre, titre } = lireModule(module.label)
+  const illustration = illustrationDuModule(module.label)
+  const [ouvert, setOuvert] = useState(ouvertParDefaut)
   const terminees = module.fiches.filter((f) => f.etat === 'Terminé').length
   const total = module.fiches.length
   const pct = total ? Math.round((terminees / total) * 100) : 0
@@ -689,7 +715,7 @@ function ModuleCarte({ module, onOpen }) {
       {illustration && <img src={illustration} alt="" className="module-carte-image" loading="lazy" />}
       <div className="module-carte-corps">
         <div className="module-carte-entete">
-          <p className="module-carte-surtitre">{numero != null ? `Module ${numero}` : 'Module'}</p>
+          <p className="module-carte-surtitre">{surtitre}</p>
           <span className={`module-carte-statut module-carte-statut-${statut === 'Terminé' ? 'fini' : statut === 'En cours' ? 'actif' : 'avenir'}`}>
             {statut}
           </span>
@@ -699,7 +725,16 @@ function ModuleCarte({ module, onOpen }) {
           <div className="module-carte-barre"><span style={{ width: `${pct}%` }} /></div>
           <span>{terminees} / {total} fiches</span>
         </div>
-        <ul className="module-carte-fiches">
+        <button
+          type="button"
+          className="module-carte-bascule"
+          aria-expanded={ouvert}
+          onClick={() => setOuvert((v) => !v)}
+        >
+          <span>{ouvert ? 'Masquer les fiches' : `Afficher les fiches (${total})`}</span>
+          <ChevronDown size={15} className={`module-carte-bascule-icone${ouvert ? ' module-carte-bascule-icone-ouverte' : ''}`} aria-hidden="true" />
+        </button>
+        {ouvert && <ul className="module-carte-fiches">
           {module.fiches.map((fiche) => {
             const bloquee = fiche.acces?.includes('Bloqué')
             const { numero: n, titre: t } = lireFiche(fiche.nom)
@@ -721,7 +756,7 @@ function ModuleCarte({ module, onOpen }) {
               </li>
             )
           })}
-        </ul>
+        </ul>}
       </div>
     </article>
   )
@@ -1419,6 +1454,8 @@ function Portail() {
     }
 
     const modulesDoneCount = modules.filter((m) => m.fiches.every((f) => f.etat === 'Terminé')).length
+    // Seul le module en cours (le premier non termine) est deplie a l'ouverture.
+    const moduleOuvertParDefaut = modules.find((m) => !m.fiches.every((f) => f.etat === 'Terminé'))?.label
     const modulesPct = modules.length ? (modulesDoneCount / modules.length) * 100 : 0
 
     // Les rollups Notion renvoient des tableaux (une valeur par ligne liee),
@@ -1471,7 +1508,12 @@ function Portail() {
         <h2 className="accueil-section-titre">Mon parcours</h2>
         <div className="modules-grille">
           {modules.map((group) => (
-            <ModuleCarte key={group.label} module={group} onOpen={openFiche} />
+            <ModuleCarte
+              key={group.label}
+              module={group}
+              onOpen={openFiche}
+              ouvertParDefaut={group.label === moduleOuvertParDefaut}
+            />
           ))}
         </div>
 
