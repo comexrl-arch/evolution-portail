@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, Users } from 'lucide-react'
 import logo from './assets/logo.svg'
+import monogramme from './assets/monogramme.svg'
 
 // Le portail parle a portal_main.py, un process separe de main.py (agents
 // IA, port 8010) - voir portal_main.py. Port 8013, pas 8011 : verifie en
@@ -180,9 +181,9 @@ function renderTextLine(ligne, key) {
     const legende = rest.join('|').trim()
 
     return (
-      <figure key={key} className="my-3">
-        <img src={src} alt={legende || 'Illustration'} loading="lazy" style={{ maxWidth: '100%', height: 'auto', borderRadius: 8 }} />
-        {legende && <figcaption className="text-sm italic" style={{ color: 'var(--text-soft)' }}>{legende}</figcaption>}
+      <figure key={key} className="fiche-figure">
+        <img src={src} alt={legende || 'Illustration'} loading="lazy" />
+        {legende && <figcaption>{legende}</figcaption>}
       </figure>
     )
   }
@@ -200,35 +201,19 @@ function renderTextLine(ligne, key) {
     const bodyRows = hasHeader ? rows.slice(1) : rows
 
     return (
-      <div key={key} className="overflow-x-auto my-3">
-        <table className="w-full text-sm" style={{ borderCollapse: 'collapse' }}>
+      <div key={key} className="fiche-table">
+        <table>
           {headerRow && (
             <thead>
               <tr>
-                {headerRow.map((cell, i) => (
-                  <th
-                    key={i}
-                    className="text-left p-2 font-semibold"
-                    style={{ borderBottom: '1px solid #D6D3CA', color: 'var(--text-pure)' }}
-                  >
-                    {renderInline(cell)}
-                  </th>
-                ))}
+                {headerRow.map((cell, i) => <th key={i}>{renderInline(cell)}</th>)}
               </tr>
             </thead>
           )}
           <tbody>
             {bodyRows.map((row, ri) => (
               <tr key={ri}>
-                {row.map((cell, ci) => (
-                  <td
-                    key={ci}
-                    className="p-2 align-top"
-                    style={{ borderBottom: '1px solid #E7E5DF', color: 'var(--text-dimmed)' }}
-                  >
-                    {renderInline(cell)}
-                  </td>
-                ))}
+                {row.map((cell, ci) => <td key={ci}>{renderInline(cell)}</td>)}
               </tr>
             ))}
           </tbody>
@@ -236,63 +221,152 @@ function renderTextLine(ligne, key) {
       </div>
     )
   }
-  if (ligne.startsWith('### ')) {
-    return <h3 key={key} className="font-semibold mt-3">{renderInline(ligne.slice(4))}</h3>
-  }
-  if (ligne.startsWith('## ')) {
-    return <h3 key={key} className="text-lg font-semibold mt-3">{renderInline(ligne.slice(3))}</h3>
-  }
-  if (ligne.startsWith('# ')) {
-    return <h2 key={key} className="gold-title text-xl mt-2">{renderInline(ligne.slice(2))}</h2>
+
+  const niveau = niveauTitre(ligne)
+
+  if (niveau) {
+    return <h3 key={key} className="fiche-soustitre">{renderInline(sansEmoji(ligne.slice(niveau + 1)))}</h3>
   }
   if (ligne.startsWith('- ')) {
-    return <p key={key} className="pl-4" style={{ color: 'var(--text-dimmed)' }}>• {renderInline(ligne.slice(2))}</p>
+    return <p key={key} className="fiche-puce">{renderInline(ligne.slice(2))}</p>
   }
   if (ligne.startsWith('> ')) {
-    return (
-      <p key={key} className="pl-3 border-l-2 italic" style={{ color: 'var(--text-soft)', borderColor: 'var(--gold)' }}>
-        {renderInline(ligne.slice(2))}
-      </p>
-    )
+    return <p key={key} className="fiche-encadre">{renderInline(ligne.slice(2))}</p>
   }
-  return <p key={key} style={{ color: 'var(--text-dimmed)' }}>{renderInline(ligne)}</p>
+  if (!ligne.trim()) return null
+  return <p key={key} className="fiche-texte">{renderInline(ligne)}</p>
 }
 
-function FicheContent({ texte, checks, onToggleCheck, saisies }) {
+// Les titres des fiches Notion commencent par un emoji ("# 📅 MON PLAN...",
+// "### 🎯 1. MES OBJECTIFS") : retire pour une presentation sobre, le numero
+// de section prend le relais.
+const EMOJI_DEBUT = /^[\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D\s]+/u
+
+const sansEmoji = (texte) => texte.replace(EMOJI_DEBUT, '')
+
+function niveauTitre(ligne) {
+  const titre = (ligne || '').match(/^(#{1,3}) /)
+  return titre ? titre[1].length : 0
+}
+
+const estParagraphe = (ligne) => Boolean(ligne) && !niveauTitre(ligne) && !/^(- |> |##)/.test(ligne)
+
+function decouperFiche(items, texteDe) {
+  // Meme lecture que la synthese : un titre "# ", une introduction, puis des
+  // sections ouvertes par le premier niveau de titre rencontre ("## " ou
+  // "### "). Les titres plus fins restent des sous-titres dans leur section.
+  const niveaux = items.map((item) => niveauTitre(texteDe(item)))
+  const premier = niveaux.findIndex((n) => n > 0)
+  const aTitre = premier >= 0 && niveaux[premier] === 1
+  const niveauSection = Math.min(4, ...niveaux.filter((n, i) => n > 0 && !(aTitre && i === premier)))
+
+  let titre = null
+  const intro = []
+  const sections = []
+
+  items.forEach((item, i) => {
+    if (aTitre && i === premier) {
+      titre = sansEmoji(texteDe(item).slice(2))
+      return
+    }
+
+    if (niveaux[i] && niveaux[i] <= niveauSection) {
+      const libelle = sansEmoji(texteDe(item).slice(niveaux[i] + 1))
+      const numero = libelle.match(/^(\d+)[.)]\s*(.*)$/)
+      sections.push({ numero: numero?.[1], titre: numero ? numero[2] : libelle, items: [] })
+      return
+    }
+
+    if (sections.length) sections[sections.length - 1].items.push(item)
+    else intro.push(item)
+  })
+
+  // L'accroche sous le titre (paragraphes simples) va dans l'en-tete, le
+  // reste de l'introduction dans un premier bloc sans titre.
+  let accroche = 0
+  while (accroche < intro.length && estParagraphe(texteDe(intro[accroche]))) accroche += 1
+
+  return { titre, accroche: intro.slice(0, accroche), intro: intro.slice(accroche), sections }
+}
+
+function FicheDocument({ items, texteDe, rendre, surtitre, apres }) {
+  const { titre, accroche, intro, sections } = decouperFiche(items, texteDe)
+  const rendreTous = (liste) => liste.map(rendre)
+
+  return (
+    <article className="fiche-document">
+      {(titre || surtitre) && (
+        <header className="fiche-entete">
+          {surtitre && <p className="fiche-surtitre">{surtitre}</p>}
+          {titre && <h1 className="fiche-titre">{renderInline(titre)}</h1>}
+          {accroche.length > 0 && (
+            <div className="fiche-accroche">
+              {accroche.map((item, i) => <p key={i}>{renderInline(texteDe(item))}</p>)}
+            </div>
+          )}
+        </header>
+      )}
+
+      {!titre && !surtitre && accroche.length > 0 && (
+        <section className="fiche-section">{rendreTous(accroche)}</section>
+      )}
+
+      {intro.length > 0 && <section className="fiche-section">{rendreTous(intro)}</section>}
+
+      {sections.map((section, index) => (
+        <section key={index} className="fiche-section">
+          <header className="fiche-section-entete">
+            {section.numero && <span className="fiche-section-numero">{section.numero}</span>}
+            <h2 className="fiche-section-titre">{renderInline(section.titre)}</h2>
+          </header>
+          {section.items.length > 0 && <div className="fiche-section-corps">{rendreTous(section.items)}</div>}
+        </section>
+      ))}
+
+      {apres}
+    </article>
+  )
+}
+
+function surtitreFiche(nom) {
+  const numero = (nom || '').match(/^\s*(\d+)\s*[.)]/)
+  if (numero) return `Fiche ${numero[1]} · Parcours eVolution 2.0`
+  return /^\s*bonus/i.test(nom || '') ? 'Fiche bonus · Parcours eVolution 2.0' : 'Parcours eVolution 2.0'
+}
+
+function FicheContent({ texte, checks, onToggleCheck, saisies, surtitre }) {
   if (!texte) return null
 
   const lignes = texte.split('\n')
   const indexModele = saisies?.entrees?.length ? indexTableModele(lignes, saisies.champs) : -1
+  const items = lignes.map((ligne, index) => ({ ligne, index })).filter(({ ligne }) => ligne.trim())
 
-  return (
-    <div className="card-glass p-6 mb-6 space-y-2" style={{ borderRadius: 'var(--radius-md)' }}>
-      {lignes.map((ligne, index) => {
-        if (index === indexModele) {
-          const entete = lireTable(ligne).rows[0]
-          return renderTextLine(tableSaisies(saisies.champs, saisies.entrees, entete), index)
-        }
+  const rendre = ({ ligne, index }) => {
+    if (index === indexModele) {
+      const entete = lireTable(ligne).rows[0]
+      return renderTextLine(tableSaisies(saisies.champs, saisies.entrees, entete), index)
+    }
 
-        if (ligne.startsWith(CHECK_LINE_PREFIX)) {
-          const [cle, ...reste] = ligne.slice(CHECK_LINE_PREFIX.length).split('|')
+    if (ligne.startsWith(CHECK_LINE_PREFIX)) {
+      const [cle, ...reste] = ligne.slice(CHECK_LINE_PREFIX.length).split('|')
 
-          return (
-            <label key={index} className="checklist-item flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={Boolean(checks?.[cle])}
-                disabled={!onToggleCheck}
-                onChange={(event) => onToggleCheck?.(cle, event.target.checked)}
-              />
-              <span style={{ color: 'var(--text-dimmed)' }}>{renderInline(reste.join('|'))}</span>
-            </label>
-          )
-        }
+      return (
+        <label key={index} className="fiche-case">
+          <input
+            type="checkbox"
+            checked={Boolean(checks?.[cle])}
+            disabled={!onToggleCheck}
+            onChange={(event) => onToggleCheck?.(cle, event.target.checked)}
+          />
+          <span>{renderInline(reste.join('|'))}</span>
+        </label>
+      )
+    }
 
-        return renderTextLine(ligne, index)
-      })}
-    </div>
-  )
+    return renderTextLine(ligne, index)
+  }
+
+  return <FicheDocument items={items} texteDe={(item) => item.ligne} rendre={rendre} surtitre={surtitre} />
 }
 
 const SYNTHESE_AXES = {
@@ -507,45 +581,46 @@ function SynthesesSection({ syntheses }) {
   )
 }
 
-function FicheSegments({ segments, formValues, onChange }) {
+function FicheSegments({ segments, formValues, onChange, surtitre }) {
+  const rendre = (segment, index) => {
+    if (segment.type === 'texte') {
+      return renderTextLine(segment.texte, index)
+    }
+
+    const champ = segment.champ
+
+    if (champ.type === 'case') {
+      return (
+        <label key={champ.cle} className="fiche-case">
+          <input
+            type="checkbox"
+            checked={Boolean(formValues[champ.cle])}
+            onChange={(event) => onChange(champ.cle, event.target.checked)}
+          />
+          <span>{champ.libelle}</span>
+        </label>
+      )
+    }
+
+    return (
+      <div key={champ.cle} className="fiche-champ">
+        <p className="fiche-champ-libelle">{renderInline(champ.libelle)}</p>
+        <FieldInput
+          champ={champ}
+          value={formValues[champ.cle]}
+          onChange={(value) => onChange(champ.cle, value)}
+        />
+      </div>
+    )
+  }
+
   return (
-    <div className="card-glass p-6 mb-6 space-y-4" style={{ borderRadius: 'var(--radius-md)' }}>
-      {segments.map((segment, index) => {
-        if (segment.type === 'texte') {
-          return renderTextLine(segment.texte, index)
-        }
-
-        const champ = segment.champ
-
-        if (champ.type === 'case') {
-          return (
-            <label
-              key={champ.cle}
-              className="checklist-item flex items-start gap-3 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={Boolean(formValues[champ.cle])}
-                onChange={(event) => onChange(champ.cle, event.target.checked)}
-              />
-              <span style={{ color: 'var(--text-dimmed)' }}>{champ.libelle}</span>
-            </label>
-          )
-        }
-
-        return (
-          <div key={champ.cle} className="pl-4 py-1">
-            <p className="font-medium mb-2">{champ.libelle}</p>
-            <FieldInput
-              champ={champ}
-              value={formValues[champ.cle]}
-              onChange={(value) => onChange(champ.cle, value)}
-            />
-          </div>
-        )
-      })}
-    </div>
+    <FicheDocument
+      items={segments}
+      texteDe={(segment) => (segment.type === 'texte' ? segment.texte : '')}
+      rendre={rendre}
+      surtitre={surtitre}
+    />
   )
 }
 
@@ -736,6 +811,16 @@ function LivrablesSection({ livrables, onOpen }) {
 }
 
 export default function App() {
+  // Monogramme RL au meme endroit (en haut a droite) sur tous les ecrans.
+  return (
+    <>
+      <img src={monogramme} alt="RL-eVolution" className="portal-monogramme" />
+      <Portail />
+    </>
+  )
+}
+
+function Portail() {
   const [screen, setScreen] = useState('loading')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -1247,7 +1332,7 @@ export default function App() {
     const avecKpi = kpiRenseignes(dashboard.kpi)
 
     return (
-      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto">
+      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto page-monogramme">
         <header className="portal-header">
           <img src={logo} alt="RL-eVolution" className="portal-logo" />
           <div className="portal-header-identity">
@@ -1335,7 +1420,7 @@ export default function App() {
 
   if (screen === 'fiche') {
     return (
-      <div className="min-h-screen p-5 md:p-10 reading-column mx-auto">
+      <div className="min-h-screen p-5 md:p-10 reading-column mx-auto page-monogramme">
         <button onClick={backToDashboard} className="flex items-center gap-2 mb-6 text-sm" style={{ color: 'var(--ink-soft)' }}>
           <ArrowLeft size={16} /> Retour au parcours
         </button>
@@ -1350,6 +1435,7 @@ export default function App() {
             {ficheData.mode === 'unique' && ficheData.segments ? (
               <>
                 <FicheSegments
+                  surtitre={surtitreFiche(ficheData.nom)}
                   segments={ficheData.segments}
                   formValues={formValues}
                   onChange={(cle, value) => setFormValues((prev) => ({ ...prev, [cle]: value }))}
@@ -1360,6 +1446,7 @@ export default function App() {
             ) : (
               <>
                 <FicheContent
+                  surtitre={surtitreFiche(ficheData.nom)}
                   texte={ficheData.contenu}
                   checks={ficheData.checks}
                   onToggleCheck={toggleCheck}
@@ -1368,21 +1455,27 @@ export default function App() {
 
                 {ficheData.mode === 'recurrent' && ficheData.entrees.length > 0
                   && indexTableModele((ficheData.contenu || '').split('\n'), ficheData.champs) < 0 && (
-                  <div className="mb-8">
+                  <section className="fiche-section fiche-section-isolee">
+                    <header className="fiche-section-entete">
+                      <ListChecks size={18} className="fiche-section-icone" />
+                      <h2 className="fiche-section-titre">Mes entrées</h2>
+                    </header>
                     {renderTextLine(tableSaisies(ficheData.champs, ficheData.entrees, null), 'saisies')}
-                  </div>
+                  </section>
                 )}
 
                 {ficheData.champs.length > 0 && (
-                <form onSubmit={submitEntry} className="card-glass p-6 space-y-5" style={{ borderRadius: 'var(--radius-md)' }}>
-                  <h2 className="font-semibold flex items-center gap-2">
-                    <Rocket size={16} color="var(--gold)" />
-                    {ficheData.mode === 'recurrent' ? 'Ajouter une entrée' : 'Vos réponses'}
-                  </h2>
+                <form onSubmit={submitEntry} className="fiche-section fiche-formulaire">
+                  <header className="fiche-section-entete">
+                    <Rocket size={18} className="fiche-section-icone" />
+                    <h2 className="fiche-section-titre">
+                      {ficheData.mode === 'recurrent' ? 'Ajouter une entrée' : 'Vos réponses'}
+                    </h2>
+                  </header>
 
                   {ficheData.champs.map((champ) => (
-                    <div key={champ.cle}>
-                      <label className="block text-sm mb-1.5" style={{ color: 'var(--text-dimmed)' }}>
+                    <div key={champ.cle} className="fiche-champ">
+                      <label className="fiche-champ-libelle">
                         {champ.libelle}
                       </label>
                       <FieldInput
@@ -1398,8 +1491,7 @@ export default function App() {
                   <button
                     type="submit"
                     disabled={saving}
-                    className="font-semibold py-2.5 px-6 rounded-xl disabled:opacity-60"
-                    style={{ background: 'var(--gold)', color: 'var(--bg-dark)' }}
+                    className="fiche-bouton disabled:opacity-60"
                   >
                     {saving ? 'Enregistrement...' : 'Enregistrer'}
                   </button>
@@ -1433,7 +1525,7 @@ export default function App() {
 
   if (screen === 'livrable') {
     return (
-      <div className="min-h-screen p-5 md:p-10 reading-column mx-auto">
+      <div className="min-h-screen p-5 md:p-10 reading-column mx-auto page-monogramme">
         <button onClick={backToFiche} className="flex items-center gap-2 mb-6 text-sm" style={{ color: 'var(--ink-soft)' }}>
           <ArrowLeft size={16} /> Retour à la fiche
         </button>
@@ -1441,7 +1533,7 @@ export default function App() {
         {!livrableData ? (
           <Loader2 className="animate-spin" color="var(--gold)" size={28} />
         ) : (
-          <FicheContent texte={livrableData.contenu} />
+          <FicheContent texte={livrableData.contenu} surtitre="Livrable" />
         )}
 
         {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
