@@ -700,6 +700,7 @@ class SyntheseAutonomeRequest(BaseModel):
     axe: str
     texte: str
     nb_fiches_terminees: int = 0
+    email: str = ""
 
 
 class SyntheseStatutRequest(BaseModel):
@@ -723,7 +724,8 @@ def automation_enregistrer_synthese(request: SyntheseAutonomeRequest, authorizat
 
     try:
         synthese_id = notion_service.enregistrer_synthese_autonome(
-            request.client_page_id, request.mois, request.axe, request.texte, request.nb_fiches_terminees
+            request.client_page_id, request.mois, request.axe, request.texte, request.nb_fiches_terminees,
+            email=request.email,
         )
 
     except ValueError:

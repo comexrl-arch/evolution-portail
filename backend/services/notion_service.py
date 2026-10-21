@@ -2642,7 +2642,8 @@ def _jour_depuis(date_demarrage, aujourd_hui) -> int | None:
 
 
 def enregistrer_synthese_autonome(
-    client_page_id: str, mois: int, axe: str, texte: str, nb_fiches_terminees: int, statut: str = "À relire"
+    client_page_id: str, mois: int, axe: str, texte: str, nb_fiches_terminees: int,
+    statut: str = "À relire", email: str = "",
 ) -> str:
     if axe not in _SYNTHESE_AXES:
         raise ValueError("Axe de synthese inconnu")
@@ -2665,6 +2666,8 @@ def enregistrer_synthese_autonome(
         "Fiches terminées": {"number": nb_fiches_terminees},
         "Texte": {"rich_text": segments},
         "Statut": {"select": {"name": statut}},
+        # Pour l'envoi differe par n8n (apres 24 h de relecture possible).
+        **({"E-mail client": {"email": email.strip().lower()}} if (email or "").strip() else {}),
     })
     _cache_clear("dashboard:")
     return page["id"]
