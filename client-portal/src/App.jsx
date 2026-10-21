@@ -1440,7 +1440,7 @@ function Portail() {
     const avecKpi = kpiRenseignes(dashboard.kpi)
 
     return (
-      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto page-monogramme">
+      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto">
         <header className="accueil-entete">
           <img src={logo} alt="RL-eVolution" className="accueil-logo" />
           <div className="accueil-titre">
