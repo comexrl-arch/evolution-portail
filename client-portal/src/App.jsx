@@ -91,6 +91,69 @@ const TABLE_LINE_PREFIX = '##TABLE## '
 
 const IMAGE_LINE_PREFIX = '##IMAGE## '
 
+const CHECK_LINE_PREFIX = '##CHECK## '
+
+const normaliserLibelle = (texte) =>
+  String(texte || '')
+    .split('(')[0]
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/gi, ' ')
+    .trim()
+    .toLowerCase()
+
+const memeLibelle = (a, b) => {
+  const x = normaliserLibelle(a)
+  const y = normaliserLibelle(b)
+  return Boolean(x && y) && (x === y || x.startsWith(y) || y.startsWith(x))
+}
+
+function lireTable(ligne) {
+  try {
+    return JSON.parse(ligne.slice(TABLE_LINE_PREFIX.length))
+  } catch {
+    return null
+  }
+}
+
+function indexTableModele(lignes, champs) {
+  // Fiche recurrente (ex. tableau de prospection) : le modele Notion contient
+  // un tableau vide dont les colonnes reprennent les champs de saisie. On le
+  // repere pour y afficher les saisies du client a la place.
+  return lignes.findIndex((ligne) => {
+    if (!ligne.startsWith(TABLE_LINE_PREFIX)) return false
+    const table = lireTable(ligne)
+    const entete = table?.hasHeader ? table.rows?.[0] || [] : []
+    return entete.filter((cellule) => champs.some((champ) => memeLibelle(cellule, champ.libelle))).length >= 2
+  })
+}
+
+function tableSaisies(champs, entrees, entete) {
+  // Colonnes : celles du tableau modele (s'il existe), puis les champs qui n'y
+  // figurent pas. La date d'enregistrement n'est ajoutee que si aucun champ
+  // "Date" n'est saisi par le client (evite la colonne Date en double).
+  const champDate = champs.some((champ) => memeLibelle(champ.libelle, 'Date'))
+  const colonnes = []
+
+  for (const cellule of entete || []) {
+    const champ = champs.find((c) => memeLibelle(cellule, c.libelle))
+    if (champ) colonnes.push({ titre: cellule, champ })
+    else if (memeLibelle(cellule, 'Date') && !champDate) colonnes.push({ titre: cellule, date: true })
+  }
+
+  if (!entete && !champDate) colonnes.push({ titre: 'Date', date: true })
+
+  for (const champ of champs) {
+    if (!colonnes.some((col) => col.champ === champ)) colonnes.push({ titre: champ.libelle, champ })
+  }
+
+  const lignes = entrees.map((entree) =>
+    colonnes.map((col) => String((col.date ? entree.date : entree.donnees?.[col.champ.cle]) ?? '')),
+  )
+
+  return TABLE_LINE_PREFIX + JSON.stringify({ hasHeader: true, rows: [colonnes.map((col) => col.titre), ...lignes] })
+}
+
 function renderInline(texte) {
   if (typeof texte !== 'string') return texte
   if (!texte.includes('**') && !texte.includes('](')) return texte
@@ -195,12 +258,39 @@ function renderTextLine(ligne, key) {
   return <p key={key} style={{ color: 'var(--text-dimmed)' }}>{renderInline(ligne)}</p>
 }
 
-function FicheContent({ texte }) {
+function FicheContent({ texte, checks, onToggleCheck, saisies }) {
   if (!texte) return null
+
+  const lignes = texte.split('\n')
+  const indexModele = saisies?.entrees?.length ? indexTableModele(lignes, saisies.champs) : -1
 
   return (
     <div className="card-glass p-6 mb-6 space-y-2" style={{ borderRadius: 'var(--radius-md)' }}>
-      {texte.split('\n').map((ligne, index) => renderTextLine(ligne, index))}
+      {lignes.map((ligne, index) => {
+        if (index === indexModele) {
+          const entete = lireTable(ligne).rows[0]
+          return renderTextLine(tableSaisies(saisies.champs, saisies.entrees, entete), index)
+        }
+
+        if (ligne.startsWith(CHECK_LINE_PREFIX)) {
+          const [cle, ...reste] = ligne.slice(CHECK_LINE_PREFIX.length).split('|')
+
+          return (
+            <label key={index} className="checklist-item flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={Boolean(checks?.[cle])}
+                disabled={!onToggleCheck}
+                onChange={(event) => onToggleCheck?.(cle, event.target.checked)}
+              />
+              <span style={{ color: 'var(--text-dimmed)' }}>{renderInline(reste.join('|'))}</span>
+            </label>
+          )
+        }
+
+        return renderTextLine(ligne, index)
+      })}
     </div>
   )
 }
@@ -281,6 +371,31 @@ function SyntheseJauge({ synthese }) {
   )
 }
 
+function SyntheseResultats({ resultats }) {
+  // Ce que le client a pose sur la periode (phrase d'accroche, cible), repris
+  // de ses fiches pour qu'il le relise avec sa synthese.
+  if (!resultats?.length) return null
+
+  return (
+    <section className="synthese-resultats">
+      <p className="synthese-bloc-titre"><Rocket size={16} /> Ce que tu as posé</p>
+      <div className="synthese-grille">
+        {resultats.map((bloc) => (
+          <div key={bloc.titre} className="synthese-resultat">
+            <p className="synthese-resultat-titre">{bloc.titre}</p>
+            {bloc.reponses.map((reponse, index) => (
+              <div key={index} className={index === 0 ? 'synthese-resultat-phare' : 'synthese-resultat-ligne'}>
+                <span>{reponse.libelle}</span>
+                <p>{reponse.valeur}</p>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function SyntheseCard({ synthese }) {
   const parties = decouperSynthese(synthese.texte)
 
@@ -288,6 +403,7 @@ function SyntheseCard({ synthese }) {
     return (
       <div className="synthese">
         <SyntheseJauge synthese={synthese} />
+        <SyntheseResultats resultats={synthese.resultats} />
         <FicheContent texte={synthese.texte} />
       </div>
     )
@@ -302,6 +418,7 @@ function SyntheseCard({ synthese }) {
       {axe && <span className={`badge ${axe.classe} synthese-axe`}>{axe.libelle}</span>}
       <SyntheseJauge synthese={synthese} />
       {intro.length > 0 && <p className="synthese-intro">{renderInline(intro.join(' '))}</p>}
+      <SyntheseResultats resultats={synthese.resultats} />
 
       <div className="synthese-grille">
         {sections[1] && (
@@ -840,6 +957,28 @@ export default function App() {
     setLivrableData(null)
   }
 
+  const toggleCheck = async (cle, coche) => {
+    // Cases a cocher du modele (ex. "Validation du plan") : etat memorise par
+    // client dans une entree speciale "__checklist__".
+    const precedent = ficheData?.checks || {}
+    const suivant = { ...precedent, [cle]: coche }
+    setFicheData((prev) => (prev ? { ...prev, checks: suivant } : prev))
+
+    try {
+      const token = localStorage.getItem(SESSION_KEY)
+      const response = await fetch(`${API_BASE}/portal/fiches/${activeFicheId}/entries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ data: { __checklist__: suivant } }),
+      })
+
+      if (!response.ok) throw new Error()
+    } catch {
+      setFicheData((prev) => (prev ? { ...prev, checks: precedent } : prev))
+      setError("La case n'a pas pu être enregistrée. Réessaie.")
+    }
+  }
+
   const saveCurrentEntry = async () => {
     const token = localStorage.getItem(SESSION_KEY)
 
@@ -1220,30 +1359,17 @@ export default function App() {
               </>
             ) : (
               <>
-                <FicheContent texte={ficheData.contenu} />
+                <FicheContent
+                  texte={ficheData.contenu}
+                  checks={ficheData.checks}
+                  onToggleCheck={toggleCheck}
+                  saisies={ficheData.mode === 'recurrent' ? { champs: ficheData.champs, entrees: ficheData.entrees } : null}
+                />
 
-                {ficheData.mode === 'recurrent' && ficheData.entrees.length > 0 && (
-                  <div className="mb-8 overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr style={{ color: 'var(--ink-soft)' }}>
-                          <th className="text-left pr-4 pb-2">Date</th>
-                          {ficheData.champs.map((champ) => (
-                            <th key={champ.cle} className="text-left pr-4 pb-2">{champ.libelle}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ficheData.entrees.map((entry) => (
-                          <tr key={entry.id} className="border-t" style={{ borderColor: 'rgba(28,25,23,0.1)' }}>
-                            <td className="pr-4 py-2">{entry.date}</td>
-                            {ficheData.champs.map((champ) => (
-                              <td key={champ.cle} className="pr-4 py-2">{String(entry.donnees[champ.cle] ?? '')}</td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                {ficheData.mode === 'recurrent' && ficheData.entrees.length > 0
+                  && indexTableModele((ficheData.contenu || '').split('\n'), ficheData.champs) < 0 && (
+                  <div className="mb-8">
+                    {renderTextLine(tableSaisies(ficheData.champs, ficheData.entrees, null), 'saisies')}
                   </div>
                 )}
 

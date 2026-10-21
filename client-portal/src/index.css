@@ -1958,6 +1958,37 @@ summary:focus-visible {
   color: var(--text-primary);
 }
 
+.synthese-resultat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-sm);
+  background: var(--brand-white);
+  border: var(--border-accent);
+}
+
+.synthese-resultat-titre {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.synthese-resultat-phare span,
+.synthese-resultat-ligne span {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.synthese-resultat-phare p {
+  font-size: 1.05rem;
+  font-style: italic;
+  color: var(--accent);
+}
+
+.synthese-resultat-ligne p {
+  color: var(--text-secondary);
+}
+
 @media (max-width: 640px) {
   .synthese-action {
     flex-wrap: wrap;
