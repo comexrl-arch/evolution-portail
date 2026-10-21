@@ -2400,7 +2400,7 @@ body[data-ecran="dashboard"] .portal-monogramme {
 .module-carte-image {
   display: block;
   width: 100%;
-  aspect-ratio: 900 / 460;
+  aspect-ratio: 480 / 220;
   object-fit: cover;
   object-position: center;
   border-bottom: var(--border-subtle);
