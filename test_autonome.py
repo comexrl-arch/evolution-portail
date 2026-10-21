@@ -263,6 +263,29 @@ check("nom de parcours inconnu -> Coaching 90 jours", ns._nom_parcours("") == "C
 
 
 print("\n" + "=" * 80)
+print("TEST 8 : jauge de realisation des syntheses affichees")
+print("=" * 80)
+
+brutes = [
+    {"mois": 2, "date": "2026-11-20", "axe": "a_faire", "texte": "t2", "statut": "Envoyée", "fiches_terminees": 18},
+    {"mois": 1, "date": "2026-10-21", "axe": "encouragement", "texte": "t1", "statut": "Envoyée", "fiches_terminees": 15},
+    {"mois": 3, "date": "2026-12-20", "axe": "reprise", "texte": "t3", "statut": "À relire", "fiches_terminees": 18},
+]
+
+with patch.object(ns, "_syntheses_brutes", return_value=brutes):
+    affichees = ns.syntheses_du_client("c")
+
+check("seules les syntheses Envoyee sont affichees", [a["mois"] for a in affichees] == [2, 1])
+check("mois 1 : 15 fiches prevues a J30", affichees[1]["fiches_prevues"] == ns._fiches_prevues(30) == 15)
+check("mois 1 : toutes les fiches comptent pour le mois", affichees[1]["fiches_du_mois"] == 15)
+check("mois 2 : progression calculee depuis le mois 1", affichees[0]["fiches_du_mois"] == 3)
+check("total du parcours = 24 fiches", affichees[0]["fiches_total"] == 24)
+
+with patch.object(ns, "_syntheses_brutes", side_effect=RuntimeError("Notion")):
+    check("Notion en panne : liste vide, pas d'erreur", ns.syntheses_du_client("c") == [])
+
+
+print("\n" + "=" * 80)
 print(f"{passed} PASS / {failed} FAIL")
 print("=" * 80)
 sys.exit(1 if failed else 0)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, TrendingUp, Users } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, Users } from 'lucide-react'
 import logo from './assets/logo.svg'
 
 // Le portail parle a portal_main.py, un process separe de main.py (agents
@@ -253,10 +253,45 @@ function decouperSynthese(texte) {
 
 const sansPuce = (ligne) => ligne.replace(/^(?:[-•*]|\d+[.)])\s+/, '')
 
+function SyntheseJauge({ synthese }) {
+  // Realisation de la periode : fiches terminees au moment de la synthese,
+  // comparees aux fiches ouvertes a ce stade (J30, J60, J90).
+  const { fiches_terminees: faites, fiches_prevues: prevues, fiches_total: total, fiches_du_mois: duMois } = synthese
+
+  if (faites == null || !prevues) return null
+
+  const taux = Math.min(Math.round((faites / prevues) * 100), 100)
+  const niveau = taux >= 100 ? 'succes' : taux >= 60 ? 'accent' : 'alerte'
+
+  return (
+    <section className={`synthese-jauge synthese-jauge-${niveau}`}>
+      <div className="synthese-jauge-entete">
+        <p className="synthese-bloc-titre"><Target size={16} /> Réalisation du mois {synthese.mois}</p>
+        <span className="synthese-jauge-taux">{taux}%</span>
+      </div>
+      <div className="synthese-jauge-barre" role="progressbar" aria-valuenow={taux} aria-valuemin={0} aria-valuemax={100}>
+        <span style={{ width: `${taux}%` }} />
+      </div>
+      <p className="synthese-jauge-detail">
+        <strong>{Math.min(faites, prevues)} / {prevues}</strong> fiches prévues à J{30 * synthese.mois}
+        {duMois > 0 && <> · <strong>+{duMois}</strong> ce mois</>}
+        {total ? <> · {Math.min(faites, total)} / {total} sur tout le parcours</> : null}
+      </p>
+    </section>
+  )
+}
+
 function SyntheseCard({ synthese }) {
   const parties = decouperSynthese(synthese.texte)
 
-  if (!parties) return <FicheContent texte={synthese.texte} />
+  if (!parties) {
+    return (
+      <div className="synthese">
+        <SyntheseJauge synthese={synthese} />
+        <FicheContent texte={synthese.texte} />
+      </div>
+    )
+  }
 
   const { intro, sections, mention } = parties
   const axe = SYNTHESE_AXES[synthese.axe]
@@ -265,6 +300,7 @@ function SyntheseCard({ synthese }) {
   return (
     <div className="synthese">
       {axe && <span className={`badge ${axe.classe} synthese-axe`}>{axe.libelle}</span>}
+      <SyntheseJauge synthese={synthese} />
       {intro.length > 0 && <p className="synthese-intro">{renderInline(intro.join(' '))}</p>}
 
       <div className="synthese-grille">

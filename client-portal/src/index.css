@@ -1908,6 +1908,56 @@ summary:focus-visible {
   color: var(--text-tertiary);
 }
 
+.synthese-jauge {
+  --jauge: var(--accent);
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-sm);
+  background: var(--brand-white);
+  border: var(--border-subtle);
+}
+
+.synthese-jauge-succes { --jauge: var(--success); }
+.synthese-jauge-alerte { --jauge: var(--warning); }
+
+.synthese-jauge-entete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.synthese-jauge-taux {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--jauge);
+}
+
+.synthese-jauge-barre {
+  height: 12px;
+  margin: 0.4rem 0 0.6rem;
+  border-radius: 999px;
+  background: var(--brand-line);
+  overflow: hidden;
+}
+
+.synthese-jauge-barre span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--jauge);
+  transition: width 0.6s var(--ease-standard);
+}
+
+.synthese-jauge-detail {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.synthese-jauge-detail strong {
+  color: var(--text-primary);
+}
+
 @media (max-width: 640px) {
   .synthese-action {
     flex-wrap: wrap;
