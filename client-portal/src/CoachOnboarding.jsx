@@ -525,6 +525,7 @@ export default function CoachOnboarding() {
             className="w-full field-input bg-transparent outline-none px-3 py-2 text-sm">
             <option value="Coaching 90 jours">Parcours : Coaching 90 jours</option>
             <option value="Atelier">Parcours : Atelier Collectif Terrain</option>
+            <option value="Autonome">Parcours : eVolution Autonome</option>
           </select>
           <input placeholder="Téléphone" value={form.telephone}
             onChange={(e) => setForm({ ...form, telephone: e.target.value })}
