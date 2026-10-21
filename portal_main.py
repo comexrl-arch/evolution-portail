@@ -487,8 +487,18 @@ def _alerter_si_diagnostic_termine(client_page_id: str, fiche_id: str) -> None:
     try:
         infos = notion_service.diagnostic_vient_de_se_terminer(client_page_id, fiche_id)
 
-        if infos:
-            notion_service.alerter_coach_diagnostic(infos["client_nom"], infos["client_email"])
+        if not infos:
+            return
+
+        if notion_service._est_parcours_autonome(infos.get("parcours")):
+            # Autonome : pas de coach, la fiche 8 se remplit et se valide seule.
+            try:
+                notion_service.remplir_fiche8_autonome(client_page_id)
+            except Exception as error:
+                _journaliser_alerte_impossible("fiche8_autonome", error)
+            return
+
+        notion_service.alerter_coach_diagnostic(infos["client_nom"], infos["client_email"])
 
     except Exception as error:
         _journaliser_alerte_impossible("alerte_diagnostic", error)
@@ -679,6 +689,70 @@ def coach_valider_fiche(fiche_client_id: str, x_coach_key: str = Header(default=
         raise _erreur_service_indisponible("coach_valider_fiche", error)
 
     return {"status": "validee"}
+
+
+# --- Parcours Autonome : syntheses mensuelles (workflow n8n). Meme cle
+# technique que /coach/diagnostic (Authorization: Bearer COACH_DIAGNOSTIC_API_KEY). ---
+
+class SyntheseAutonomeRequest(BaseModel):
+    client_page_id: str
+    mois: int
+    axe: str
+    texte: str
+    nb_fiches_terminees: int = 0
+    email: str = ""
+
+
+class SyntheseStatutRequest(BaseModel):
+    statut: str
+
+
+@app.get("/automation/autonome/syntheses-dues")
+def automation_syntheses_dues(authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        return {"clients": notion_service.clients_autonome_synthese_due()}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_syntheses_dues", error)
+
+
+@app.post("/automation/autonome/syntheses")
+def automation_enregistrer_synthese(request: SyntheseAutonomeRequest, authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        synthese_id = notion_service.enregistrer_synthese_autonome(
+            request.client_page_id, request.mois, request.axe, request.texte, request.nb_fiches_terminees,
+            email=request.email,
+        )
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Axe ou statut de synthese invalide.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_enregistrer_synthese", error)
+
+    return {"synthese_id": synthese_id}
+
+
+@app.post("/automation/autonome/syntheses/{synthese_id}/statut")
+def automation_statut_synthese(
+    synthese_id: str, request: SyntheseStatutRequest, authorization: str = Header(default="")
+):
+    _require_diagnostic_api_key(authorization)
+
+    if request.statut not in ("Envoyée", "Bloquée"):
+        raise HTTPException(status_code=422, detail="Statut attendu : Envoyée ou Bloquée.")
+
+    try:
+        notion_service.changer_statut_synthese(synthese_id, request.statut)
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_statut_synthese", error)
+
+    return {"status": "mis a jour"}
 
 
 @app.get("/coach/suivi-clients")

@@ -496,6 +496,48 @@ def _est_parcours_atelier(valeur) -> bool:
     return "atelier" in str(valeur or "").lower()
 
 
+# Parcours "eVolution Autonome" (decision du 21/10/2026) : meme parcours que le
+# Coaching 90 jours (memes fiches, meme frise), sans intervention du coach.
+# La fiche 8 est remplie et validee automatiquement a la fin du diagnostic, et
+# une synthese IA est redigee tous les 30 jours (workflow n8n).
+def _est_parcours_autonome(valeur) -> bool:
+    return "autonome" in str(valeur or "").lower()
+
+
+def _nom_parcours(valeur) -> str:
+    if _est_parcours_atelier(valeur):
+        return "Atelier"
+
+    if _est_parcours_autonome(valeur):
+        return "Autonome"
+
+    return "Coaching 90 jours"
+
+
+# Texte de bienvenue (fiche 0) propre a l'Autonome : page Notion a part,
+# modifiable par Rony (vide tant qu'elle n'existe pas : texte de secours).
+_AUTONOME_FICHE0_TEXTE_PAGE_ID = os.getenv("NOTION_AUTONOME_FICHE0_PAGE_ID", "")
+_AUTONOME_FICHE0_TEXTE = [
+    "# 👋 BIENVENUE DANS TON ESPACE eVOLUTION AUTONOME",
+    "Bonjour et bienvenue dans ton espace de travail personnel. Tu suis ici la méthode complète du programme 90 jours, à ton rythme.",
+    "### 📖 COMMENT ÇA MARCHE ?",
+    "- **Avance pas à pas :** Tu avances fiche par fiche, dans l'ordre proposé.",
+    "- **Déblocage progressif :** Chaque fiche validée débloque la suivante, et les étapes s'ouvrent au fil des jours (de J0 à J90).",
+    "- **Ton diagnostic d'abord :** Tu commences par ton diagnostic commercial. Ton résultat est calculé automatiquement et t'indique ta priorité des 30 prochains jours.",
+    "### 🗺️ TON PARCOURS",
+    "- **Démarrage :** ton point de départ et ton diagnostic.",
+    "- **Clarifier :** ton offre, ta phrase de positionnement, ta cible, ton script d'approche.",
+    "- **Prospecter :** ton plan chaque lundi, ton bilan chaque vendredi. Tes chiffres se reportent tout seuls dans ton Tableau de bord.",
+    "- **Convertir et stabiliser :** tes rendez-vous, tes objections, ton suivi de closing, ton bilan J90.",
+    "### 🤝 CE QUI T'ACCOMPAGNE",
+    "- **Une synthèse tous les 30 jours :** un point écrit sur ce que tu as fait, avec tes 3 actions pour le mois suivant.",
+    "- **Un point collectif chaque mois avec Rony :** garde tes questions pour ce moment-là.",
+    "### ⚡ LE SEUL GESTE À RETENIR",
+    "Une fois que tu as lu ou complété une fiche, va tout en bas de la page et clique sur le bouton : 👉 **\"Valider et continuer\"**.",
+    "La fiche suivante se débloque alors dans ton parcours.",
+]
+
+
 _FICHE_POSITION = {
     _NUMERO_TO_MASTER_ID[str(numero)]: position
     for position, numero in enumerate(
@@ -664,13 +706,17 @@ def _jour_parcours(date_demarrage) -> int | None:
     return (datetime.now(timezone.utc).date() - debut).days
 
 
-def _apply_acces(fiches: list[dict], date_demarrage=None, jours=None, permanentes=None) -> None:
+def _apply_acces(
+    fiches: list[dict], date_demarrage=None, jours=None, permanentes=None, verrou_coach: bool = True
+) -> None:
     # Calcule le deblocage nous-memes plutot que de lire la formule Notion
     # "acces". Trois regles, dans l'ordre du parcours (_PARCOURS) :
     #  1. jour d'ouverture atteint (frise J0 -> J90) ;
     #  2. fiche precedente terminee ;
     #  3. verrou coach : rien ne s'ouvre apres la fiche 8 tant que le coach
-    #     ne l'a pas passee a Termine.
+    #     ne l'a pas passee a Termine. Sans verrou (parcours Autonome), la
+    #     fiche 8 suit la regle normale : filet de securite si son
+    #     remplissage automatique a echoue, le client peut la valider.
     jour = _jour_parcours(date_demarrage)
     jours = _FICHE_JOUR if jours is None else jours
     permanentes = _FICHES_PERMANENTES if permanentes is None else permanentes
@@ -688,7 +734,7 @@ def _apply_acces(fiches: list[dict], date_demarrage=None, jours=None, permanente
             fiche["acces"] = "✅ Terminé" if etat == "Terminé" else "🚀 En cours"
             continue
 
-        if master_id in _FICHES_DEBLOCAGE_COACH:
+        if verrou_coach and master_id in _FICHES_DEBLOCAGE_COACH:
             fiche["acces"] = "✅ Terminé" if etat == "Terminé" else (
                 "🚀 En cours" if etat == "En cours" else "🔒 Bloqué"
             )
@@ -990,6 +1036,7 @@ def _build_client_dashboard(client_page_id: str) -> dict:
     fiches = _fiches_du_client(client_page_id, fiche_ids)
 
     date_demarrage = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
+    autonome = _est_parcours_autonome(_prop_value(_prop(props, "Parcours")))
 
     if _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))):
         # Atelier : seules les fiches du parcours court sont visibles.
@@ -1009,7 +1056,7 @@ def _build_client_dashboard(client_page_id: str) -> dict:
             fiches = _repair_missing_fiches(client_page_id, nom_client, fiches)
 
         fiches.sort(key=_fiche_sort_key)
-        _apply_acces(fiches, date_demarrage)
+        _apply_acces(fiches, date_demarrage, verrou_coach=not autonome)
 
     return {
         "nom": nom_client,
@@ -1026,6 +1073,7 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "sessions": _client_sessions(props),
         "fiches": fiches,
         "kpi": kpi_future.result(),
+        "syntheses": syntheses_du_client(client_page_id) if autonome else [],
     }
 
 
@@ -1562,21 +1610,30 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
             # modifie individuellement : le master fait foi.
             source_id = master_id
 
+            secours = _ATELIER_FICHE0_TEXTE
+
             if master_id == _NUMERO_TO_MASTER_ID["0"]:
                 try:
                     client_props = _get_page(client_page_id).get("properties", {})
+                    parcours = _prop_value(_prop(client_props, "Parcours"))
 
-                    if _est_parcours_atelier(_prop_value(_prop(client_props, "Parcours"))):
+                    if _est_parcours_atelier(parcours):
                         source_id = _ATELIER_FICHE0_TEXTE_PAGE_ID
+                    elif _est_parcours_autonome(parcours):
+                        # Pas encore de page Notion dediee : texte de secours.
+                        source_id = _AUTONOME_FICHE0_TEXTE_PAGE_ID or None
+                        secours = _AUTONOME_FICHE0_TEXTE
                 except Exception:
                     source_id = master_id
 
             try:
+                if source_id is None:
+                    raise LookupError("Page de bienvenue Autonome non configuree")
                 segments = _segments_master_cache(source_id)
             except Exception:
                 if source_id == master_id:
                     raise
-                segments = [{"type": "texte", "texte": ligne} for ligne in _ATELIER_FICHE0_TEXTE]
+                segments = [{"type": "texte", "texte": ligne} for ligne in secours]
 
     champs = _champs_for(schema, master_id, segments)
 
@@ -2342,7 +2399,286 @@ def diagnostic_vient_de_se_terminer(client_page_id: str, fiche_client_id: str) -
     if not toutes_terminees or (fiche8 and fiche8.get("etat") == "Terminé"):
         return None
 
-    return {"client_nom": dashboard["nom"], "client_email": (dashboard.get("identite") or {}).get("email")}
+    return {
+        "client_nom": dashboard["nom"],
+        "client_email": (dashboard.get("identite") or {}).get("email"),
+        "parcours": dashboard.get("parcours"),
+    }
+
+
+# --- Parcours Autonome : fiche 8 automatique (decision du 21/10/2026) ---
+# Les numeros de fiche cites sont ceux AFFICHES (numerotation Notion du
+# 07/10/2026), pas les numeros internes de _PARCOURS.
+_RECOMMANDATION_AUTONOME = {
+    "Offre": "Ta priorité des 30 prochains jours : rendre ton offre claire. Concentre-toi sur les fiches 9, 10 et 12, et sur le Module 1. Tant qu'on ne comprend pas ce que tu vends en 10 secondes, prospecter plus ne servira pas.",
+    "Visibilité": "Ta priorité : qu'on te trouve et qu'on se souvienne de toi. Après la fiche 10, mets ta phrase de positionnement partout (profil WhatsApp, Facebook, fiche Google). Chaque semaine, demande une recommandation à un client content.",
+    "Prospection": "Ta priorité : la régularité. Fixe un petit nombre de contacts par semaine que tu peux tenir, note-les dans la fiche 11 et fais tes fiches 15 et 16 chaque semaine. Mieux vaut 5 contacts chaque semaine que 30 une seule fois.",
+    "Conversion": "Ta priorité : transformer tes rendez-vous en clients. Travaille la trame d'entretien (fiche 17) et tes réponses aux objections (fiche 18) avant ton prochain rendez-vous.",
+    "Suivi commercial": "Ta priorité : ne plus laisser filer de devis. Note chaque proposition dans ta fiche 19 et relance à J+3 et J+7. Beaucoup de ventes se perdent faute de relance.",
+}
+_MENTION_FICHE8_AUTONOME = (
+    "Ce résultat est calculé automatiquement à partir de tes réponses. Pour un diagnostic "
+    "lu et commenté par Rony, avec 3 priorités sur mesure, découvre le Coaching 90 jours."
+)
+
+
+def _zone_la_plus_faible(rapport: dict) -> str | None:
+    # A egalite, l'ordre des zones du rapport (ordre du parcours) departage.
+    scores = [(z["zone"], z["score"]) for z in rapport.get("zones", []) if z.get("score") is not None]
+
+    if not scores:
+        return None
+
+    return min(scores, key=lambda item: item[1])[0]
+
+
+def remplir_fiche8_autonome(client_page_id: str) -> bool:
+    """Parcours Autonome : remplit la fiche 8 avec les scores calcules, ajoute
+    la recommandation de la zone la plus faible, puis valide la fiche.
+
+    Renvoie False (sans rien ecrire) si le diagnostic n'est pas complet.
+    """
+    rapport = get_diagnostic_rapport(client_page_id)
+    fiche8_id = (rapport.get("fiche_8") or {}).get("fiche_client_id")
+
+    if not rapport.get("complet") or not fiche8_id:
+        return False
+
+    valeurs = {p["label"]: p["valeur"] for p in rapport.get("propositions", [])}
+    updates = [
+        {**champ, "valeur": valeurs[champ["label"]]}
+        for champ in get_diagnostic_fiche8(fiche8_id)
+        if champ["label"] in valeurs
+    ]
+
+    if updates:
+        update_diagnostic_fiche8(updates)
+
+    zone = _zone_la_plus_faible(rapport)
+
+    def bloc(type_, *rich_text):
+        return {"object": "block", "type": type_, type_: {"rich_text": list(rich_text)}}
+
+    enfants = [
+        {"object": "block", "type": "divider", "divider": {}},
+        bloc("heading_3", _rt("\U0001F9ED TA PRIORITÉ DES 30 PROCHAINS JOURS")),
+    ]
+
+    if zone:
+        enfants.append(bloc("paragraph", _rt(_RECOMMANDATION_AUTONOME[zone])))
+
+    enfants.append(bloc("paragraph", _rt(_MENTION_FICHE8_AUTONOME, italique=True)))
+
+    try:
+        response = _http.patch(
+            f"{NOTION_API_BASE}/blocks/{fiche8_id}/children",
+            headers=_headers(),
+            json={"children": enfants},
+            timeout=20,
+        )
+        response.raise_for_status()
+
+    except requests.RequestException as error:
+        raise RuntimeError(f"Erreur Notion (fiche 8 autonome {fiche8_id}) : {error}") from error
+
+    validate_fiche(fiche8_id)
+    return True
+
+
+# --- Parcours Autonome : syntheses mensuelles redigees par n8n ---
+SYNTHESES_DATA_SOURCE_ID = os.getenv(
+    "NOTION_SYNTHESES_DATA_SOURCE_ID", "9f11e9fa-34a4-48fb-9f27-658a4ad3bf83"
+)
+_SYNTHESE_STATUTS = {"À relire", "Envoyée", "Bloquée"}
+_SYNTHESE_AXES = {"encouragement", "a_faire", "reprise"}
+# Dernieres entrees lues pour la synthese : bilan hebdomadaire de prospection
+# (fiche affichee 16) et suivi de closing (fiche affichee 19).
+_SYNTHESE_FICHES_BILAN = ["39ffaffd875880708581d60c234aab45", "39ffaffd8758805398f7dc22d26b9626"]
+_SYNTHESE_SEUIL_ENCOURAGEMENT = 3
+
+
+def _syntheses_brutes(client_page_id: str) -> list[dict]:
+    rows = _query_data_source(
+        SYNTHESES_DATA_SOURCE_ID,
+        filter_={"property": "Client", "relation": {"contains": client_page_id}},
+    )
+    syntheses = []
+
+    for row in rows:
+        props = row.get("properties", {})
+        date = _prop_value(_prop(props, "Date"))
+        syntheses.append({
+            "id": row["id"],
+            "mois": _prop_value(_prop(props, "Mois")),
+            "date": date.get("start") if isinstance(date, dict) else date,
+            "axe": _prop_value(_prop(props, "Axe")),
+            "statut": _prop_value(_prop(props, "Statut")),
+            "fiches_terminees": _prop_value(_prop(props, "Fiches terminées")),
+            "texte": _prop_value(_prop(props, "Texte")) or "",
+        })
+
+    syntheses.sort(key=lambda item: item.get("mois") or 0, reverse=True)
+    return syntheses
+
+
+def syntheses_du_client(client_page_id: str) -> list[dict]:
+    # Affichage portail : seulement les syntheses envoyees. Ne fait jamais
+    # tomber le tableau de bord (base absente, non partagee, Notion en panne).
+    try:
+        return [
+            {k: s[k] for k in ("mois", "date", "axe", "texte")}
+            for s in _syntheses_brutes(client_page_id)
+            if s.get("statut") == "Envoyée"
+        ]
+    except Exception as error:
+        logger.warning("Syntheses Autonome illisibles : %s", _resume_erreur(error))
+        return []
+
+
+def _axe_synthese(nb_terminees: int, nb_precedent: int | None) -> str:
+    nouvelles = nb_terminees - (nb_precedent or 0)
+
+    if nouvelles <= 0:
+        return "reprise"
+
+    if nouvelles >= _SYNTHESE_SEUIL_ENCOURAGEMENT:
+        return "encouragement"
+
+    return "a_faire"
+
+
+def _derniere_entree(fiche: dict | None, client_page_id: str) -> dict | None:
+    if not fiche:
+        return None
+
+    try:
+        entrees = get_fiche(fiche["id"], client_page_id).get("entrees") or []
+    except Exception as error:
+        logger.warning("Synthese : fiche %s illisible (%s)", fiche.get("master_id"), _resume_erreur(error))
+        return None
+
+    return entrees[-1].get("donnees") if entrees else None
+
+
+def donnees_synthese_autonome(client_page_id: str, numero_mois: int, syntheses: list[dict] | None = None) -> dict:
+    dashboard = get_client_dashboard(client_page_id)
+    fiches = dashboard.get("fiches") or []
+    terminees = [f.get("nom") for f in fiches if f.get("etat") == "Terminé"]
+    en_cours = [f.get("nom") for f in fiches if f.get("acces") == "🚀 En cours"]
+    syntheses = _syntheses_brutes(client_page_id) if syntheses is None else syntheses
+    precedente = next((s for s in syntheses if s.get("mois") == numero_mois - 1), None)
+
+    try:
+        zone = _zone_la_plus_faible(get_diagnostic_rapport(client_page_id))
+    except Exception:
+        zone = None
+
+    par_master = {f.get("master_id"): f for f in fiches}
+    nom = dashboard.get("nom") or ""
+
+    return {
+        "client_page_id": client_page_id,
+        "prenom": nom.split()[0] if nom.split() else "",
+        "email": (dashboard.get("identite") or {}).get("email"),
+        "numero_mois": numero_mois,
+        "objectif_90j": dashboard.get("objectif_90j"),
+        "zone_prioritaire": zone,
+        "fiches_terminees": terminees,
+        "nb_fiches_terminees": len(terminees),
+        "fiches_en_cours": en_cours,
+        "kpi": dashboard.get("kpi") or [],
+        "derniers_bilans": {
+            master_id: _derniere_entree(par_master.get(master_id), client_page_id)
+            for master_id in _SYNTHESE_FICHES_BILAN
+        },
+        "synthese_precedente": (precedente or {}).get("texte") or None,
+        "axe": _axe_synthese(len(terminees), (precedente or {}).get("fiches_terminees")),
+    }
+
+
+def clients_autonome_synthese_due(aujourd_hui=None) -> list[dict]:
+    """Membres Autonome dont c'est aujourd'hui un jour de synthese (J30, J60,
+    J90, puis tous les 30 jours) et qui n'ont pas encore leur synthese du mois."""
+    rows = _query_data_source(
+        CLIENTS_DATA_SOURCE_ID,
+        filter_={"property": "Parcours", "select": {"equals": "Autonome"}},
+    )
+    dus = []
+
+    for row in rows:
+        props = row.get("properties", {})
+
+        if _prop_value(_prop(props, "État")) != "En cours":
+            continue
+
+        debut = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
+        debut = debut.get("start") if isinstance(debut, dict) else debut
+        jour = _jour_parcours(debut) if aujourd_hui is None else _jour_depuis(debut, aujourd_hui)
+
+        if not jour or jour <= 0 or jour % 30 != 0:
+            continue
+
+        numero_mois = jour // 30
+        syntheses = _syntheses_brutes(row["id"])
+
+        if any(s.get("mois") == numero_mois for s in syntheses):
+            continue
+
+        dus.append(donnees_synthese_autonome(row["id"], numero_mois, syntheses))
+
+    return dus
+
+
+def _jour_depuis(date_demarrage, aujourd_hui) -> int | None:
+    if not date_demarrage:
+        return None
+
+    try:
+        debut = datetime.fromisoformat(str(date_demarrage)[:10]).date()
+    except ValueError:
+        return None
+
+    return (aujourd_hui - debut).days
+
+
+def enregistrer_synthese_autonome(
+    client_page_id: str, mois: int, axe: str, texte: str, nb_fiches_terminees: int,
+    statut: str = "À relire", email: str = "",
+) -> str:
+    if axe not in _SYNTHESE_AXES:
+        raise ValueError("Axe de synthese inconnu")
+
+    if statut not in _SYNTHESE_STATUTS:
+        raise ValueError("Statut de synthese inconnu")
+
+    client = _get_page(client_page_id)
+    nom = _prop_value(_prop(client.get("properties", {}), "Nom")) or "Client"
+    texte = (texte or "").strip()
+    # L'API Notion limite chaque segment de texte a 2000 caracteres.
+    segments = [{"text": {"content": texte[i:i + 2000]}} for i in range(0, len(texte), 2000)]
+
+    page = _create_page(SYNTHESES_DATA_SOURCE_ID, {
+        "Nom": {"title": [{"text": {"content": f"{nom} · Synthèse mois {mois}"}}]},
+        "Client": {"relation": [{"id": client_page_id}]},
+        "Mois": {"number": mois},
+        "Axe": {"select": {"name": axe}},
+        "Date": {"date": {"start": datetime.now(timezone.utc).strftime("%Y-%m-%d")}},
+        "Fiches terminées": {"number": nb_fiches_terminees},
+        "Texte": {"rich_text": segments},
+        "Statut": {"select": {"name": statut}},
+        # Pour l'envoi differe par n8n (apres 24 h de relecture possible).
+        **({"E-mail client": {"email": email.strip().lower()}} if (email or "").strip() else {}),
+    })
+    _cache_clear("dashboard:")
+    return page["id"]
+
+
+def changer_statut_synthese(synthese_id: str, statut: str) -> None:
+    if statut not in _SYNTHESE_STATUTS:
+        raise ValueError("Statut de synthese inconnu")
+
+    _update_page(synthese_id, {"Statut": {"select": {"name": statut}}})
+    _cache_clear("dashboard:")
 
 
 def alerter_coach_diagnostic(client_nom: str, client_email: str | None) -> None:
@@ -2661,7 +2997,7 @@ def onboard_client(nom: str, email: str, kpi_j0: dict | None = None, **extra) ->
         properties["Date de démarrage"] = {"date": {"start": date_demarrage}}
 
     atelier = _est_parcours_atelier(extra.get("parcours"))
-    properties["Parcours"] = {"select": {"name": "Atelier" if atelier else "Coaching 90 jours"}}
+    properties["Parcours"] = {"select": {"name": _nom_parcours(extra.get("parcours"))}}
 
     kpi_j0 = kpi_j0 or {}
     created_page_ids: list[str] = []

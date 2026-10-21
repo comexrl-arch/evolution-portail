@@ -205,6 +205,31 @@ function FicheContent({ texte }) {
   )
 }
 
+function SynthesesSection({ syntheses }) {
+  // Parcours Autonome : une synthese redigee tous les 30 jours. La plus
+  // recente est depliee, les precedentes repliees.
+  if (!syntheses?.length) return null
+
+  const dateFr = (iso) => (iso ? new Date(iso).toLocaleDateString('fr-FR') : '')
+
+  return (
+    <>
+      <h2 className="section-title">Mes synthèses mensuelles</h2>
+      {syntheses.map((synthese, index) => (
+        <details key={`${synthese.mois}-${synthese.date}`} className="module-accordion" open={index === 0}>
+          <summary className="module-heading">
+            <ChevronDown size={16} className="module-heading-chevron" />
+            <span className="module-heading-label">
+              Mois {synthese.mois}{synthese.date ? ` · ${dateFr(synthese.date)}` : ''}
+            </span>
+          </summary>
+          <FicheContent texte={synthese.texte} />
+        </details>
+      ))}
+    </>
+  )
+}
+
 function FicheSegments({ segments, formValues, onChange }) {
   return (
     <div className="card-glass p-6 mb-6 space-y-4" style={{ borderRadius: 'var(--radius-md)' }}>
@@ -982,6 +1007,8 @@ export default function App() {
             </details>
           ))
         })()}
+
+        <SynthesesSection syntheses={dashboard.syntheses} />
 
         {/* Informations de reference, apres le parcours, en presentation
             sobre. Un bloc sans donnee n'est pas affiche. */}
