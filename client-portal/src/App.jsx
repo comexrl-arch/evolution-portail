@@ -8,6 +8,11 @@ import illustrationModule2 from './assets/modules/module-2.jpg'
 import illustrationModule3 from './assets/modules/module-3.jpg'
 import illustrationModule4 from './assets/modules/module-4.jpg'
 import illustrationModule5 from './assets/modules/module-5.jpg'
+import illustrationCible from './assets/modules/module-cible.jpg'
+import illustrationPitch from './assets/modules/module-pitch.jpg'
+import illustrationPrix from './assets/modules/module-prix.jpg'
+import illustrationAides from './assets/modules/module-aides.jpg'
+import illustrationSemaine from './assets/modules/module-semaine.jpg'
 
 // Le portail parle a portal_main.py, un process separe de main.py (agents
 // IA, port 8010) - voir portal_main.py. Port 8013, pas 8011 : verifie en
@@ -683,10 +688,17 @@ function lireModule(label) {
   return { surtitre, titre }
 }
 
-// Croquis choisi d'apres le theme du module (ordre des tests important :
-// "Suivre tes prospects" est du suivi, pas de la prospection).
+// Croquis choisi d'apres le theme du module, un par module dans un meme
+// parcours. Ordre des tests important : les sujets precis d'abord, et
+// "Suivre tes prospects" est du suivi, pas de la prospection.
 function illustrationDuModule(label) {
   const texte = (label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (/cible/.test(texte)) return illustrationCible
+  if (/pitch/.test(texte)) return illustrationPitch
+  if (/prix|proposition/.test(texte)) return illustrationPrix
+  if (/aides/.test(texte)) return illustrationAides
+  if (/planifier/.test(texte)) return illustrationSemaine
+  if (/demarrage|commencer/.test(texte)) return ILLUSTRATIONS_MODULES[0]
   if (/clarifi|offre|cible|pitch|positionnement/.test(texte)) return ILLUSTRATIONS_MODULES[2]
   if (/stabilis|bilan|suivre|suivi|kpi|pilotage|aides/.test(texte)) return ILLUSTRATIONS_MODULES[5]
   if (/convertir|rendez-vous|rdv|prix|proposition/.test(texte)) return ILLUSTRATIONS_MODULES[4]
