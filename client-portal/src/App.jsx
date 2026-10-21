@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Loader2, Lock, Mail, MapPin, Phone, Rocket, TrendingUp, Users } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, TrendingUp, Users } from 'lucide-react'
 import logo from './assets/logo.svg'
 
 // Le portail parle a portal_main.py, un process separe de main.py (agents
@@ -205,6 +205,130 @@ function FicheContent({ texte }) {
   )
 }
 
+const SYNTHESE_AXES = {
+  encouragement: { libelle: 'Bel élan', classe: 'badge-success' },
+  a_faire: { libelle: 'Cap à tenir', classe: 'badge-warning' },
+  reprise: { libelle: 'On repart', classe: 'badge-accent' },
+}
+
+const SYNTHESE_MENTION = 'Synthèse rédigée automatiquement'
+
+function decouperSynthese(texte) {
+  // Le texte de l'IA suit un plan en 5 parties numerotees ("1. Ou tu en es"
+  // ... "5. Une question..."), suivies d'une mention finale. Renvoie null si
+  // le plan n'est pas reconnu : l'affichage retombe alors sur le texte brut.
+  const lignes = (texte || '').replace(/<br\s*\/?>/gi, '\n').split('\n').map((l) => l.trim())
+  const sections = {}
+  const intro = []
+  let mention = ''
+  let courante = null
+
+  for (const ligne of lignes) {
+    if (!ligne) continue
+
+    const nue = ligne.replace(/[*"«»“”]/g, '').trim()
+
+    if (nue.startsWith(SYNTHESE_MENTION)) {
+      mention = nue
+      courante = null
+      continue
+    }
+
+    const titre = ligne.match(/^#{0,4}\s*\**\s*([1-5])[.)]\s+(.{0,80}?)\**\s*:?\s*$/)
+
+    if (titre && !sections[titre[1]]) {
+      courante = titre[1]
+      sections[courante] = []
+      continue
+    }
+
+    if (courante) sections[courante].push(ligne)
+    else intro.push(ligne)
+  }
+
+  if (Object.keys(sections).length < 3) return null
+
+  return { intro, sections, mention }
+}
+
+const sansPuce = (ligne) => ligne.replace(/^(?:[-•*]|\d+[.)])\s+/, '')
+
+function SyntheseCard({ synthese }) {
+  const parties = decouperSynthese(synthese.texte)
+
+  if (!parties) return <FicheContent texte={synthese.texte} />
+
+  const { intro, sections, mention } = parties
+  const axe = SYNTHESE_AXES[synthese.axe]
+  const paragraphes = (lignes = []) => lignes.map((l, i) => <p key={i}>{renderInline(sansPuce(l))}</p>)
+
+  return (
+    <div className="synthese">
+      {axe && <span className={`badge ${axe.classe} synthese-axe`}>{axe.libelle}</span>}
+      {intro.length > 0 && <p className="synthese-intro">{renderInline(intro.join(' '))}</p>}
+
+      <div className="synthese-grille">
+        {sections[1] && (
+          <section className="synthese-bloc">
+            <p className="synthese-bloc-titre"><Compass size={16} /> Où tu en es</p>
+            <div className="synthese-bloc-texte">{paragraphes(sections[1])}</div>
+          </section>
+        )}
+
+        {sections[2] && (
+          <section className="synthese-bloc synthese-bloc-succes">
+            <p className="synthese-bloc-titre"><CheckCircle2 size={16} /> Ce qui avance</p>
+            <ul className="synthese-liste">
+              {sections[2].map((l, i) => (
+                <li key={i}><CheckCircle2 size={15} /> <span>{renderInline(sansPuce(l))}</span></li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      {sections[3] && (
+        <section className="synthese-mot">
+          <Quote size={22} className="synthese-mot-icone" />
+          <p className="synthese-bloc-titre"><Sparkles size={16} /> Le mot du mois</p>
+          <div className="synthese-mot-texte">{paragraphes(sections[3])}</div>
+        </section>
+      )}
+
+      {sections[4] && (
+        <section className="synthese-actions">
+          <p className="synthese-bloc-titre"><ListChecks size={16} /> Tes actions des 30 prochains jours</p>
+          <ol>
+            {sections[4].map((l, i) => {
+              const fiche = l.match(/fiche\s+(\d+)/i)
+
+              return (
+                <li key={i} className="synthese-action">
+                  <span className="synthese-action-numero">{i + 1}</span>
+                  <span className="synthese-action-texte">{renderInline(sansPuce(l))}</span>
+                  {fiche && <span className="badge badge-accent">Fiche {fiche[1]}</span>}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      )}
+
+      {sections[5] && (
+        <section className="synthese-question">
+          <MessageCircle size={18} />
+          <div>
+            <p className="synthese-bloc-titre">À poser au prochain point collectif</p>
+            <div className="synthese-question-texte">{paragraphes(sections[5])}</div>
+          </div>
+        </section>
+      )}
+
+      {mention && <p className="synthese-mention">{mention}</p>}
+    </div>
+  )
+}
+
 function SynthesesSection({ syntheses }) {
   // Parcours Autonome : une synthese redigee tous les 30 jours. La plus
   // recente est depliee, les precedentes repliees.
@@ -223,7 +347,7 @@ function SynthesesSection({ syntheses }) {
               Mois {synthese.mois}{synthese.date ? ` · ${dateFr(synthese.date)}` : ''}
             </span>
           </summary>
-          <FicheContent texte={synthese.texte} />
+          <SyntheseCard synthese={synthese} />
         </details>
       ))}
     </>
