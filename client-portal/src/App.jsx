@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, Users } from 'lucide-react'
+import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, Users } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
+import illustrationModule0 from './assets/modules/module-0.jpg'
+import illustrationModule1 from './assets/modules/module-1.jpg'
+import illustrationModule2 from './assets/modules/module-2.jpg'
+import illustrationModule3 from './assets/modules/module-3.jpg'
+import illustrationModule4 from './assets/modules/module-4.jpg'
+import illustrationModule5 from './assets/modules/module-5.jpg'
 
 // Le portail parle a portal_main.py, un process separe de main.py (agents
 // IA, port 8010) - voir portal_main.py. Port 8013, pas 8011 : verifie en
@@ -565,7 +571,7 @@ function SynthesesSection({ syntheses }) {
 
   return (
     <>
-      <h2 className="section-title">Mes synthèses mensuelles</h2>
+      <h2 className="accueil-section-titre">Mes synthèses mensuelles</h2>
       {syntheses.map((synthese, index) => (
         <details key={`${synthese.mois}-${synthese.date}`} className="module-accordion" open={index === 0}>
           <summary className="module-heading">
@@ -621,6 +627,103 @@ function FicheSegments({ segments, formValues, onChange, surtitre }) {
       rendre={rendre}
       surtitre={surtitre}
     />
+  )
+}
+
+const FORMULES = [
+  { motif: /atelier/i, libelle: 'Formule Atelier' },
+  { motif: /autonome/i, libelle: 'Formule Autonome' },
+]
+
+function libelleFormule(parcours) {
+  // Parcours vide = coaching (valeur historique des premiers clients).
+  const formule = FORMULES.find((f) => f.motif.test(parcours || ''))
+  return formule ? formule.libelle : 'Formule Coaching 90 jours'
+}
+
+const ILLUSTRATIONS_MODULES = [
+  illustrationModule0, illustrationModule1, illustrationModule2,
+  illustrationModule3, illustrationModule4, illustrationModule5,
+]
+
+// Sigles gardes en capitales quand un titre en capitales est remis en casse
+// de phrase ("MON PLAN DE PROSPECTION" -> "Mon plan de prospection").
+const SIGLES = /^(KPI|RDV|J\d+|CA|IA|TPE|PME|CRM|SMS)$/
+
+function casseDePhrase(texte) {
+  if (!texte || texte !== texte.toUpperCase()) return texte
+  const mots = texte.toLowerCase().split(' ')
+  return mots
+    .map((mot, i) => {
+      const brut = mot.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      if (SIGLES.test(brut)) return mot.toUpperCase()
+      if (brut === 'EVOLUTION') return mot.replace('evolution', 'eVolution')
+      return i === 0 ? mot.charAt(0).toUpperCase() + mot.slice(1) : mot
+    })
+    .join(' ')
+}
+
+function lireModule(label) {
+  // "\u2060" (separateur invisible) parasite certains noms Notion.
+  const propre = (label || '').replace(/\u2060/g, '').trim()
+  const numero = propre.match(/^(\d+)\s*[.)]\s*(.*)$/)
+  return numero ? { numero: Number(numero[1]), titre: numero[2] } : { numero: null, titre: propre }
+}
+
+function lireFiche(nom) {
+  const propre = sansNomClient(nom || '').trim()
+  const numero = propre.match(/^(\d+)\s*[.)]\s*(.*)$/)
+  return numero ? { numero: numero[1], titre: casseDePhrase(numero[2]) } : { numero: null, titre: casseDePhrase(propre) }
+}
+
+function ModuleCarte({ module, onOpen }) {
+  const { numero, titre } = lireModule(module.label)
+  const illustration = numero != null ? ILLUSTRATIONS_MODULES[numero] : null
+  const terminees = module.fiches.filter((f) => f.etat === 'Terminé').length
+  const total = module.fiches.length
+  const pct = total ? Math.round((terminees / total) * 100) : 0
+  const statut = terminees === total ? 'Terminé' : module.fiches.some((f) => f.etat === 'En cours' || f.etat === 'Terminé') ? 'En cours' : 'À venir'
+
+  return (
+    <article className="module-carte">
+      {illustration && <img src={illustration} alt="" className="module-carte-image" loading="lazy" />}
+      <div className="module-carte-corps">
+        <div className="module-carte-entete">
+          <p className="module-carte-surtitre">{numero != null ? `Module ${numero}` : 'Module'}</p>
+          <span className={`module-carte-statut module-carte-statut-${statut === 'Terminé' ? 'fini' : statut === 'En cours' ? 'actif' : 'avenir'}`}>
+            {statut}
+          </span>
+        </div>
+        <h3 className="module-carte-titre">{titre}</h3>
+        <div className="module-carte-progression">
+          <div className="module-carte-barre"><span style={{ width: `${pct}%` }} /></div>
+          <span>{terminees} / {total} fiches</span>
+        </div>
+        <ul className="module-carte-fiches">
+          {module.fiches.map((fiche) => {
+            const bloquee = fiche.acces?.includes('Bloqué')
+            const { numero: n, titre: t } = lireFiche(fiche.nom)
+            const etat = fiche.etat === 'Terminé' ? 'fini' : fiche.etat === 'En cours' ? 'actif' : 'avenir'
+
+            return (
+              <li key={fiche.id}>
+                <button disabled={bloquee} onClick={() => onOpen(fiche.id)} className={`module-fiche module-fiche-${etat}`}>
+                  <span className="module-fiche-numero">{n ?? '•'}</span>
+                  <span className="module-fiche-titre">{t}</span>
+                  {bloquee ? (
+                    <Lock size={13} className="module-fiche-icone" aria-label="Bloquée" />
+                  ) : etat === 'fini' ? (
+                    <CheckCircle2 size={14} className="module-fiche-icone module-fiche-icone-fini" aria-label="Terminée" />
+                  ) : (
+                    <ChevronRight size={14} className="module-fiche-icone" aria-hidden="true" />
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </article>
   )
 }
 
@@ -811,7 +914,8 @@ function LivrablesSection({ livrables, onOpen }) {
 }
 
 export default function App() {
-  // Monogramme RL au meme endroit (en haut a droite) sur tous les ecrans.
+  // Monogramme RL au meme endroit (en haut a droite) sur tous les ecrans,
+  // sauf l'accueil qui porte deja le logo de marque (voir index.css).
   return (
     <>
       <img src={monogramme} alt="RL-eVolution" className="portal-monogramme" />
@@ -822,6 +926,10 @@ export default function App() {
 
 function Portail() {
   const [screen, setScreen] = useState('loading')
+
+  useEffect(() => {
+    document.body.dataset.ecran = screen
+  }, [screen])
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
@@ -1332,16 +1440,19 @@ function Portail() {
     const avecKpi = kpiRenseignes(dashboard.kpi)
 
     return (
-      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto page-monogramme">
-        <header className="portal-header">
-          <img src={logo} alt="RL-eVolution" className="portal-logo" />
-          <div className="portal-header-identity">
-            <h1 className="gold-title text-2xl font-extrabold">{dashboard.nom}</h1>
-            <p style={{ color: 'var(--ink-soft)' }}>{dashboard.phase_parcours}</p>
+      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto">
+        <header className="accueil-entete">
+          <img src={logo} alt="RL-eVolution" className="accueil-logo" />
+          <div className="accueil-titre">
+            <h1>Système eVolution 2.0</h1>
+            <p>{libelleFormule(dashboard.parcours)}</p>
           </div>
-          <button onClick={logout} className="portal-logout text-sm" style={{ color: 'var(--ink-soft)' }}>
-            Se déconnecter
-          </button>
+          <div className="accueil-client">
+            <p className="accueil-client-nom">{dashboard.nom}</p>
+            <button onClick={logout} className="accueil-deconnexion">
+              Se déconnecter
+            </button>
+          </div>
         </header>
 
         {/* Bandeau de progression compact : une ligne discrete, sans jauge.
@@ -1357,40 +1468,12 @@ function Portail() {
         </div>
 
         {/* Le parcours est l'action principale : il vient juste apres. */}
-        <h2 className="section-title">Mon parcours</h2>
-        {(() => {
-          const activeIndex = modules.findIndex((group) => group.fiches.some((f) => f.etat === 'En cours'))
-          const defaultOpenIndex = activeIndex === -1 ? 0 : activeIndex
-
-          return modules.map((group, index) => (
-            <details key={group.label} className="module-accordion" open={index === defaultOpenIndex}>
-              <summary className="module-heading">
-                <ChevronDown size={16} className="module-heading-chevron" />
-                <span className="module-heading-label">{group.label} ({group.fiches.length})</span>
-              </summary>
-              <div className="grid md:grid-cols-2 gap-2">
-                {group.fiches.map((fiche) => {
-                  const locked = fiche.acces?.includes('Bloqué')
-                  return (
-                    <button
-                      key={fiche.id}
-                      disabled={locked}
-                      onClick={() => openFiche(fiche.id)}
-                      className="text-left card-glass p-2.5 flex items-center justify-between disabled:opacity-50"
-                      style={{ borderRadius: 'var(--radius-sm)' }}
-                    >
-                      <span className="flex items-center gap-2 text-sm">
-                        {locked && <Lock size={14} color="var(--text-soft)" />}
-                        {sansNomClient(fiche.nom)}
-                      </span>
-                      <AccesBadge acces={fiche.acces} />
-                    </button>
-                  )
-                })}
-              </div>
-            </details>
-          ))
-        })()}
+        <h2 className="accueil-section-titre">Mon parcours</h2>
+        <div className="modules-grille">
+          {modules.map((group) => (
+            <ModuleCarte key={group.label} module={group} onOpen={openFiche} />
+          ))}
+        </div>
 
         <SynthesesSection syntheses={dashboard.syntheses} />
 
