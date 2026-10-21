@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, Users } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
-import illustrationModule0 from './assets/modules/module-0.svg'
-import illustrationModule1 from './assets/modules/module-1.svg'
-import illustrationModule2 from './assets/modules/module-2.svg'
-import illustrationModule3 from './assets/modules/module-3.svg'
-import illustrationModule4 from './assets/modules/module-4.svg'
-import illustrationModule5 from './assets/modules/module-5.svg'
+import illustrationModule0 from './assets/modules/module-0.jpg'
+import illustrationModule1 from './assets/modules/module-1.jpg'
+import illustrationModule2 from './assets/modules/module-2.jpg'
+import illustrationModule3 from './assets/modules/module-3.jpg'
+import illustrationModule4 from './assets/modules/module-4.jpg'
+import illustrationModule5 from './assets/modules/module-5.jpg'
 
 // Le portail parle a portal_main.py, un process separe de main.py (agents
 // IA, port 8010) - voir portal_main.py. Port 8013, pas 8011 : verifie en
