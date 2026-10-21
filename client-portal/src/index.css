@@ -2383,6 +2383,7 @@ body[data-ecran="dashboard"] .portal-monogramme {
 .modules-grille {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-items: start;
   gap: 1rem;
   margin-bottom: 2.25rem;
 }
@@ -2472,10 +2473,29 @@ body[data-ecran="dashboard"] .portal-monogramme {
   background: var(--brand-gold);
 }
 
+.module-carte-bascule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: var(--border-subtle);
+  background: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent, #8a6d3b);
+  cursor: pointer;
+}
+
+.module-carte-bascule:hover { text-decoration: underline; }
+
+.module-carte-bascule-icone { transition: transform 0.2s ease; }
+.module-carte-bascule-icone-ouverte { transform: rotate(180deg); }
+
 .module-carte-fiches {
   display: flex;
   flex-direction: column;
-  margin-top: 0.25rem;
   border-top: var(--border-subtle);
 }
 
