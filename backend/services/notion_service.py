@@ -2525,14 +2525,45 @@ def syntheses_du_client(client_page_id: str) -> list[dict]:
     # Affichage portail : seulement les syntheses envoyees. Ne fait jamais
     # tomber le tableau de bord (base absente, non partagee, Notion en panne).
     try:
-        return [
-            {k: s[k] for k in ("mois", "date", "axe", "texte")}
-            for s in _syntheses_brutes(client_page_id)
-            if s.get("statut") == "Envoyée"
-        ]
+        syntheses = _syntheses_brutes(client_page_id)
     except Exception as error:
         logger.warning("Syntheses Autonome illisibles : %s", _resume_erreur(error))
         return []
+
+    par_mois = {s.get("mois"): s for s in syntheses}
+
+    return [
+        {
+            **{k: s[k] for k in ("mois", "date", "axe", "texte")},
+            **_realisation_synthese(s, par_mois.get((s.get("mois") or 0) - 1)),
+        }
+        for s in syntheses
+        if s.get("statut") == "Envoyée"
+    ]
+
+
+def _fiches_prevues(jour: int) -> int:
+    # Fiches du parcours 90 jours dont le jour d'ouverture est atteint.
+    return sum(1 for jour_fiche in _FICHE_JOUR.values() if jour_fiche <= jour)
+
+
+def _realisation_synthese(synthese: dict, precedente: dict | None) -> dict:
+    # Jauge du portail : fiches terminees au moment de la synthese, comparees
+    # aux fiches ouvertes a ce stade du parcours (J30, J60, J90...).
+    terminees = synthese.get("fiches_terminees")
+
+    if terminees is None:
+        return {}
+
+    prevues = _fiches_prevues(30 * (synthese.get("mois") or 0))
+    avant = (precedente or {}).get("fiches_terminees") or 0
+
+    return {
+        "fiches_terminees": terminees,
+        "fiches_prevues": prevues,
+        "fiches_total": len(_FICHE_JOUR),
+        "fiches_du_mois": max(terminees - avant, 0),
+    }
 
 
 def _axe_synthese(nb_terminees: int, nb_precedent: int | None) -> str:
