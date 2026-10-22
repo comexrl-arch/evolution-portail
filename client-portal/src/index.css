@@ -3014,3 +3014,109 @@ body[data-ecran="dashboard"] .portal-monogramme {
   text-align: right;
   margin: 0 0 0.5rem;
 }
+
+/* Parcours adapte au diagnostic */
+.badge-priorite {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.badge-priorite-forte {
+  color: var(--text-on-accent);
+  background: var(--accent);
+}
+
+.badge-priorite-acquis {
+  color: var(--text-tertiary);
+  background: var(--surface-3);
+  border: var(--border-subtle);
+}
+
+.sur-mesure-intro,
+.sur-mesure-fortes {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.sur-mesure-fortes {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+}
+
+.sur-mesure-zones {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sur-mesure-zone {
+  border: var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  background: var(--surface-2);
+}
+
+.sur-mesure-zone-entete {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.sur-mesure-zone-nom {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sur-mesure-zone-score {
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.sur-mesure-pourquoi {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0.25rem 0 0.5rem;
+}
+
+.sur-mesure-fiches {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.sur-mesure-fiche {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: left;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  padding: 0.3rem 0;
+  cursor: pointer;
+}
+
+.sur-mesure-fiche:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.sur-mesure-fiche:not(:disabled):hover {
+  color: var(--accent);
+}
