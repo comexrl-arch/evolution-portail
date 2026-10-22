@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from backend.services import cockpit_service
 from backend.services import docuseal_service
+from backend.services import entrainement_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -777,6 +778,39 @@ def automation_statut_synthese(
         raise _erreur_service_indisponible("automation_statut_synthese", error)
 
     return {"status": "mis a jour"}
+
+
+# --- Entrainement aux objections (IA interactive, Gemini direct) ---
+
+class EntrainementRequest(BaseModel):
+    scenario: str
+    messages: list[dict] = []
+    terminer: bool = False
+
+
+@app.get("/portal/entrainement/scenarios")
+def portal_entrainement_scenarios(authorization: str = Header(default="")):
+    _session_from_header(authorization)
+    return {"scenarios": [{"id": cle, "titre": s["titre"]} for cle, s in entrainement_service.SCENARIOS.items()]}
+
+
+@app.post("/portal/entrainement")
+def portal_entrainement(request: EntrainementRequest, authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    try:
+        return entrainement_service.repondre(
+            session["client_page_id"], request.scenario, request.messages, request.terminer
+        )
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Scénario ou conversation invalide.")
+
+    except PermissionError:
+        raise HTTPException(status_code=429, detail="Limite d'entraînements atteinte pour aujourd'hui.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_entrainement", error)
 
 
 # --- Retours IA sur les fiches (workflow n8n + Gemini), meme cle technique. ---

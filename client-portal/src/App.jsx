@@ -983,6 +983,137 @@ function RetourIA({ retour, actif }) {
   )
 }
 
+// Entrainement aux objections : l'IA joue un prospect, puis fait un retour de
+// coach. Rien n'est enregistre, la conversation vit dans la page.
+function Entrainement() {
+  const [scenarios, setScenarios] = useState([])
+  const [scenario, setScenario] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [saisie, setSaisie] = useState('')
+  const [retour, setRetour] = useState(null)
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  useEffect(() => {
+    fetch(`${API_BASE}/portal/entrainement/scenarios`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
+    })
+      .then((r) => (r.ok ? r.json() : { scenarios: [] }))
+      .then((data) => setScenarios(data.scenarios || []))
+      .catch(() => setScenarios([]))
+  }, [])
+
+  const envoyer = async (id, historique, terminer = false) => {
+    setAttente(true)
+    setErreur('')
+
+    try {
+      const response = await fetch(`${API_BASE}/portal/entrainement`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
+        body: JSON.stringify({ scenario: id, messages: historique, terminer }),
+      })
+
+      if (response.status === 429) throw new Error("Tu as beaucoup pratiqué aujourd'hui : reviens demain pour continuer.")
+      if (!response.ok) throw new Error("L'entraînement n'est pas disponible pour le moment. Réessaie plus tard.")
+
+      const data = await response.json()
+      if (data.role === 'coach') setRetour(data.texte)
+      else setMessages([...historique, { role: 'prospect', texte: data.texte }])
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  const demarrer = (id) => {
+    setScenario(id)
+    setMessages([])
+    setRetour(null)
+    envoyer(id, [])
+  }
+
+  const repondre = (event) => {
+    event.preventDefault()
+    const texte = saisie.trim()
+    if (!texte || attente) return
+    const historique = [...messages, { role: 'client', texte }]
+    setMessages(historique)
+    setSaisie('')
+    envoyer(scenario, historique)
+  }
+
+  if (!scenarios.length) return null
+
+  const tours = messages.filter((m) => m.role === 'client').length
+
+  return (
+    <section className="entrainement">
+      <header className="retour-ia-entete">
+        <MessageCircle size={17} aria-hidden="true" />
+        <h2>Entraîne-toi face à un prospect</h2>
+      </header>
+      <p className="entrainement-intro">
+        L'IA joue un prospect qui te sort une objection. Réponds comme en vrai, puis demande ton retour de coach. Rien n'est enregistré.
+      </p>
+      <div className="entrainement-scenarios">
+        {scenarios.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            className={`entrainement-scenario${scenario === s.id ? ' entrainement-scenario-actif' : ''}`}
+            onClick={() => demarrer(s.id)}
+            disabled={attente}
+          >
+            {s.titre}
+          </button>
+        ))}
+      </div>
+
+      {scenario && (
+        <div className="entrainement-chat">
+          {messages.map((m, index) => (
+            <p key={index} className={`entrainement-bulle entrainement-bulle-${m.role}`}>
+              <span className="entrainement-auteur">{m.role === 'prospect' ? 'Prospect' : 'Toi'}</span>
+              {m.texte}
+            </p>
+          ))}
+          {attente && <p className="retour-ia-attente"><Loader2 size={14} className="animate-spin" aria-hidden="true" /> …</p>}
+
+          {retour ? (
+            <div className="entrainement-retour">
+              <p className="pourquoi-pour-toi-titre">Ton retour de coach</p>
+              {retour.split(/\n\s*\n/).map((paragraphe, index) => <p key={index}>{paragraphe}</p>)}
+              <button type="button" className="prochaine-etape-lien" onClick={() => demarrer(scenario)}>Recommencer</button>
+            </div>
+          ) : messages.length > 0 && (
+            <form onSubmit={repondre} className="entrainement-saisie">
+              <textarea
+                value={saisie}
+                onChange={(e) => setSaisie(e.target.value)}
+                placeholder="Ta réponse au prospect…"
+                rows={2}
+                maxLength={800}
+                disabled={attente}
+              />
+              <div className="entrainement-actions">
+                <button type="submit" className="fiche-bouton" disabled={attente || !saisie.trim()}>Répondre</button>
+                {tours > 0 && (
+                  <button type="button" className="prochaine-etape-lien" disabled={attente} onClick={() => envoyer(scenario, messages, true)}>
+                    Terminer et recevoir mon retour
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
+          {erreur && <p className="text-sm" style={{ color: 'var(--red)' }}>{erreur}</p>}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
   const { surtitre, titre } = lireModule(module.label)
   const illustration = illustrationDuModule(module.label)
@@ -1906,6 +2037,7 @@ function Portail() {
           {onglet === 'ressources' && (
             <>
               <h2 className="accueil-section-titre">Ressources</h2>
+              <Entrainement />
               <section className="panel">
                 <p className="panel-eyebrow">Mes fiches terminées</p>
                 {fichesTerminees.length ? (
@@ -2078,6 +2210,8 @@ function Portail() {
                 )}
               </>
             )}
+
+            {ficheData.entrainement && <Entrainement />}
 
             <RetourIA
               actif={ficheData.retour_ia_actif}

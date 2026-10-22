@@ -24,6 +24,8 @@ services:
         sync: false
       - key: PORTAL_SECRET_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
       - key: PORTAL_FRONTEND_URL
         value: https://portail.rl-evolution.fr
       - key: PORTAL_ALLOWED_ORIGINS
