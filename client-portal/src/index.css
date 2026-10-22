@@ -3000,3 +3000,10 @@ body[data-ecran="dashboard"] .portal-monogramme {
     right: auto;
   }
 }
+
+.fiche-champ-aide {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}

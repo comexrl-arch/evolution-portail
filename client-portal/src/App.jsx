@@ -615,7 +615,7 @@ function FicheSegments({ segments, formValues, onChange, surtitre }) {
 
     return (
       <div key={champ.cle} className="fiche-champ">
-        <p className="fiche-champ-libelle">{renderInline(champ.libelle)}</p>
+        <p className="fiche-champ-libelle">{renderInline(champ.libelle_affiche || champ.libelle)}</p>
         <FieldInput
           champ={champ}
           value={formValues[champ.cle]}
@@ -632,6 +632,83 @@ function FicheSegments({ segments, formValues, onChange, surtitre }) {
       rendre={rendre}
       surtitre={surtitre}
     />
+  )
+}
+
+function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error }) {
+  // Fiche de suivi (plan de la semaine, bilan hebdo) : les reponses se
+  // saisissent sous chaque question ; le bloc du bas date l'entree et
+  // l'ajoute a l'historique. Chaque enregistrement cree une nouvelle ligne.
+  const places = new Set(
+    ficheData.segments.filter((s) => s.type === 'champ').map((s) => s.champ.cle),
+  )
+  const restants = ficheData.champs.filter((champ) => !places.has(champ.cle))
+  // "Semaine du (identifiant de l'entrée)" : libelle technique du schema.
+  const lisible = (libelle) => libelle.replace(/\s*\(identifiant de l'entrée\)/i, '')
+  const affiches = Object.fromEntries(
+    ficheData.segments.filter((s) => s.type === 'champ').map((s) => [s.champ.cle, s.champ.libelle_affiche]),
+  )
+  const champsTableau = ficheData.champs.map((champ) => ({
+    ...champ,
+    libelle: champ.court || lisible(affiches[champ.cle] || champ.libelle).replace(/\s*:\s*$/, ''),
+  }))
+
+  // "Semaine du" propose d'office le lundi de la semaine en cours.
+  const champSemaine = restants.find((champ) => champ.type === 'date')
+  useEffect(() => {
+    if (!champSemaine || formValues[champSemaine.cle]) return
+    const lundi = new Date()
+    lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7))
+    const iso = `${lundi.getFullYear()}-${String(lundi.getMonth() + 1).padStart(2, '0')}-${String(lundi.getDate()).padStart(2, '0')}`
+    onChange(champSemaine.cle, iso)
+  }, [champSemaine, formValues, onChange])
+
+  return (
+    <>
+      <FicheSegments
+        surtitre={surtitreFiche(ficheData.nom)}
+        segments={ficheData.segments}
+        formValues={formValues}
+        onChange={onChange}
+      />
+
+      <form onSubmit={onSubmit} className="fiche-section fiche-formulaire">
+        <header className="fiche-section-entete">
+          <Rocket size={18} className="fiche-section-icone" />
+          <h2 className="fiche-section-titre">Enregistrer cette semaine</h2>
+        </header>
+
+        <p className="fiche-champ-aide">
+          Réponds aux questions ci-dessus, puis enregistre. Chaque semaine ajoute une ligne
+          à ton historique : tu peux revenir sur cette fiche toutes les semaines.
+        </p>
+
+        {restants.map((champ) => (
+          <div key={champ.cle} className="fiche-champ">
+            <label className="fiche-champ-libelle">
+              {lisible(champ.libelle)}
+            </label>
+            <FieldInput champ={champ} value={formValues[champ.cle]} onChange={(value) => onChange(champ.cle, value)} />
+          </div>
+        ))}
+
+        {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
+
+        <button type="submit" disabled={saving} className="fiche-bouton disabled:opacity-60">
+          {saving ? 'Enregistrement...' : 'Enregistrer ma semaine'}
+        </button>
+      </form>
+
+      {ficheData.entrees.length > 0 && (
+        <section className="fiche-section fiche-section-isolee">
+          <header className="fiche-section-entete">
+            <ListChecks size={18} className="fiche-section-icone" />
+            <h2 className="fiche-section-titre">Mes semaines précédentes</h2>
+          </header>
+          {renderTextLine(tableSaisies(champsTableau, ficheData.entrees, null), 'saisies')}
+        </section>
+      )}
+    </>
   )
 }
 
@@ -1754,7 +1831,16 @@ function Portail() {
             {/* Pas de titre ici : verifie sur les 22 fiches master, le
                 contenu commence toujours par son propre titre en "# "
                 (avec emoji) - un h1 au-dessus ferait doublon. */}
-            {ficheData.mode === 'unique' && ficheData.segments ? (
+            {ficheData.mode === 'recurrent' && ficheData.segments ? (
+              <FicheSuivi
+                ficheData={ficheData}
+                formValues={formValues}
+                onChange={(cle, value) => setFormValues((prev) => ({ ...prev, [cle]: value }))}
+                onSubmit={submitEntry}
+                saving={saving}
+                error={error}
+              />
+            ) : ficheData.mode === 'unique' && ficheData.segments ? (
               <>
                 <FicheSegments
                   surtitre={surtitreFiche(ficheData.nom)}
