@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from backend.services import cockpit_service
 from backend.services import docuseal_service
-from backend.services import entrainement_service
+from backend.services import brouillon_service, entrainement_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -435,10 +435,34 @@ def portal_get_fiche(fiche_id: str, authorization: str = Header(default="")):
     try:
         dashboard = notion_service.get_client_dashboard(session["client_page_id"])
         fiche = _fiche_du_client(dashboard, fiche_id)
-        return notion_service.get_fiche(fiche["id"], session["client_page_id"])
+        resultat = notion_service.get_fiche(fiche["id"], session["client_page_id"])
+        resultat["brouillon_ia"] = brouillon_service.disponible(fiche.get("master_id"))
+        return resultat
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_get_fiche", error)
+
+
+@app.post("/portal/fiches/{fiche_id}/brouillon")
+def portal_brouillon_fiche(fiche_id: str, authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    try:
+        dashboard = notion_service.get_client_dashboard(session["client_page_id"])
+        _exiger_fiche_ouverte(dashboard, fiche_id)
+        fiche = _fiche_du_client(dashboard, fiche_id)
+        master_id = fiche.get("master_id")
+        champs = notion_service._champs_for(notion_service.FICHE_SCHEMAS[master_id], master_id)
+        return brouillon_service.proposer(session["client_page_id"], dashboard.get("fiches", []), master_id, champs)
+
+    except (LookupError, KeyError):
+        raise HTTPException(status_code=404, detail="Pas de brouillon pour cette fiche.")
+
+    except PermissionError:
+        raise HTTPException(status_code=429, detail="Limite de brouillons atteinte pour aujourd'hui.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_brouillon_fiche", error)
 
 
 @app.get("/portal/livrables/{livrable_id}")

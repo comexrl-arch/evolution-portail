@@ -985,6 +985,91 @@ function RetourIA({ retour, actif }) {
 
 // Entrainement aux objections : l'IA joue un prospect, puis fait un retour de
 // coach. Rien n'est enregistre, la conversation vit dans la page.
+function BrouillonIA({ ficheId, champs, formValues, onRemplir }) {
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const [message, setMessage] = useState('')
+  const [propositions, setPropositions] = useState({})
+
+  const proposer = async () => {
+    setAttente(true)
+    setErreur('')
+    setMessage('')
+
+    try {
+      const response = await fetch(`${API_BASE}/portal/fiches/${ficheId}/brouillon`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
+      })
+
+      if (response.status === 429) throw new Error("Tu as déjà demandé beaucoup de brouillons aujourd'hui : reviens demain.")
+      if (!response.ok) throw new Error("Le brouillon n'est pas disponible pour le moment. Réessaie plus tard.")
+
+      const { valeurs } = await response.json()
+      const vides = {}
+      const enAttente = {}
+
+      Object.entries(valeurs || {}).forEach(([cle, texte]) => {
+        if ((formValues[cle] || '').trim()) enAttente[cle] = texte
+        else vides[cle] = texte
+      })
+
+      onRemplir(vides)
+      setPropositions(enAttente)
+      setMessage(
+        Object.keys(vides).length
+          ? "Brouillon ajouté dans tes champs vides. Relis-le, mets-le à ta façon, puis enregistre."
+          : 'Tes champs sont déjà remplis : compare avec la proposition ci-dessous.'
+      )
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  const libelle = (cle) => (champs.find((c) => c.cle === cle)?.libelle || '').replace(/\s*:\s*$/, '')
+
+  return (
+    <section className="brouillon-ia">
+      <div className="brouillon-ia-entete">
+        <Sparkles size={18} className="brouillon-ia-icone" />
+        <div>
+          <p className="brouillon-ia-titre">Besoin d'un point de départ ?</p>
+          <p className="brouillon-ia-texte">
+            L'IA te propose une première version à partir de ce que tu as écrit dans tes fiches précédentes. Tu la corriges avec tes mots.
+          </p>
+        </div>
+      </div>
+
+      <button type="button" className="brouillon-ia-bouton" onClick={proposer} disabled={attente}>
+        {attente ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+        {attente ? 'Rédaction en cours...' : 'Proposer un brouillon'}
+      </button>
+
+      {message && <p className="brouillon-ia-message">{message}</p>}
+      {erreur && <p className="brouillon-ia-message" style={{ color: 'var(--red)' }}>{erreur}</p>}
+
+      {Object.entries(propositions).map(([cle, texte]) => (
+        <div key={cle} className="brouillon-ia-proposition">
+          <p className="brouillon-ia-libelle">{libelle(cle)}</p>
+          <p className="brouillon-ia-texte-propose">{texte}</p>
+          <button
+            type="button"
+            className="brouillon-ia-remplacer"
+            onClick={() => {
+              onRemplir({ [cle]: texte })
+              setPropositions(({ [cle]: _, ...reste }) => reste)
+            }}
+          >
+            Remplacer ma version
+          </button>
+        </div>
+      ))}
+    </section>
+  )
+}
+
 function Entrainement() {
   const [scenarios, setScenarios] = useState([])
   const [scenario, setScenario] = useState(null)
@@ -2139,6 +2224,15 @@ function Portail() {
               <>
                 {ficheData.mis_a_jour && (
                   <p className="fiche-maj">Mis à jour le {formaterMaj(ficheData.mis_a_jour)}</p>
+                )}
+
+                {ficheData.brouillon_ia && (
+                  <BrouillonIA
+                    ficheId={activeFicheId}
+                    champs={ficheData.champs}
+                    formValues={formValues}
+                    onRemplir={(valeurs) => setFormValues((prev) => ({ ...prev, ...valeurs }))}
+                  />
                 )}
 
                 <FicheSegments
