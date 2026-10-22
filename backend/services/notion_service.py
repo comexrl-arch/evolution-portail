@@ -1534,6 +1534,7 @@ def _parse_entry(page: dict, champs: list[dict]) -> dict:
         "id": page["id"],
         "date": _prop_value(_prop(props, "Date")),
         "donnees": _donnees_vers_cles(donnees, champs),
+        "retour_ia": _retour_ia_visible(props),
     }
 
 
@@ -1844,6 +1845,8 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
 
     if mis_a_jour:
         result["mis_a_jour"] = mis_a_jour
+
+    result["retour_ia_actif"] = master_id not in _FICHES_SANS_RETOUR_IA
 
     if mode == "unique":
         result["segments"] = segments
@@ -2660,6 +2663,173 @@ def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
         ],
         "zones_fortes": fortes,
     }
+
+
+# --- Retours IA personnalises (decision de Rony du 22/10/2026) ---
+# Apres chaque enregistrement, l'IA commente les reponses du client, l'encourage
+# et lui explique l'interet de la fiche pour SES zones faibles. Circuit :
+# l'enregistrement passe l'entree a "A generer", le workflow n8n (Gemini)
+# recupere les prompts via /automation/retours-ia/a-generer puis renvoie le
+# texte. Autonome : publie tout de suite. Coaching : "A relire", visible par le
+# client apres _DELAI_RELECTURE_RETOUR_IA sauf si Rony le passe a "Bloque".
+_DELAI_RELECTURE_RETOUR_IA_H = 12
+_FICHES_SANS_RETOUR_IA = _DIAGNOSTIC_ZONE_IDS | {_DIAGNOSTIC_FICHE8_MASTER_ID} | {
+    master_id for master_id, schema in FICHE_SCHEMAS.items() if schema["nom"].startswith("Bonus")
+}
+
+_RETOUR_IA_SYSTEME = """Tu es le coach IA du programme eVolution 2.0 de RL-Evolution (Rony), accompagnement commercial des indépendants et TPE des Antilles-Guyane. Un client vient d'enregistrer une fiche de travail. Tu lui écris un retour personnel.
+
+RÈGLES
+- Français, tutoiement, ton chaleureux, direct et concret, sans jargon (pas de "funnel", "mindset", "scaler").
+- Appuie-toi UNIQUEMENT sur les données fournies. N'invente aucun chiffre, aucun fait, aucun résultat. Ne promets ni chiffre d'affaires ni aide publique.
+- Cite ou reprends ses propres mots quand c'est utile, pour qu'il sente que tu as lu SES réponses.
+- 90 à 150 mots, 3 courts paragraphes, pas de titre, pas de markdown, pas de signature.
+
+STRUCTURE
+1. Ce que tu retiens de ses réponses : un point fort précis, et si une réponse est vague ou vide, dis-le simplement et propose comment la préciser.
+2. Pourquoi cette fiche compte pour lui : relie-la à son diagnostic (zone prioritaire, score) et à son objectif 90 jours s'il est fourni.
+3. Un encouragement sincère et UNE action concrète pour les 7 prochains jours."""
+
+
+def _retour_ia_visible(props: dict) -> dict | None:
+    # Ce que le client peut voir du retour IA de cette entree.
+    statut = _prop_value(_prop(props, "Retour IA statut"))
+    texte = (_prop_value(_prop(props, "Retour IA")) or "").strip()
+    date = _prop_value(_prop(props, "Retour IA date"))
+
+    if statut == "À générer":
+        return {"statut": "en_cours"}
+
+    if not texte or statut not in ("Publié", "À relire"):
+        return None
+
+    if statut == "À relire":
+        try:
+            ecrit = datetime.fromisoformat(str(date).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+        if ecrit.tzinfo is None:
+            ecrit = ecrit.replace(tzinfo=timezone.utc)
+
+        if (datetime.now(timezone.utc) - ecrit).total_seconds() < _DELAI_RELECTURE_RETOUR_IA_H * 3600:
+            return {"statut": "relecture"}
+
+    return {"statut": "publie", "texte": texte, "date": date}
+
+
+def demander_retour_ia(fiche_client_id: str, entry_id: str | None) -> bool:
+    """Apres un enregistrement : met l'entree en file pour le retour IA.
+
+    Rien pour les checklists, le diagnostic (3 a 8 : la fiche 8 en tient lieu)
+    et le Bonus aides publiques.
+    """
+    if not entry_id:
+        return False
+
+    _schema, _nom, master_id = _fiche_schema_for(fiche_client_id)
+
+    if master_id in _FICHES_SANS_RETOUR_IA:
+        return False
+
+    _update_page(entry_id, {"Retour IA statut": {"select": {"name": "À générer"}}})
+    return True
+
+
+def _prompt_retour_ia(entree: dict) -> dict | None:
+    props = entree.get("properties", {})
+    client_ids = _prop_value(_prop(props, "Client")) or []
+    fiche_ids = _prop_value(_prop(props, "Fiche Client")) or []
+
+    if not client_ids or not fiche_ids:
+        return None
+
+    try:
+        donnees = json.loads(_prop_value(_prop(props, "Données (JSON)")) or "{}")
+    except json.JSONDecodeError:
+        donnees = {}
+
+    reponses = {
+        question: valeur for question, valeur in donnees.items()
+        if not str(question).startswith("__") and str(valeur).strip()
+    }
+    dashboard = get_client_dashboard(client_ids[0])
+    fiche = next((f for f in dashboard["fiches"] if f["id"].replace("-", "") == fiche_ids[0].replace("-", "")), None)
+
+    if not fiche:
+        return None
+
+    perso = dashboard.get("personnalisation") or {}
+    priorite = fiche.get("priorite") or {}
+    prenom = (dashboard.get("nom") or "").split(" ")[0]
+    lignes = [
+        f"Prénom : {prenom}" if prenom else None,
+        f"Formule : {'eVolution Autonome' if _est_parcours_autonome(dashboard.get('parcours')) else 'Coaching 90 jours'}",
+        f"Objectif 90 jours : {dashboard['objectif_90j']}" if dashboard.get("objectif_90j") else None,
+        f"Fiche enregistrée : {fiche['nom'].split(' - ', 1)[-1]}",
+    ]
+
+    if perso.get("scores"):
+        lignes.append("Diagnostic : " + ", ".join(f"{zone} {score}/3" for zone, score in perso["scores"].items()) + f" (total {perso['total']}/15)")
+        lignes.append("Zones prioritaires : " + (", ".join(z["zone"] for z in perso["zones_prioritaires"]) or "aucune"))
+
+    if priorite.get("type") == "prioritaire":
+        lignes.append(f"Cette fiche travaille sa zone prioritaire : {priorite['zone']}. {_POURQUOI_PAR_ZONE[priorite['zone']]}")
+    elif priorite.get("type") == "point_fort":
+        lignes.append(f"Cette fiche touche un de ses points forts : {priorite['zone']}. Encourage-le à la boucler vite pour se concentrer sur ses priorités.")
+
+    lignes.append("")
+    lignes.append("Ses réponses :")
+    lignes.extend(f"- {question} {valeur}" for question, valeur in reponses.items())
+
+    if not reponses:
+        lignes.append("(aucune réponse remplie)")
+
+    return {
+        "entry_id": entree["id"],
+        "client": dashboard.get("nom"),
+        "fiche": fiche["nom"].split(" - ", 1)[-1],
+        "autonome": _est_parcours_autonome(dashboard.get("parcours")),
+        "systeme": _RETOUR_IA_SYSTEME,
+        "message": "\n".join(ligne for ligne in lignes if ligne is not None),
+    }
+
+
+def retours_ia_a_generer(limite: int = 10) -> list[dict]:
+    entrees = _query_data_source(
+        ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={"property": "Retour IA statut", "select": {"equals": "À générer"}},
+    )
+    prompts = []
+
+    for entree in entrees[:limite]:
+        try:
+            prompt = _prompt_retour_ia(entree)
+        except Exception as error:
+            logger.warning("Retour IA %s : prompt impossible (%s)", entree.get("id"), error)
+            prompt = None
+
+        if prompt:
+            prompts.append(prompt)
+        else:
+            _update_page(entree["id"], {"Retour IA statut": {"select": None}})
+
+    return prompts
+
+
+def enregistrer_retour_ia(entry_id: str, texte: str, autonome: bool) -> str:
+    texte = (texte or "").strip()
+
+    if not texte:
+        raise ValueError("Retour IA vide")
+
+    statut = "Publié" if autonome else "À relire"
+    _update_page(entry_id, {
+        "Retour IA": {"rich_text": [{"text": {"content": texte[i:i + 2000]}} for i in range(0, min(len(texte), 4000), 2000)]},
+        "Retour IA statut": {"select": {"name": statut}},
+        "Retour IA date": {"date": {"start": datetime.now(timezone.utc).isoformat(timespec="seconds")}},
+    })
+    return statut
 
 
 # --- Parcours Autonome : fiche 8 automatique (decision du 21/10/2026) ---

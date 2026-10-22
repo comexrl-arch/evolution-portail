@@ -481,7 +481,16 @@ def portal_create_entry(
 
     if background_tasks is not None:
         background_tasks.add_task(_recalculer_fiche8, session["client_page_id"], fiche_id)
+        background_tasks.add_task(_demander_retour_ia, fiche_id, (entry or {}).get("id"))
     return {"status": "saved", "entry": entry}
+
+
+def _demander_retour_ia(fiche_id: str, entry_id: str | None) -> None:
+    # Tache de fond, best-effort : met la saisie en file pour le retour IA.
+    try:
+        notion_service.demander_retour_ia(fiche_id, entry_id)
+    except Exception as error:
+        _journaliser_alerte_impossible("retour_ia", error)
 
 
 def _recalculer_fiche8(client_page_id: str, fiche_id: str) -> None:
@@ -768,6 +777,40 @@ def automation_statut_synthese(
         raise _erreur_service_indisponible("automation_statut_synthese", error)
 
     return {"status": "mis a jour"}
+
+
+# --- Retours IA sur les fiches (workflow n8n + Gemini), meme cle technique. ---
+
+class RetourIARequest(BaseModel):
+    texte: str
+    autonome: bool = False
+
+
+@app.get("/automation/retours-ia/a-generer")
+def automation_retours_ia_a_generer(authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        return {"retours": notion_service.retours_ia_a_generer()}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_retours_ia_a_generer", error)
+
+
+@app.post("/automation/retours-ia/{entry_id}")
+def automation_enregistrer_retour_ia(entry_id: str, request: RetourIARequest, authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        statut = notion_service.enregistrer_retour_ia(entry_id, request.texte, request.autonome)
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Texte du retour vide.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_enregistrer_retour_ia", error)
+
+    return {"statut": statut}
 
 
 @app.get("/coach/suivi-clients")
