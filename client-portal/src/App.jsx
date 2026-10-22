@@ -863,6 +863,77 @@ function ProchaineEtape({ module, fiche, onOpen, onParcours }) {
   )
 }
 
+// Parcours adapte au diagnostic : la fiche 8 terminee designe les zones a
+// travailler en priorite (notion_service._personnaliser_parcours).
+function BadgePriorite({ priorite }) {
+  if (!priorite) return null
+
+  return priorite.type === 'prioritaire' ? (
+    <span className="badge-priorite badge-priorite-forte" title={`Zone à travailler : ${priorite.zone}`}>Prioritaire pour toi</span>
+  ) : (
+    <span className="badge-priorite badge-priorite-acquis" title={`Ton point fort : ${priorite.zone}`}>Point fort</span>
+  )
+}
+
+function ParcoursSurMesure({ personnalisation, fiches, onOpen }) {
+  if (!personnalisation) return null
+
+  const parId = Object.fromEntries(fiches.map((f) => [f.id, f]))
+  const { zones_prioritaires: zones, zones_fortes: fortes, total } = personnalisation
+
+  return (
+    <section className="panel sur-mesure">
+      <p className="panel-eyebrow">Ton parcours sur mesure · diagnostic {total} / 15</p>
+      {zones.length ? (
+        <>
+          <p className="sur-mesure-intro">
+            D'après ton diagnostic, voici où mettre ton énergie en premier. Ces fiches portent le badge « Prioritaire pour toi » dans ton parcours.
+          </p>
+          <ol className="sur-mesure-zones">
+            {zones.map((zone) => (
+              <li key={zone.zone} className="sur-mesure-zone">
+                <div className="sur-mesure-zone-entete">
+                  <span className="sur-mesure-zone-nom">{zone.zone}</span>
+                  <span className="sur-mesure-zone-score">{zone.score} / 3</span>
+                </div>
+                <p className="sur-mesure-pourquoi">{zone.pourquoi}</p>
+                <ul className="sur-mesure-fiches">
+                  {zone.fiches.map((id) => {
+                    const fiche = parId[id]
+                    if (!fiche) return null
+                    const bloquee = fiche.acces?.includes('Bloqué')
+                    const { numero, titre } = lireFiche(fiche.nom)
+
+                    return (
+                      <li key={id}>
+                        <button type="button" disabled={bloquee} onClick={() => onOpen(id)} className="sur-mesure-fiche">
+                          <span>{numero ? `${numero}. ` : ''}{titre}</span>
+                          {fiche.etat === 'Terminé' ? (
+                            <CheckCircle2 size={14} className="module-fiche-icone-fini" aria-label="Terminée" />
+                          ) : bloquee ? (
+                            <Lock size={13} aria-label="Pas encore ouverte" />
+                          ) : (
+                            <ChevronRight size={14} aria-hidden="true" />
+                          )}
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        </>
+      ) : (
+        <p className="sur-mesure-intro">Ton diagnostic est solide sur les 5 zones : avance à ton rythme sur l'ensemble du parcours.</p>
+      )}
+      {fortes.length > 0 && (
+        <p className="sur-mesure-fortes">Tes points forts : {fortes.join(', ')}. Les fiches liées sont marquées « Point fort » : tu peux les traiter plus vite.</p>
+      )}
+    </section>
+  )
+}
+
 function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
   const { surtitre, titre } = lireModule(module.label)
   const illustration = illustrationDuModule(module.label)
@@ -907,6 +978,7 @@ function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
                 <button disabled={bloquee} onClick={() => onOpen(fiche.id)} className={`module-fiche module-fiche-${etat}`}>
                   <span className="module-fiche-numero">{n ?? '•'}</span>
                   <span className="module-fiche-titre">{t}</span>
+                  <BadgePriorite priorite={fiche.priorite} />
                   {bloquee ? (
                     <Lock size={13} className="module-fiche-icone" aria-label="Bloquée" />
                   ) : etat === 'fini' ? (
@@ -1717,6 +1789,8 @@ function Portail() {
                 onOpen={openFiche}
                 onParcours={() => changerOnglet('parcours')}
               />
+
+              <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
 
               {dashboard.objectif_90j && (
                 <section className="panel">

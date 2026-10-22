@@ -1082,6 +1082,7 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "fiches": fiches,
         "kpi": kpi_future.result(),
         "syntheses": syntheses_du_client(client_page_id, fiches) if autonome else [],
+        "personnalisation": _personnaliser_parcours(fiches),
     }
 
 
@@ -2569,6 +2570,95 @@ def diagnostic_vient_de_se_terminer(client_page_id: str, fiche_client_id: str) -
         "client_nom": dashboard["nom"],
         "client_email": (dashboard.get("identite") or {}).get("email"),
         "parcours": dashboard.get("parcours"),
+    }
+
+
+# --- Parcours adapte au diagnostic (demande de Rony du 22/10/2026) ---
+# Une fois la fiche 8 terminee, ses scores (ceux valides par le coach en
+# Coaching, ceux recalcules en Autonome) designent les zones a travailler en
+# priorite. L'ordre de deblocage ne change pas : on signale seulement au
+# client les fiches qui comptent le plus pour lui.
+_FICHES_PAR_ZONE = {
+    "Offre": [_NUMERO_TO_MASTER_ID[n] for n in ("9", "11", "10", "12")],
+    "Visibilité": [_NUMERO_TO_MASTER_ID[n] for n in ("11", "12", "22", "20")],
+    "Prospection": [_NUMERO_TO_MASTER_ID[n] for n in ("14", "15", "13", "17")],
+    "Conversion": [_NUMERO_TO_MASTER_ID[n] for n in ("18", "16")],
+    "Suivi commercial": [_NUMERO_TO_MASTER_ID[n] for n in ("19", "17")],
+}
+_POURQUOI_PAR_ZONE = {
+    "Offre": "Tant qu'on ne comprend pas ce que tu vends en 10 secondes, prospecter plus ne servira pas.",
+    "Visibilité": "On doit te trouver et se souvenir de toi avant même que tu prospectes.",
+    "Prospection": "La régularité compte plus que le volume : un petit rythme tenu chaque semaine.",
+    "Conversion": "Tes rendez-vous doivent se transformer en clients : trame et réponses aux objections.",
+    "Suivi commercial": "Beaucoup de ventes se perdent faute de relance : chaque proposition se suit.",
+}
+
+
+def _scores_fiche8(fiche8_id: str) -> dict:
+    # Lecture seule des lignes "Score de X : n / 3" de la fiche 8.
+    libelle_vers_zone = {libelle.lower(): zone for zone, libelle in _FICHE8_LIBELLE_SCORE.items()}
+    scores = {}
+
+    for bloc in _list_children(fiche8_id):
+        texte = _block_text(bloc)
+        match = re.match(r"^\s*(.+?)\s*:\s*(\d)\s*/\s*3\b", texte)
+
+        if match and match.group(1).lower() in libelle_vers_zone:
+            scores[libelle_vers_zone[match.group(1).lower()]] = int(match.group(2))
+
+    return scores
+
+
+def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
+    """Marque les fiches liees aux zones faibles du diagnostic.
+
+    Zones prioritaires : les 3 plus faibles sous 3/3 (a egalite, l'ordre des
+    zones). Zones fortes : 3/3. Ajoute a chaque fiche concernee
+    fiche["priorite"] = {"type": "prioritaire" | "point_fort", "zone": ...}.
+    None tant que la fiche 8 n'est pas terminee ou illisible.
+    """
+    fiche8 = next((f for f in fiches if f.get("master_id") == _DIAGNOSTIC_FICHE8_MASTER_ID), None)
+
+    if not fiche8 or fiche8.get("etat") != "Terminé":
+        return None
+
+    try:
+        scores = _scores_fiche8(fiche8["id"])
+    except Exception as error:
+        logger.warning("Scores de la fiche 8 illisibles (%s) : parcours standard.", error)
+        return None
+
+    if len(scores) != len(_DIAGNOSTIC_ZONES):
+        return None
+
+    ordre = [zone["zone"] for zone in _DIAGNOSTIC_ZONES]
+    faibles = sorted((z for z in ordre if scores[z] < 3), key=lambda z: (scores[z], ordre.index(z)))[:3]
+    fortes = [z for z in ordre if scores[z] == 3]
+    par_id = {f.get("master_id"): f for f in fiches}
+
+    for zone in reversed(faibles):
+        for master_id in _FICHES_PAR_ZONE[zone]:
+            if master_id in par_id:
+                par_id[master_id]["priorite"] = {"type": "prioritaire", "zone": zone}
+
+    for zone in fortes:
+        for master_id in _FICHES_PAR_ZONE[zone]:
+            if master_id in par_id and "priorite" not in par_id[master_id]:
+                par_id[master_id]["priorite"] = {"type": "point_fort", "zone": zone}
+
+    return {
+        "scores": scores,
+        "total": sum(scores.values()),
+        "zones_prioritaires": [
+            {
+                "zone": zone,
+                "score": scores[zone],
+                "pourquoi": _POURQUOI_PAR_ZONE[zone],
+                "fiches": [par_id[m]["id"] for m in _FICHES_PAR_ZONE[zone] if m in par_id],
+            }
+            for zone in faibles
+        ],
+        "zones_fortes": fortes,
     }
 
 
