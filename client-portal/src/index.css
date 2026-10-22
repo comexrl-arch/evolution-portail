@@ -3007,3 +3007,10 @@ body[data-ecran="dashboard"] .portal-monogramme {
   margin: 0 0 1rem;
   line-height: 1.5;
 }
+
+.fiche-maj {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  text-align: right;
+  margin: 0 0 0.5rem;
+}

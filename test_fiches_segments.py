@@ -47,7 +47,8 @@ def para(bid, texte):
 
 PLAN = [
     para("p1", "Fixons tes objectifs d'action pour les 7 prochains jours."),
-    puce("q1", ("Cette semaine, je vais contacter :", True), ("  nouveaux prospects.", False)),
+    puce("q1", ("Score d'Offre :", True), ("  / 3", False)),
+    puce("q1b", ("Combien de prospects vas-tu contacter ?", True)),
     puce("q2", ("Le canal de contact principal sera :", True), enfants=True),
     puce("q3", ("Le segment ciblé en priorité :", True), (" ", False)),
     puce("q4", ("Créneau bloqué dans mon agenda :", True), enfants=True),
@@ -70,7 +71,7 @@ with patch.object(ns, "_list_children", side_effect=enfants_de):
     segments = ns._page_segments("page")
 
 champs = {s["champ"]["cle"]: s["champ"] for s in segments if s["type"] == "champ"}
-check("trou a remplir -> champ", champs.get("q1", {}).get("libelle") == "Cette semaine, je vais contacter : … nouveaux prospects.")
+check("'**Score :**  / 3' (fiche 8, rempli par le coach) reste du texte", "q1" not in champs)
 check("options A | B -> choix a 5 options", champs.get("q2", {}).get("type") == "choix" and len(champs["q2"]["options"]) == 5)
 check("question en gras finissant par ':' -> champ", champs.get("q3", {}).get("type") == "texte")
 check("question avec 'Ecris ici' -> champ", champs.get("q4", {}).get("type") == "texte")
@@ -98,7 +99,11 @@ with patch.object(ns, "_segments_master_cache", return_value=segments):
 
 cles = [s["champ"]["cle"] for s in suivi or [] if s["type"] == "champ"]
 check("champs places dans l'ordre", cles == ["nb", "canal", "segment", "creneau"])
-check("libelle de la fiche affiche", suivi and suivi[1]["champ"]["libelle_affiche"].startswith("Cette semaine"))
+check("libelle de la fiche affiche", suivi and suivi[2]["champ"]["libelle_affiche"].startswith("Combien"))
+
+with patch.object(ns, "_list_children", side_effect=enfants_de):
+    coach = ns._page_segments("page", questions_libres=False)
+check("fiche coach : aucune question libre", not any(s["type"] == "champ" and s["champ"]["cle"] in ("q1b", "q3") for s in coach))
 
 with patch.object(ns, "_segments_master_cache", return_value=segments[:2]):
     check("modele different -> affichage classique", ns._segments_recurrents("m", SCHEMA) is None)
@@ -108,6 +113,11 @@ CH = [{"cle": "a", "libelle": "Ton activité / Ton métier :"}, {"cle": "b", "li
 cles = ns._donnees_vers_cles({"Votre activité / Votre métier :": "Plombier", "Qui sont tes clients actuels ?": "TPE", "__checklist__": {}}, CH)
 check("ancienne reponse 'vous' retrouvee", cles.get("a") == "Plombier" and cles.get("b") == "TPE")
 check("etat des cases intact", "__checklist__" in cles)
+
+print("Horodatage de mise a jour")
+blocs = [{"last_edited_time": "2026-10-20T10:00:00.000Z"}, {"last_edited_time": "2026-10-22T11:31:00.000Z"}]
+with patch.object(ns, "_list_children", return_value=blocs):
+    check("derniere modification du contenu", ns._derniere_maj_blocs("p") == "2026-10-22T11:31:00.000Z")
 
 print(f"\n{passed} PASS, {failed} FAIL")
 sys.exit(1 if failed else 0)

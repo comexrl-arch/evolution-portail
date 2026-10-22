@@ -1358,10 +1358,11 @@ def _options_du_todo(block: dict) -> list[str]:
 
 
 def _question_sans_zone(block: dict) -> str | None:
-    # Puce en gras sans sous-puce "Ecris ici..." : "**Le segment cible :**"
-    # ou "**Je vais contacter :**  nouveaux prospects." (trou a remplir).
+    # Puce en gras sans sous-puce "Ecris ici..." : "**Le segment cible :**".
     # Sans ce repere, la question s'affichait comme du texte, sans aucun
     # moyen d'y repondre. Renvoie le libelle de la question, sinon None.
+    # Pas de detection des "trous" (double espace) : la fiche 8 en contient
+    # ("**Score d'Offre :**  / 3") et ces lignes sont remplies par le coach.
     if block.get("type") != "bulleted_list_item" or block.get("has_children"):
         return None
 
@@ -1381,13 +1382,10 @@ def _question_sans_zone(block: dict) -> str | None:
     if not reste.strip() and propre.endswith((":", "?")):
         return propre
 
-    if re.search(r"\S {2,}\S", texte.strip()):
-        return re.sub(r" {2,}", " … ", propre)
-
     return None
 
 
-def _page_segments(page_id: str) -> list[dict]:
+def _page_segments(page_id: str, questions_libres: bool = True) -> list[dict]:
     # Rendu "fidele" d'une fiche Q&A : chaque question Notion (puce en gras
     # suivie d'une sous-puce "Ecrivez ici...") devient un champ affiche en
     # ligne juste apres son enonce, plutot qu'une zone de reponses separee.
@@ -1422,7 +1420,7 @@ def _page_segments(page_id: str) -> list[dict]:
             })
             continue
 
-        question = _question_sans_zone(block)
+        question = _question_sans_zone(block) if questions_libres else None
 
         if question:
             segments.append({
@@ -1663,6 +1661,18 @@ def _contenu_master_cache(page_id: str) -> str:
     return _cache_set(cle, _get_page_content(page_id, checks=True), _TTL_MASTER)
 
 
+def _derniere_maj_blocs(page_id: str) -> str | None:
+    # Date de la derniere modification du contenu (pas des proprietes : la
+    # validation de la fiche ne doit pas compter comme une mise a jour).
+    try:
+        dates = [b.get("last_edited_time") for b in _list_children(page_id)]
+    except RuntimeError:
+        return None
+
+    dates = [d for d in dates if d]
+    return max(dates) if dates else None
+
+
 def _segments_recurrents(master_id: str, schema: dict) -> list[dict] | None:
     # Fiche de suivi (plan de la semaine, bilan hebdo) : le modele Notion
     # pose les memes questions que le formulaire, dans le meme ordre. On
@@ -1725,6 +1735,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
     livrables_future = _POOL.submit(_livrables_for_fiche, fiche_client_id, master_id)
 
     segments = None
+    mis_a_jour = None
 
     if mode == "unique":
         if master_id in _FICHES_DEBLOCAGE_COACH:
@@ -1738,7 +1749,11 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
             # portail tant qu'on lisait le master. Ces fiches n'ont pas de
             # champs to_do/sous-puce a proteger du bug de flattening n8n
             # decrit ci-dessous, donc rien ne justifie le repli sur master.
-            segments = _page_segments(fiche_client_id)
+            # Contenu ecrit par le coach : rien n'y est a remplir par le
+            # client (sinon sa reponse enregistree masquerait les mises a
+            # jour du coach).
+            segments = _page_segments(fiche_client_id, questions_libres=False)
+            mis_a_jour = _derniere_maj_blocs(fiche_client_id)
         else:
             # Toujours lu depuis la fiche MASTER plutot que la copie client :
             # le pipeline n8n de duplication (Sub_InjectBlocksTree) peut
@@ -1825,6 +1840,9 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
         "livrables": livrables,
         "checks": checks_etat,
     }
+
+    if mis_a_jour:
+        result["mis_a_jour"] = mis_a_jour
 
     if mode == "unique":
         result["segments"] = segments
