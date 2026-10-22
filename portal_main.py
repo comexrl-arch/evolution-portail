@@ -813,6 +813,32 @@ def automation_enregistrer_retour_ia(entry_id: str, request: RetourIARequest, au
     return {"statut": statut}
 
 
+# --- Relances intelligentes (workflow n8n quotidien), meme cle technique. ---
+
+@app.get("/automation/relances-dues")
+def automation_relances_dues(authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        return {"relances": notion_service.relances_dues()}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_relances_dues", error)
+
+
+@app.post("/automation/relances/{client_page_id}")
+def automation_relance_envoyee(client_page_id: str, authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        notion_service.marquer_relance_envoyee(client_page_id)
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_relance_envoyee", error)
+
+    return {"status": "relance enregistree"}
+
+
 @app.get("/coach/suivi-clients")
 def coach_suivi_clients(x_coach_key: str = Header(default="")):
     # Onglet "Suivi client" : lecture seule de "Suivi clients" du cockpit Google

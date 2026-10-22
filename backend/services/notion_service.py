@@ -2832,6 +2832,144 @@ def enregistrer_retour_ia(entry_id: str, texte: str, autonome: bool) -> str:
     return statut
 
 
+# --- Relances intelligentes (decision de Rony du 22/10/2026) ---
+# Chaque jour, le workflow n8n demande les clients a relancer : aucune saisie
+# depuis _RELANCE_INACTIF_JOURS jours, ou bilan hebdomadaire oublie une fois
+# la routine de prospection ouverte (J31). Une relance au plus tous les
+# _RELANCE_INTERVALLE_JOURS jours par client. L'IA redige un e-mail court et
+# personnel ; n8n l'envoie puis appelle marquer_relance_envoyee().
+_RELANCE_INACTIF_JOURS = 7
+_RELANCE_INTERVALLE_JOURS = 7
+_RELANCE_BILAN_DES_JOUR = 31
+_BILAN_HEBDO_MASTER_ID = _NUMERO_TO_MASTER_ID["17"]
+
+_RELANCE_SYSTEME = """Tu écris, au nom de Rony (RL-Evolution, programme eVolution 2.0), un court e-mail de relance à un client indépendant ou TPE des Antilles-Guyane qui a un peu décroché de son parcours.
+
+RÈGLES
+- Français, tutoiement, ton chaleureux, simple et motivant, jamais culpabilisant ni insistant.
+- N'utilise QUE les données fournies, n'invente aucun chiffre ni fait.
+- 60 à 110 mots, pas d'objet, pas de markdown, pas de signature (elle est ajoutée ensuite).
+- Commence par son prénom.
+- Rappelle-lui pourquoi il fait ce parcours (son objectif s'il est fourni), propose UNE seule petite action concrète à faire aujourd'hui en 15 minutes (la fiche indiquée), et termine par une phrase d'encouragement.
+- Si c'est un bilan hebdomadaire oublié : explique en une phrase que 10 minutes de bilan chaque semaine montrent ce qui marche et ce qui coince."""
+
+
+def _jours_depuis_iso(valeur, maintenant: datetime) -> int | None:
+    if not valeur:
+        return None
+
+    try:
+        date = datetime.fromisoformat(str(valeur).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+
+    return (maintenant - date).days
+
+
+def _relance_du_client(row: dict, maintenant: datetime) -> dict | None:
+    props = row.get("properties", {})
+
+    if _prop_value(_prop(props, "État")) != "En cours" or _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))):
+        return None
+
+    email = _prop_value(_prop(props, "E-mail"))
+    debut = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
+    jour = _jours_depuis_iso(debut, maintenant)
+
+    if not email or jour is None or jour < 2 or jour > 95:
+        return None
+
+    derniere = _jours_depuis_iso(_prop_value(_prop(props, "Dernière relance")), maintenant)
+
+    if derniere is not None and derniere < _RELANCE_INTERVALLE_JOURS:
+        return None
+
+    entrees = _query_data_source(
+        ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={"property": "Client", "relation": {"contains": row["id"]}},
+    )
+    activite = [_jours_depuis_iso(e.get("last_edited_time"), maintenant) for e in entrees]
+    activite = [j for j in activite if j is not None]
+    inactif = min(activite) if activite else jour
+
+    dashboard = get_client_dashboard(row["id"])
+    fiche_bilan = next((f for f in dashboard["fiches"] if f.get("master_id") == _BILAN_HEBDO_MASTER_ID), None)
+
+    if inactif >= _RELANCE_INACTIF_JOURS:
+        type_relance = "inactif"
+    elif jour >= _RELANCE_BILAN_DES_JOUR and fiche_bilan:
+        bilans = [
+            _jours_depuis_iso(e.get("last_edited_time"), maintenant)
+            for e in entrees
+            if fiche_bilan["id"].replace("-", "") in [r.replace("-", "") for r in (_prop_value(_prop(e.get("properties", {}), "Fiche Client")) or [])]
+        ]
+        bilans = [j for j in bilans if j is not None]
+
+        if bilans and min(bilans) < 7:
+            return None
+
+        type_relance = "bilan"
+    else:
+        return None
+
+    ouvertes = [f for f in dashboard["fiches"] if f.get("etat") != "Terminé" and "Bloqué" not in str(f.get("acces") or "")]
+    fiche = fiche_bilan if type_relance == "bilan" else next(
+        (f for f in ouvertes if (f.get("priorite") or {}).get("type") == "prioritaire"),
+        ouvertes[0] if ouvertes else None,
+    )
+    perso = dashboard.get("personnalisation") or {}
+    prenom = (dashboard.get("nom") or "").split(" ")[0]
+    lignes = [
+        f"Prénom : {prenom}",
+        f"Jour du parcours : J{jour} sur 90",
+        f"Objectif 90 jours : {dashboard['objectif_90j']}" if dashboard.get("objectif_90j") else None,
+        f"Jours sans activité sur son espace : {inactif}" if type_relance == "inactif" else "Bilan hebdomadaire de prospection non rempli depuis plus de 7 jours",
+        f"Fiches terminées : {sum(1 for f in dashboard['fiches'] if f.get('etat') == 'Terminé')} sur {len(dashboard['fiches'])}",
+        "Zones prioritaires de son diagnostic : " + ", ".join(z["zone"] for z in perso["zones_prioritaires"]) if perso.get("zones_prioritaires") else None,
+        f"Fiche à faire aujourd'hui : {fiche['nom'].split(' - ', 1)[-1]}" if fiche else None,
+    ]
+
+    return {
+        "client_page_id": row["id"],
+        "email": email,
+        "prenom": prenom,
+        "client": dashboard.get("nom"),
+        "type": type_relance,
+        "objet": f"{prenom}, 15 minutes pour avancer aujourd'hui ?" if type_relance == "inactif" else f"{prenom}, ton bilan de la semaine t'attend",
+        "systeme": _RELANCE_SYSTEME,
+        "message": "\n".join(ligne for ligne in lignes if ligne),
+    }
+
+
+def relances_dues(maintenant: datetime | None = None) -> list[dict]:
+    maintenant = maintenant or datetime.now(timezone.utc)
+    relances = []
+
+    for row in _query_data_source(CLIENTS_DATA_SOURCE_ID):
+        try:
+            relance = _relance_du_client(row, maintenant)
+        except Exception as error:
+            logger.warning("Relance %s impossible a evaluer (%s)", row.get("id"), error)
+            relance = None
+
+        if relance:
+            relances.append(relance)
+
+    return relances
+
+
+def marquer_relance_envoyee(client_page_id: str) -> None:
+    props = _get_page(client_page_id).get("properties", {})
+    nombre = _prop_value(_prop(props, "Nb relances")) or 0
+    _update_page(client_page_id, {
+        "Dernière relance": {"date": {"start": datetime.now(timezone.utc).strftime("%Y-%m-%d")}},
+        "Nb relances": {"number": nombre + 1},
+    })
+
+
 # --- Parcours Autonome : fiche 8 automatique (decision du 21/10/2026) ---
 # Les numeros de fiche cites sont ceux AFFICHES (numerotation Notion du
 # 07/10/2026), pas les numeros internes de _PARCOURS.
