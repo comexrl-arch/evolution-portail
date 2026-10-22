@@ -963,28 +963,75 @@ function RetourIA({ retour, actif }) {
     <section className="retour-ia">
       <header className="retour-ia-entete">
         <Sparkles size={17} aria-hidden="true" />
-        <h2>Ton retour personnalisé</h2>
+        <h2>Le retour d'Idris</h2>
       </header>
       {retour.statut === 'publie' ? (
         <>
           {retour.texte.split(/\n\s*\n/).map((paragraphe, index) => (
             <p key={index}>{paragraphe}</p>
           ))}
-          {retour.date && <p className="retour-ia-date">Rédigé le {formaterMaj(retour.date)}</p>}
+          {retour.date && <p className="retour-ia-date">Rédigé par Idris le {formaterMaj(retour.date)}</p>}
         </>
       ) : retour.statut === 'relecture' ? (
-        <p className="retour-ia-attente">Ton retour est prêt, Rony le relit. Il apparaîtra ici d'ici quelques heures.</p>
+        <p className="retour-ia-attente">Idris a rédigé ton retour, Rony le relit. Il apparaîtra ici d'ici quelques heures.</p>
       ) : (
         <p className="retour-ia-attente">
-          <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Ton retour personnalisé est en cours de rédaction, il arrive dans quelques minutes.
+          <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Idris rédige ton retour personnalisé, il arrive dans un instant.
         </p>
       )}
     </section>
   )
 }
 
-// Entrainement aux objections : l'IA joue un prospect, puis fait un retour de
-// coach. Rien n'est enregistre, la conversation vit dans la page.
+// Entrainement aux objections : Idris (l'assistant IA) joue un prospect, puis
+// fait un retour de coach. Rien n'est enregistre, la conversation vit dans la page.
+// Idris, l'assistant IA du parcours, se presente une fois en debut de
+// parcours (decision de Rony du 22/10/2026). Masque des que le client l'a lu.
+const IDRIS_PRESENTE_KEY = 'idris_presente'
+
+function PresentationIdris({ nom }) {
+  const [visible, setVisible] = useState(() => {
+    try {
+      return localStorage.getItem(IDRIS_PRESENTE_KEY) !== '1'
+    } catch {
+      return true
+    }
+  })
+
+  if (!visible) return null
+
+  const prenom = (nom || '').split(' ')[0]
+
+  const fermer = () => {
+    try {
+      localStorage.setItem(IDRIS_PRESENTE_KEY, '1')
+    } catch {
+      // Navigation privee : la carte reviendra a la prochaine visite.
+    }
+    setVisible(false)
+  }
+
+  return (
+    <section className="idris-presentation">
+      <header className="retour-ia-entete">
+        <Sparkles size={17} aria-hidden="true" />
+        <h2>{prenom ? `Bonjour ${prenom}, moi c'est Idris` : "Bonjour, moi c'est Idris"}</h2>
+      </header>
+      <p>
+        Je suis l'assistant IA de ton parcours eVolution 2.0, aux côtés de Rony. Je m'appuie sur ton diagnostic
+        et sur tes vrais chiffres pour t'aider là où ça compte le plus pour toi.
+      </p>
+      <ul>
+        <li>Après chaque fiche, je te fais un retour personnalisé : ce que tu as bien fait, et pourquoi la suite compte pour toi.</li>
+        <li>Sur tes fiches de rédaction (phrase de positionnement, script d'approche), je te propose un premier jet que tu corriges avec tes mots.</li>
+        <li>Quand tu arrives à la vente, je joue tes prospects pour t'entraîner à répondre aux objections.</li>
+      </ul>
+      <p>Rony garde l'œil sur ton parcours ; moi, je suis là au quotidien. On y va ?</p>
+      <button type="button" className="brouillon-ia-bouton" onClick={fermer}>Enchanté, Idris !</button>
+    </section>
+  )
+}
+
 function BrouillonIA({ ficheId, champs, formValues, onRemplir }) {
   const [attente, setAttente] = useState(false)
   const [erreur, setErreur] = useState('')
@@ -1037,14 +1084,14 @@ function BrouillonIA({ ficheId, champs, formValues, onRemplir }) {
         <div>
           <p className="brouillon-ia-titre">Besoin d'un point de départ ?</p>
           <p className="brouillon-ia-texte">
-            L'IA te propose une première version à partir de ce que tu as écrit dans tes fiches précédentes. Tu la corriges avec tes mots.
+            Idris te propose une première version à partir de ce que tu as écrit dans tes fiches précédentes. Tu la corriges avec tes mots.
           </p>
         </div>
       </div>
 
       <button type="button" className="brouillon-ia-bouton" onClick={proposer} disabled={attente}>
         {attente ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-        {attente ? 'Rédaction en cours...' : 'Proposer un brouillon'}
+        {attente ? 'Idris rédige...' : 'Demander un brouillon à Idris'}
       </button>
 
       {message && <p className="brouillon-ia-message">{message}</p>}
@@ -1140,7 +1187,7 @@ function Entrainement() {
         <h2>Entraîne-toi face à un prospect</h2>
       </header>
       <p className="entrainement-intro">
-        L'IA joue un prospect qui te sort une objection. Réponds comme en vrai, puis demande ton retour de coach. Rien n'est enregistré.
+        Idris joue un prospect qui te sort une objection. Réponds comme en vrai, puis demande-lui ton retour de coach. Rien n'est enregistré.
       </p>
       <div className="entrainement-scenarios">
         {scenarios.map((s) => (
@@ -1168,7 +1215,7 @@ function Entrainement() {
 
           {retour ? (
             <div className="entrainement-retour">
-              <p className="pourquoi-pour-toi-titre">Ton retour de coach</p>
+              <p className="pourquoi-pour-toi-titre">Le retour d'Idris</p>
               {retour.split(/\n\s*\n/).map((paragraphe, index) => <p key={index}>{paragraphe}</p>)}
               <button type="button" className="prochaine-etape-lien" onClick={() => demarrer(scenario)}>Recommencer</button>
             </div>
@@ -2082,6 +2129,8 @@ function Portail() {
                   <Jauge pct={livrablesPct} titre="Livrables" detail={`${livrablesTermines} / ${livrablesTotal} livrables`} />
                 )}
               </div>
+
+              <PresentationIdris nom={dashboard.nom} />
 
               <ProchaineEtape
                 module={moduleEnCours}
