@@ -791,6 +791,11 @@ class EntrainementRequest(BaseModel):
 @app.get("/portal/entrainement/scenarios")
 def portal_entrainement_scenarios(authorization: str = Header(default="")):
     _session_from_header(authorization)
+
+    # Sans cle Gemini, aucun scenario : le bloc d'entrainement reste masque.
+    if not entrainement_service.ia_service.enabled():
+        return {"scenarios": []}
+
     return {"scenarios": [{"id": cle, "titre": s["titre"]} for cle, s in entrainement_service.SCENARIOS.items()]}
 
 
