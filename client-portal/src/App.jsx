@@ -1354,10 +1354,16 @@ function Portail() {
 
       if (!response.ok) throw new Error('Erreur lors de la validation.')
 
-      const meResponse = await fetch(`${API_BASE}/portal/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const freshDashboard = await meResponse.json()
+      const data = await response.json()
+      let freshDashboard = data.dashboard
+
+      if (!freshDashboard) {
+        const meResponse = await fetch(`${API_BASE}/portal/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        freshDashboard = await meResponse.json()
+      }
+
       setDashboard(freshDashboard)
 
       const currentIndex = freshDashboard.fiches.findIndex((fiche) => fiche.id === activeFicheId)

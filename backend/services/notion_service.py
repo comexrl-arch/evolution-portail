@@ -196,7 +196,7 @@ def _cache_clear(prefix: str | None = None) -> None:
             del _cache[key]
 
 
-_TTL_DASHBOARD = 20  # secondes
+_TTL_DASHBOARD = 300  # secondes (5 min : navigation instantanee, invalide a chaque ecriture)
 _TTL_MASTER = 600    # contenu des fiches master (quasi jamais modifie)
 
 
@@ -792,18 +792,23 @@ def _client_cohorte(props: dict) -> dict | None:
 
 def _client_sessions(props: dict) -> list[dict]:
     session_ids = _prop_value(_prop(props, "Sessions")) or []
-    sessions = []
 
-    for session_id in session_ids:
+    if not session_ids:
+        return []
+
+    def _fetch_session(session_id: str) -> dict:
         session_props = _get_page(session_id).get("properties", {})
-        sessions.append({
+        return {
             "id": session_id,
             "nom": _prop_value(_prop(session_props, "Nom")),
             "date_heure": _prop_value(_prop(session_props, "Date & heure")),
             "statut": _prop_value(_prop(session_props, "Statut")),
             "prochaine_echeance": _prop_value(_prop(session_props, "Prochaine échéance")),
-        })
+        }
 
+    # _POOL_BLOCS et non _POOL : _client_sessions tourne deja dans _POOL, et
+    # attendre des sous-taches du meme pool peut le bloquer sous charge.
+    sessions = list(_POOL_BLOCS.map(_fetch_session, session_ids))
     sessions.sort(key=lambda session: session.get("date_heure") or "")
     return sessions
 
@@ -1019,8 +1024,10 @@ def _build_client_dashboard(client_page_id: str) -> dict:
     props = page.get("properties", {})
     nom_client = _prop_value(_prop(props, "Nom"))
 
-    # Appels independants lances ensemble : fiches, KPI, classeur Google.
+    # Appels independants lances ensemble : fiches, KPI, cohorte, sessions, classeur Google.
     kpi_future = _POOL.submit(_client_kpi, client_page_id)
+    cohorte_future = _POOL.submit(_client_cohorte, props)
+    sessions_future = _POOL.submit(_client_sessions, props)
     sheets_future = None
 
     if sheets_service.enabled():
@@ -1069,8 +1076,8 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "progression_kpi_j90": _prop_value(_prop(props, "Progression KPI J90")),
         "progression_livrables": _prop_value(_prop(props, "Progression livrables")),
         "identite": _client_identite(props),
-        "cohorte": _client_cohorte(props),
-        "sessions": _client_sessions(props),
+        "cohorte": cohorte_future.result(),
+        "sessions": sessions_future.result(),
         "fiches": fiches,
         "kpi": kpi_future.result(),
         "syntheses": syntheses_du_client(client_page_id, fiches) if autonome else [],

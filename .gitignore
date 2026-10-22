@@ -6,3 +6,17 @@ __pycache__/
 node_modules/
 dist/
 .venv/
+.env.*
+!.env.example
+google_token.json
+.deploy_keys/
+*.log
+logs/
+_sauvegarde_*/
+*.zip
+*.avant_*
+*.pem
+*.key
+*service_account*.json
+client_secret*.json
+graphify-out/
