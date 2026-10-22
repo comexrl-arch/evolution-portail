@@ -3182,3 +3182,16 @@ body[data-ecran="dashboard"] .portal-monogramme {
   color: var(--text-tertiary);
   margin: 0.25rem 0 0 !important;
 }
+
+.sur-mesure-chiffres {
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.sur-mesure-constat {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin: 0.25rem 0 0;
+}

@@ -2634,6 +2634,19 @@ def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
     if len(scores) != len(_DIAGNOSTIC_ZONES):
         return None
 
+    diagnostic = dict(scores)
+    reel = None
+    fiche_bilan = next((f for f in fiches if f.get("master_id") == _BILAN_HEBDO_MASTER_ID), None)
+
+    if fiche_bilan and "Bloqué" not in str(fiche_bilan.get("acces") or ""):
+        try:
+            reel = _scores_reels(fiche_bilan["id"])
+        except Exception as error:
+            logger.warning("Bilans hebdomadaires illisibles (%s) : priorites du diagnostic.", error)
+
+    if reel:
+        scores.update(reel["scores"])
+
     ordre = [zone["zone"] for zone in _DIAGNOSTIC_ZONES]
     faibles = sorted((z for z in ordre if scores[z] < 3), key=lambda z: (scores[z], ordre.index(z)))[:3]
     fortes = [z for z in ordre if scores[z] == 3]
@@ -2649,19 +2662,101 @@ def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
             if master_id in par_id and "priorite" not in par_id[master_id]:
                 par_id[master_id]["priorite"] = {"type": "point_fort", "zone": zone}
 
+    constats = (reel or {}).get("constats", {})
+
     return {
         "scores": scores,
-        "total": sum(scores.values()),
+        "scores_diagnostic": diagnostic,
+        "total": sum(diagnostic.values()),
+        "total_actuel": sum(scores.values()),
+        "chiffres": (reel or {}).get("chiffres"),
         "zones_prioritaires": [
             {
                 "zone": zone,
                 "score": scores[zone],
+                "source": "chiffres" if zone in constats else "diagnostic",
+                "constat": constats.get(zone),
                 "pourquoi": _POURQUOI_PAR_ZONE[zone],
                 "fiches": [par_id[m]["id"] for m in _FICHES_PAR_ZONE[zone] if m in par_id],
             }
             for zone in faibles
         ],
         "zones_fortes": fortes,
+    }
+
+
+# --- Diagnostic vivant (decision de Rony du 22/10/2026) ---
+# Des que le client a rempli au moins 2 bilans hebdomadaires sur les 4
+# dernieres semaines, ses vrais chiffres remplacent les reponses du
+# diagnostic de depart pour 3 zones : Prospection (contacts par semaine),
+# Conversion (ventes / rendez-vous) et Suivi commercial (regularite des
+# bilans). Offre et Visibilite gardent le score du diagnostic. Seuils de
+# travail, a ajuster avec l'experience.
+_FENETRE_REELLE_JOURS = 28
+
+
+def _nombre(valeur) -> float:
+    try:
+        return float(str(valeur).replace(",", ".").strip())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _scores_reels(fiche_bilan_id: str, maintenant: datetime | None = None) -> dict | None:
+    maintenant = maintenant or datetime.now(timezone.utc)
+    champs = FICHE_SCHEMAS[_BILAN_HEBDO_MASTER_ID]["champs"]
+    pages = _query_data_source(
+        ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={"property": "Fiche Client", "relation": {"contains": fiche_bilan_id}},
+    )
+    semaines = {}
+
+    for page in pages:
+        entree = _parse_entry(page, champs)
+        donnees = entree["donnees"]
+        quand = donnees.get("semaine_du") or entree.get("date")
+        jours = _jours_depuis_iso(quand, maintenant)
+
+        if jours is None or jours < 0 or jours >= _FENETRE_REELLE_JOURS:
+            continue
+
+        # Une seule ligne par semaine : la derniere saisie l'emporte.
+        semaines[str(quand)[:10]] = donnees
+
+    n = len(semaines)
+
+    if n < 2:
+        return None
+
+    total = {cle: sum(_nombre(d.get(cle)) for d in semaines.values())
+             for cle in ("nb_contacts_tentes", "nb_rdv_obtenus", "nb_ventes_conclues")}
+    contacts_semaine = total["nb_contacts_tentes"] / n
+    scores = {}
+    constats = {}
+
+    prospection = 3 if contacts_semaine >= 10 else 2 if contacts_semaine >= 5 else 1 if contacts_semaine > 0 else 0
+    scores["Prospection"] = min(prospection, 2) if n < 3 else prospection
+    constats["Prospection"] = f"{contacts_semaine:.0f} contacts par semaine en moyenne sur tes {n} derniers bilans."
+
+    if total["nb_rdv_obtenus"] > 0:
+        taux = total["nb_ventes_conclues"] / total["nb_rdv_obtenus"]
+        scores["Conversion"] = 3 if taux >= 0.3 else 2 if taux >= 0.15 else 1 if taux > 0 else 0
+        constats["Conversion"] = (
+            f"{total['nb_ventes_conclues']:.0f} vente(s) pour {total['nb_rdv_obtenus']:.0f} rendez-vous sur {n} semaines."
+        )
+
+    scores["Suivi commercial"] = 3 if n >= 4 else 2 if n == 3 else 1
+    constats["Suivi commercial"] = f"{n} bilan(s) hebdomadaire(s) rempli(s) sur les 4 dernières semaines."
+
+    return {
+        "scores": scores,
+        "constats": constats,
+        "chiffres": {
+            "semaines": n,
+            "contacts": total["nb_contacts_tentes"],
+            "rdv": total["nb_rdv_obtenus"],
+            "ventes": total["nb_ventes_conclues"],
+        },
     }
 
 
@@ -2770,8 +2865,9 @@ def _prompt_retour_ia(entree: dict) -> dict | None:
     ]
 
     if perso.get("scores"):
-        lignes.append("Diagnostic : " + ", ".join(f"{zone} {score}/3" for zone, score in perso["scores"].items()) + f" (total {perso['total']}/15)")
+        lignes.append("Scores actuels : " + ", ".join(f"{zone} {score}/3" for zone, score in perso["scores"].items()) + f" (total {perso.get('total_actuel', perso['total'])}/15)")
         lignes.append("Zones prioritaires : " + (", ".join(z["zone"] for z in perso["zones_prioritaires"]) or "aucune"))
+        lignes.extend(f"Ses chiffres réels ({z['zone']}) : {z['constat']}" for z in perso["zones_prioritaires"] if z.get("constat"))
 
     if priorite.get("type") == "prioritaire":
         lignes.append(f"Cette fiche travaille sa zone prioritaire : {priorite['zone']}. {_POURQUOI_PAR_ZONE[priorite['zone']]}")
