@@ -70,7 +70,7 @@ entree = {"id": "e1", "properties": {
 with patch.object(ns, "get_client_dashboard", return_value=dash):
     prompt = ns._prompt_retour_ia(entree)
 check("prenom seul", "Prénom : Marie" in prompt["message"] and "Test" not in prompt["message"])
-check("diagnostic dans le prompt", "Prospection 0/3" in prompt["message"])
+check("scores dans le prompt", "Prospection 0/3" in prompt["message"])
 check("pourquoi de la zone", ns._POURQUOI_PAR_ZONE["Prospection"] in prompt["message"])
 check("reponses remplies seulement", "- Canal : WhatsApp" in prompt["message"] and "Vide" not in prompt["message"] and "__x" not in prompt["message"])
 check("autonome", prompt["autonome"] is True)

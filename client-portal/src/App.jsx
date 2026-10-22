@@ -879,15 +879,20 @@ function ParcoursSurMesure({ personnalisation, fiches, onOpen }) {
   if (!personnalisation) return null
 
   const parId = Object.fromEntries(fiches.map((f) => [f.id, f]))
-  const { zones_prioritaires: zones, zones_fortes: fortes, total } = personnalisation
+  const { zones_prioritaires: zones, zones_fortes: fortes, total, chiffres } = personnalisation
 
   return (
     <section className="panel sur-mesure">
       <p className="panel-eyebrow">Ton parcours sur mesure · diagnostic {total} / 15</p>
+      {chiffres && (
+        <p className="sur-mesure-chiffres">
+          Mis à jour avec tes {chiffres.semaines} derniers bilans : {chiffres.contacts} contacts, {chiffres.rdv} rendez-vous, {chiffres.ventes} vente(s).
+        </p>
+      )}
       {zones.length ? (
         <>
           <p className="sur-mesure-intro">
-            D'après ton diagnostic, voici où mettre ton énergie en premier. Ces fiches portent le badge « Prioritaire pour toi » dans ton parcours.
+            D'après ton diagnostic{chiffres ? ' et tes chiffres' : ''}, voici où mettre ton énergie en premier. Ces fiches portent le badge « Prioritaire pour toi » dans ton parcours.
           </p>
           <ol className="sur-mesure-zones">
             {zones.map((zone) => (
@@ -896,6 +901,7 @@ function ParcoursSurMesure({ personnalisation, fiches, onOpen }) {
                   <span className="sur-mesure-zone-nom">{zone.zone}</span>
                   <span className="sur-mesure-zone-score">{zone.score} / 3</span>
                 </div>
+                {zone.constat && <p className="sur-mesure-constat">D'après tes chiffres : {zone.constat}</p>}
                 <p className="sur-mesure-pourquoi">{zone.pourquoi}</p>
                 <ul className="sur-mesure-fiches">
                   {zone.fiches.map((id) => {
@@ -943,7 +949,9 @@ function PourquoiPourToi({ fiche, personnalisation }) {
   return (
     <aside className="pourquoi-pour-toi">
       <p className="pourquoi-pour-toi-titre">Pourquoi cette fiche est prioritaire pour toi</p>
-      <p>Ton diagnostic : {zone.zone} à {zone.score} / 3. {zone.pourquoi}</p>
+      <p>
+        {zone.constat ? `D'après tes chiffres : ${zone.constat}` : `Ton diagnostic : ${zone.zone} à ${zone.score} / 3.`} {zone.pourquoi}
+      </p>
     </aside>
   )
 }

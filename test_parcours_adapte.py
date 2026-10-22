@@ -48,6 +48,8 @@ fiche8 = [
 ]
 
 print("Parcours adapte")
+sans_bilans = patch.object(ns, "_query_data_source", return_value=[])
+sans_bilans.start()
 with patch.object(ns, "_list_children", return_value=fiche8):
     liste = fiches()
     perso = ns._personnaliser_parcours(liste)
@@ -76,6 +78,45 @@ with patch.object(ns, "_list_children", return_value=tout3):
 
 with patch.object(ns, "_list_children", side_effect=RuntimeError("Notion")):
     check("erreur Notion : parcours standard", ns._personnaliser_parcours(fiches()) is None)
+
+sans_bilans.stop()
+
+print("Diagnostic vivant")
+from datetime import datetime, timedelta, timezone
+
+MAINTENANT = datetime(2026, 10, 22, 12, tzinfo=timezone.utc)
+
+
+def bilan(jours, contacts, rdv, ventes):
+    donnees = {"Semaine du (identifiant de l'entrée)": (MAINTENANT - timedelta(days=jours)).strftime("%Y-%m-%d"),
+               "Nombre de contacts tentés": str(contacts), "Nombre de rendez-vous obtenus": str(rdv),
+               "Nombre de ventes conclues": str(ventes)}
+    return {"id": f"b{jours}", "properties": {
+        "Date": {"type": "date", "date": {"start": "2026-10-01"}},
+        "Données (JSON)": {"type": "rich_text", "rich_text": [{"plain_text": __import__("json").dumps(donnees)}]}}}
+
+
+with patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 4, 0), bilan(9, 10, 2, 0), bilan(16, 14, 2, 0), bilan(23, 8, 2, 0)]):
+    reel = ns._scores_reels("fb", MAINTENANT)
+check("4 bilans : prospection 11/sem -> 3", reel["scores"]["Prospection"] == 3)
+check("10 RDV, 0 vente -> conversion 0", reel["scores"]["Conversion"] == 0)
+check("4 bilans -> suivi 3", reel["scores"]["Suivi commercial"] == 3)
+check("constat chiffre", "0 vente(s) pour 10 rendez-vous" in reel["constats"]["Conversion"])
+
+with patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 0, 0), bilan(9, 12, 0, 0)]):
+    reel = ns._scores_reels("fb", MAINTENANT)
+check("2 bilans : prospection plafonnee a 2", reel["scores"]["Prospection"] == 2)
+check("sans RDV : conversion du diagnostic", "Conversion" not in reel["scores"])
+
+with patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 0, 0), bilan(40, 12, 0, 0)]):
+    check("1 seul bilan recent : pas de chiffres", ns._scores_reels("fb", MAINTENANT) is None)
+
+with patch.object(ns, "_list_children", return_value=fiche8), \
+        patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 4, 0), bilan(9, 10, 2, 0), bilan(16, 14, 2, 0), bilan(23, 8, 2, 0)]):
+    perso = ns._personnaliser_parcours(fiches())
+check("prospection devient un point fort", "Prospection" in perso["zones_fortes"])
+check("conversion prioritaire d'apres les chiffres", perso["zones_prioritaires"][0]["zone"] == "Conversion" and perso["zones_prioritaires"][0]["source"] == "chiffres")
+check("score du diagnostic conserve", perso["total"] == 8 and perso["scores_diagnostic"]["Prospection"] == 0)
 
 print(f"\n{passed} PASS, {failed} FAIL")
 sys.exit(1 if failed else 0)
