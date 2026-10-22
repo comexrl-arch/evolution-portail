@@ -87,5 +87,20 @@ try:
 except ValueError:
     check("texte vide refuse", True)
 
+print("Generation immediate (Autonome)")
+ecrit = []
+prompt_auto = {"autonome": True, "systeme": "S", "message": "M"}
+with patch.object(ns.ia_service, "enabled", return_value=True), \
+        patch.object(ns, "_get_page", return_value={}), \
+        patch.object(ns, "_prompt_retour_ia", return_value=prompt_auto), \
+        patch.object(ns.ia_service, "generer", return_value="Bravo"), \
+        patch.object(ns, "_update_page", side_effect=lambda pid, p: ecrit.append(p)):
+    check("autonome : publie tout de suite", ns.generer_retour_ia_immediat("e1") is True)
+    check("statut Publié", ecrit[-1]["Retour IA statut"]["select"]["name"] == "Publié")
+    with patch.object(ns, "_prompt_retour_ia", return_value={**prompt_auto, "autonome": False}):
+        check("coaching : laisse a n8n", ns.generer_retour_ia_immediat("e1") is False)
+with patch.object(ns.ia_service, "enabled", return_value=False):
+    check("sans cle Gemini : laisse a n8n", ns.generer_retour_ia_immediat("e1") is False)
+
 print(f"\n{passed} PASS, {failed} FAIL")
 sys.exit(1 if failed else 0)
