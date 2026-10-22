@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { formaterMaj } from './dates'
 import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
@@ -633,16 +634,6 @@ function FicheSegments({ segments, formValues, onChange, surtitre }) {
       surtitre={surtitre}
     />
   )
-}
-
-function formaterMaj(iso) {
-  // Heure de Guadeloupe, ou se trouvent les clients.
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  const options = { timeZone: 'America/Guadeloupe' }
-  const jour = date.toLocaleDateString('fr-FR', { ...options, day: '2-digit', month: '2-digit', year: 'numeric' })
-  const heure = date.toLocaleTimeString('fr-FR', { ...options, hour: '2-digit', minute: '2-digit' })
-  return `${jour} à ${heure}`
 }
 
 function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error }) {

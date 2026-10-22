@@ -646,7 +646,10 @@ def coach_get_diagnostic_champs(fiche_client_id: str, x_coach_key: str = Header(
     _require_coach_key(x_coach_key)
 
     try:
-        return {"champs": notion_service.get_diagnostic_fiche8(fiche_client_id)}
+        return {
+            "champs": notion_service.get_diagnostic_fiche8(fiche_client_id),
+            "mis_a_jour": notion_service._derniere_maj_blocs(fiche_client_id),
+        }
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("coach_get_diagnostic_champs", error)
