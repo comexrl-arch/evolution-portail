@@ -2593,3 +2593,410 @@ body[data-ecran="dashboard"] .portal-monogramme {
     font-size: 1.2rem;
   }
 }
+
+/* ===== Espace client : menu latéral, tableau de bord, frise du parcours ===== */
+
+.espace {
+  min-height: 100vh;
+}
+
+.espace-menu {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  padding: 1.5rem 1rem;
+  background: var(--brand-ink);
+  border-right: 1px solid rgba(201, 162, 101, 0.35);
+}
+
+.espace-menu-logo {
+  height: 46px;
+  width: auto;
+  align-self: flex-start;
+  margin: 0 0.5rem 2rem;
+  border-radius: 8px;
+  background: #FFFFFF;
+  padding: 0.35rem 0.6rem;
+}
+
+.espace-menu-liens {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.espace-menu-lien {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  border-left: 3px solid transparent;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.espace-menu-lien:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #FFFFFF;
+}
+
+.espace-menu-lien-actif {
+  background: rgba(201, 162, 101, 0.14);
+  border-left-color: var(--brand-gold-metal);
+  color: var(--brand-gold-champagne);
+  font-weight: 600;
+}
+
+.espace-contenu {
+  margin-left: 240px;
+  max-width: 1000px;
+  padding: 2rem 2.5rem 3rem;
+}
+
+.espace-hamburger {
+  display: none;
+}
+
+.espace-voile {
+  display: none;
+}
+
+.espace .accueil-entete {
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.espace .accueil-titre {
+  grid-column: 2;
+}
+
+.espace .accueil-client {
+  grid-column: 3;
+}
+
+.accueil-formule {
+  display: inline-block;
+  margin-top: 0.4rem !important;
+  padding: 0.2rem 0.7rem;
+  border: var(--border-accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.espace-vide {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+/* Jauges circulaires */
+.jauges {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.jauge {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: 0 1px 2px rgba(20, 23, 31, 0.04);
+}
+
+.jauge-cercle {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  transform: rotate(-90deg);
+}
+
+.jauge-fond {
+  fill: none;
+  stroke: #EEEAE0;
+  stroke-width: 7;
+}
+
+.jauge-valeur {
+  fill: none;
+  stroke: var(--brand-gold);
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.jauge-pct {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.jauge-titre {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.jauge-detail {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+/* Carte « Prochaine étape » */
+.prochaine-etape {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  margin-bottom: 1.75rem;
+  overflow: hidden;
+  border: var(--border-accent);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  box-shadow: 0 1px 2px rgba(20, 23, 31, 0.04);
+}
+
+.prochaine-etape-image {
+  width: 100%;
+  height: 100%;
+  min-height: 150px;
+  object-fit: cover;
+  background: #FBFAF6;
+  border-right: var(--border-subtle);
+}
+
+.prochaine-etape-corps {
+  padding: 1.25rem 1.5rem;
+}
+
+.prochaine-etape-surtitre {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.prochaine-etape-titre {
+  margin-top: 0.3rem;
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prochaine-etape-fiche {
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.prochaine-etape-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.prochaine-etape-actions .fiche-bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 1.3rem;
+  font-size: 0.85rem;
+}
+
+.prochaine-etape-lien {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.prochaine-etape-lien:hover {
+  text-decoration: underline;
+}
+
+/* Cartes de modules : image moins haute, vrai bouton d'accordéon */
+.espace .module-carte-image {
+  aspect-ratio: 900 / 340;
+}
+
+.espace .module-carte-statut-actif {
+  background: var(--brand-gold);
+  color: #FFFFFF;
+}
+
+.espace .module-carte-bascule {
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  border: var(--border-accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
+.espace .module-carte-bascule:hover {
+  text-decoration: none;
+  background: rgba(142, 108, 56, 0.14);
+}
+
+.espace .module-carte-bascule + .module-carte-fiches {
+  margin-top: 0.75rem;
+}
+
+/* Frise : axe vertical entre les deux colonnes, un point par module */
+.parcours-frise {
+  position: relative;
+  column-gap: 2.5rem;
+  row-gap: 1.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.parcours-frise::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: linear-gradient(var(--brand-gold-metal), rgba(201, 162, 101, 0.15));
+}
+
+.parcours-frise > .module-carte {
+  position: relative;
+  overflow: visible;
+}
+
+.parcours-frise > .module-carte > .module-carte-image {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.parcours-frise > .module-carte::after {
+  content: "";
+  position: absolute;
+  top: 1.5rem;
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--surface-0);
+  border-radius: 50%;
+  background: var(--brand-gold-metal);
+  box-shadow: 0 0 0 1px var(--brand-gold-metal);
+}
+
+.parcours-frise > .module-carte:nth-child(odd)::after {
+  right: calc(-1.25rem - 7px);
+}
+
+.parcours-frise > .module-carte:nth-child(even)::after {
+  top: 3.25rem;
+  left: calc(-1.25rem - 7px);
+}
+
+.parcours-frise > .module-carte-fini::after {
+  background: var(--success);
+  box-shadow: 0 0 0 1px var(--success);
+}
+
+.parcours-frise > .module-carte-avenir::after {
+  background: #D9D4C7;
+  box-shadow: 0 0 0 1px #D9D4C7;
+}
+
+.ressources-liste {
+  border-top: none;
+}
+
+@media (max-width: 900px) {
+  .espace-menu {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+
+  .espace-menu-ouvert {
+    transform: translateX(0);
+  }
+
+  .espace-voile {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(20, 23, 31, 0.45);
+  }
+
+  .espace-contenu {
+    margin-left: 0;
+    padding: 1.25rem 1rem 2.5rem;
+  }
+
+  .espace-hamburger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: var(--border-subtle);
+    border-radius: 10px;
+    background: var(--surface-2);
+    color: var(--text-primary);
+  }
+
+  .espace .accueil-entete {
+    grid-template-columns: auto 1fr;
+  }
+
+  .espace .accueil-titre {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .espace .accueil-client {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .parcours-frise > .module-carte:nth-child(even)::after {
+    top: 1.5rem;
+  }
+
+  .prochaine-etape {
+    grid-template-columns: 1fr;
+  }
+
+  .prochaine-etape-image {
+    min-height: 0;
+    aspect-ratio: 900 / 340;
+    border-right: none;
+    border-bottom: var(--border-subtle);
+  }
+
+  .parcours-frise {
+    grid-template-columns: 1fr;
+    padding-left: 1.5rem;
+  }
+
+  .parcours-frise::before {
+    left: 0.4rem;
+    transform: none;
+  }
+
+  .parcours-frise > .module-carte:nth-child(odd)::after,
+  .parcours-frise > .module-carte:nth-child(even)::after {
+    left: calc(-1.5rem + 0.4rem - 6px);
+    right: auto;
+  }
+}
