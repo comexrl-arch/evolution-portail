@@ -1641,6 +1641,53 @@ def _prefill_entre_fiches(master_id: str, client_page_id: str, champs: list[dict
     return prefill
 
 
+def reponses_des_fiches(client_page_id: str, fiches: list[dict], master_ids: list[str]) -> list[dict]:
+    """Dernieres reponses texte du client aux fiches demandees, dans l'ordre :
+    [{"nom", "reponses": [(libelle, valeur)]}]. Sert de matiere aux brouillons IA."""
+    par_master = {f.get("master_id"): f for f in fiches}
+    resultat = []
+
+    for master_id in master_ids:
+        fiche = par_master.get(master_id)
+
+        if not fiche or master_id not in FICHE_SCHEMAS:
+            continue
+
+        try:
+            champs = _champs_for(FICHE_SCHEMAS[master_id], master_id)
+            pages = _query_data_source(
+                ENTREES_PORTAIL_DATA_SOURCE_ID,
+                {
+                    "and": [
+                        {"property": "Fiche Client", "relation": {"contains": fiche["id"]}},
+                        {"property": "Client", "relation": {"contains": client_page_id}},
+                    ]
+                },
+            )
+        except Exception as error:
+            logger.warning("Reponses de fiche illisibles (%s)", error)
+            continue
+
+        entrees = [_parse_entry(p, champs) for p in pages]
+        entrees = [e for e in entrees if _CHECKLIST_KEY not in (e.get("donnees") or {})]
+
+        if not entrees:
+            continue
+
+        entrees.sort(key=lambda e: e.get("date") or "")
+        donnees = entrees[-1]["donnees"]
+        reponses = [
+            (champ["libelle"], donnees[champ["cle"]].strip())
+            for champ in champs
+            if isinstance(donnees.get(champ["cle"]), str) and donnees[champ["cle"]].strip()
+        ]
+
+        if reponses:
+            resultat.append({"nom": fiche.get("nom") or FICHE_SCHEMAS[master_id]["nom"], "reponses": reponses})
+
+    return resultat
+
+
 def _segments_master_cache(page_id: str) -> list[dict]:
     # Les fiches master ne changent quasi jamais : on evite de re-lire tous
     # leurs blocs Notion (plusieurs appels) a chaque ouverture de fiche.
