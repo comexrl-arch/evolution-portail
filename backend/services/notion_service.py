@@ -16,7 +16,7 @@ from urllib3.util.retry import Retry
 from dotenv import load_dotenv
 
 from backend.services.portal_fiche_schemas import FICHE_SCHEMAS
-from backend.services import portal_auth_service, sheets_service
+from backend.services import ia_service, portal_auth_service, sheets_service
 
 logger = logging.getLogger(__name__)
 
@@ -2978,6 +2978,26 @@ def enregistrer_retour_ia(entry_id: str, texte: str, autonome: bool) -> str:
         "Retour IA date": {"date": {"start": datetime.now(timezone.utc).isoformat(timespec="seconds")}},
     })
     return statut
+
+
+def generer_retour_ia_immediat(entry_id: str) -> bool:
+    """Parcours Autonome : redige et publie le retour tout de suite, sans
+    attendre le passage du workflow n8n (toutes les 2 min). En Coaching, ou
+    si Gemini echoue, l'entree reste "À générer" et n8n s'en charge (avec
+    l'alerte Telegram de relecture pour Rony)."""
+    if not ia_service.enabled():
+        return False
+
+    prompt = _prompt_retour_ia(_get_page(entry_id))
+
+    if not prompt or not prompt["autonome"]:
+        return False
+
+    texte = ia_service.generer(
+        prompt["systeme"], [{"role": "user", "texte": prompt["message"]}], temperature=0.5, max_tokens=800
+    )
+    enregistrer_retour_ia(entry_id, texte, autonome=True)
+    return True
 
 
 # --- Relances intelligentes (decision de Rony du 22/10/2026) ---

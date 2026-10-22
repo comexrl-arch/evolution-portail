@@ -513,8 +513,10 @@ def portal_create_entry(
 def _demander_retour_ia(fiche_id: str, entry_id: str | None) -> None:
     # Tache de fond, best-effort : met la saisie en file pour le retour IA.
     try:
-        notion_service.demander_retour_ia(fiche_id, entry_id)
+        if notion_service.demander_retour_ia(fiche_id, entry_id):
+            notion_service.generer_retour_ia_immediat(entry_id)
     except Exception as error:
+        # L'entree reste "À générer" : le workflow n8n prendra le relais.
         _journaliser_alerte_impossible("retour_ia", error)
 
 

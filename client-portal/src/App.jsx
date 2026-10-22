@@ -1477,15 +1477,16 @@ function Portail() {
   const [livrableData, setLivrableData] = useState(null)
   const retourEnCours = ficheData?.entrees?.[ficheData.entrees.length - 1]?.retour_ia?.statut === 'en_cours'
 
-  // Retour IA en cours de redaction : on relit la fiche toutes les 30 s
-  // (10 fois au plus) sans toucher a ce que le client est en train de saisir.
+  // Retour IA en cours de redaction : on relit la fiche toutes les 8 s
+  // (5 min au plus) sans toucher a ce que le client est en train de saisir.
+  // En Autonome le portail le redige lui-meme en quelques secondes.
   useEffect(() => {
     if (!retourEnCours || !activeFicheId) return undefined
 
     let essais = 0
     const minuteur = setInterval(async () => {
       essais += 1
-      if (essais > 10) {
+      if (essais > 40) {
         clearInterval(minuteur)
         return
       }
@@ -1504,7 +1505,7 @@ function Portail() {
       } catch {
         // Nouvel essai au prochain tour.
       }
-    }, 30000)
+    }, 8000)
 
     return () => clearInterval(minuteur)
   }, [retourEnCours, activeFicheId])
