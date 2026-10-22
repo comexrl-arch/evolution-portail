@@ -1,4 +1,5 @@
 import copy
+import difflib
 import json
 import logging
 import os
@@ -1272,6 +1273,12 @@ def _block_lines(block: dict, depth: int = 0, checks: bool = False) -> list[str]
     if checks and block_type == "to_do":
         # Case a cocher reelle (etat memorise par client) : "##CHECK## cle|texte"
         texte = _block_text(block).strip("* ")
+
+        if _options_du_todo(block):
+            # "Telephone | WhatsApp | ..." : liste d'options, pas une case.
+            # Une seule case pour tout cocher a la fois n'aurait aucun sens.
+            return [texte]
+
         return [f"{_CHECK_LINE_PREFIX}{block['id'].replace('-', '')}|{texte}"] if texte else []
 
     lines: list[str] = []
@@ -1339,6 +1346,47 @@ def _get_page_content(page_id: str, checks: bool = False) -> str:
     return _blocks_to_text(_list_children(page_id), checks)
 
 
+def _options_du_todo(block: dict) -> list[str]:
+    # Motif "Oui | Plutot | Non" ecrit dans une case a cocher : ce sont des
+    # options a choisir, pas une case. Vide si le texte n'a pas de "|".
+    texte = _block_text(block)
+
+    if "|" not in texte:
+        return []
+
+    return [option.strip() for option in texte.split("|") if option.strip()]
+
+
+def _question_sans_zone(block: dict) -> str | None:
+    # Puce en gras sans sous-puce "Ecris ici..." : "**Le segment cible :**"
+    # ou "**Je vais contacter :**  nouveaux prospects." (trou a remplir).
+    # Sans ce repere, la question s'affichait comme du texte, sans aucun
+    # moyen d'y repondre. Renvoie le libelle de la question, sinon None.
+    if block.get("type") != "bulleted_list_item" or block.get("has_children"):
+        return None
+
+    parts = block.get("bulleted_list_item", {}).get("rich_text", [])
+
+    if not parts or not (parts[0].get("annotations") or {}).get("bold"):
+        return None
+
+    texte = "".join(part.get("plain_text", "") for part in parts)
+    reste = "".join(
+        part.get("plain_text", "")
+        for part in parts
+        if not (part.get("annotations") or {}).get("bold")
+    )
+    propre = texte.strip("* ").strip()
+
+    if not reste.strip() and propre.endswith((":", "?")):
+        return propre
+
+    if re.search(r"\S {2,}\S", texte.strip()):
+        return re.sub(r" {2,}", " … ", propre)
+
+    return None
+
+
 def _page_segments(page_id: str) -> list[dict]:
     # Rendu "fidele" d'une fiche Q&A : chaque question Notion (puce en gras
     # suivie d'une sous-puce "Ecrivez ici...") devient un champ affiche en
@@ -1362,12 +1410,27 @@ def _page_segments(page_id: str) -> list[dict]:
             continue
 
         if block_type == "to_do":
+            options = _options_du_todo(block)
             segments.append({
                 "type": "champ",
                 "champ": {
                     "cle": block["id"].replace("-", ""),
-                    "libelle": _block_text(block).strip("* "),
-                    "type": "case",
+                    "libelle": "Choisis une option" if options else _block_text(block).strip("* "),
+                    "type": "choix" if options else "case",
+                    **({"options": options} if options else {}),
+                },
+            })
+            continue
+
+        question = _question_sans_zone(block)
+
+        if question:
+            segments.append({
+                "type": "champ",
+                "champ": {
+                    "cle": block["id"].replace("-", ""),
+                    "libelle": question,
+                    "type": "texte",
                 },
             })
             continue
@@ -1382,11 +1445,8 @@ def _page_segments(page_id: str) -> list[dict]:
             todo_children = [child for child in children if child.get("type") == "to_do"]
 
             if todo_children:
-                options = [
-                    option.strip()
-                    for option in _block_text(todo_children[0]).split("|")
-                    if option.strip()
-                ]
+                seule = _block_text(todo_children[0]).strip()
+                options = _options_du_todo(todo_children[0]) or ([seule] if seule else [])
                 segments.append({
                     "type": "champ",
                     "champ": {
@@ -1430,7 +1490,36 @@ def _donnees_vers_libelles(data: dict, champs: list[dict]) -> dict:
 
 def _donnees_vers_cles(donnees: dict, champs: list[dict]) -> dict:
     libelle_vers_cle = {champ["libelle"]: champ["cle"] for champ in champs}
-    return {libelle_vers_cle.get(libelle, libelle): valeur for libelle, valeur in donnees.items()}
+    resultat = {}
+    orphelins = {}
+
+    for libelle, valeur in donnees.items():
+        if libelle in libelle_vers_cle:
+            resultat[libelle_vers_cle[libelle]] = valeur
+        elif libelle.startswith("__"):
+            resultat[libelle] = valeur
+        else:
+            orphelins[libelle] = valeur
+
+    # Question reformulee dans Notion depuis la reponse (ex. "vous" -> "tu") :
+    # on rattache l'ancienne reponse a la question la plus proche, pour que
+    # le client ne la voie pas disparaitre.
+    libres = [champ for champ in champs if champ["cle"] not in resultat]
+
+    for libelle, valeur in orphelins.items():
+        proche = max(
+            libres,
+            key=lambda champ: difflib.SequenceMatcher(None, libelle.lower(), champ["libelle"].lower()).ratio(),
+            default=None,
+        )
+
+        if proche and difflib.SequenceMatcher(None, libelle.lower(), proche["libelle"].lower()).ratio() >= 0.75:
+            resultat[proche["cle"]] = valeur
+            libres.remove(proche)
+        else:
+            resultat[libelle] = valeur
+
+    return resultat
 
 
 def _parse_entry(page: dict, champs: list[dict]) -> dict:
@@ -1488,7 +1577,7 @@ def _prefill_from_client(master_id: str, client_page_id: str, champs: list[dict]
 _PREFILL_ENTRE_FICHES = [
     ("9", "quel est le problème urgent", "10", "quelle est sa plus grande frustration"),
     ("11", "ma phrase officielle", "15", "mon script personnalisé"),
-    ("11", "ma phrase officielle", "16", "objection \"c'est trop cher\""),
+    ("11", "ma phrase officielle", "16", "objection : \"c'est trop cher\""),
 ]
 
 
@@ -1572,6 +1661,50 @@ def _contenu_master_cache(page_id: str) -> str:
         return en_cache
 
     return _cache_set(cle, _get_page_content(page_id, checks=True), _TTL_MASTER)
+
+
+def _segments_recurrents(master_id: str, schema: dict) -> list[dict] | None:
+    # Fiche de suivi (plan de la semaine, bilan hebdo) : le modele Notion
+    # pose les memes questions que le formulaire, dans le meme ordre. On
+    # place donc les champs du formulaire directement sous chaque question,
+    # au lieu d'afficher les questions en texte fige puis de les reposer plus
+    # bas. Les champs date (ex. "Semaine du") restent dans le bloc
+    # d'enregistrement. Si le modele et le formulaire ne correspondent pas
+    # exactement (tableau, cases a cocher...), on garde l'affichage classique.
+    try:
+        segments = _segments_master_cache(master_id)
+    except Exception:
+        return None
+
+    questions = [s for s in segments if s["type"] == "champ"]
+    a_placer = [
+        c for c in sorted(schema["champs"], key=lambda c: c.get("ordre", 0)) if c["type"] != "date"
+    ]
+
+    if not questions or len(questions) != len(a_placer):
+        return None
+
+    for question, champ in zip(questions, a_placer):
+        if question["champ"]["type"] == "case":
+            return None
+
+        if (question["champ"]["type"] == "choix") != (champ["type"] == "choix"):
+            return None
+
+    restants = iter(a_placer)
+    resultat = []
+
+    for segment in segments:
+        if segment["type"] == "champ":
+            champ = next(restants)
+            resultat.append({
+                "type": "champ",
+                "champ": {**champ, "libelle_affiche": segment["champ"]["libelle"]},
+            })
+        else:
+            resultat.append(segment)
+
+    return resultat
 
 
 def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
@@ -1696,7 +1829,12 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
     if mode == "unique":
         result["segments"] = segments
     else:
-        result["contenu"] = _contenu_master_cache(master_id)
+        segments_suivi = _segments_recurrents(master_id, schema)
+
+        if segments_suivi is not None:
+            result["segments"] = segments_suivi
+        else:
+            result["contenu"] = _contenu_master_cache(master_id)
 
     return result
 
@@ -1909,12 +2047,15 @@ def _create_entry(fiche_client_id: str, client_page_id: str, client_nom: str, da
     }
 
     if schema["mode"] == "unique":
+        # Sans exclure l'entree "checklist" (etat des cases), la reponse
+        # pouvait ecraser cette entree au lieu de la sienne.
         existing = _query_data_source(
             ENTREES_PORTAIL_DATA_SOURCE_ID,
             filter_={
                 "and": [
                     {"property": "Fiche Client", "relation": {"contains": fiche_client_id}},
                     {"property": "Client", "relation": {"contains": client_page_id}},
+                    {"property": "Nom", "title": {"does_not_contain": "checklist"}},
                 ]
             },
         )
