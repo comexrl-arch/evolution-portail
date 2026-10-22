@@ -3386,3 +3386,26 @@ body[data-ecran="dashboard"] .portal-monogramme {
   color: var(--text-primary);
   cursor: pointer;
 }
+
+/* Presentation d'Idris, l'assistant IA, en debut de parcours */
+.idris-presentation {
+  margin: 1.5rem 0;
+  padding: 1rem 1.1rem;
+  border: var(--border-subtle);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.idris-presentation p,
+.idris-presentation li {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.6rem;
+}
+
+.idris-presentation ul {
+  margin: 0 0 0.6rem;
+  padding-left: 1.1rem;
+  list-style: disc;
+}
