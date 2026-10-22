@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { formaterMaj } from './dates'
 import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks } from 'lucide-react'
 import CoachSuiviClients from './CoachSuiviClients.jsx'
 
@@ -43,6 +44,7 @@ export default function CoachOnboarding() {
   const [validating, setValidating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [misAJour, setMisAJour] = useState(null)
 
   async function loadDiagnostics() {
     setDiagnosticsLoading(true)
@@ -71,23 +73,30 @@ export default function CoachOnboarding() {
     setExpandedFicheId(diag.fiche_client_id)
     setChamps(null)
     setOriginalChamps(null)
+    setMisAJour(null)
     setChampsError('')
     setSaved(false)
     setFicheLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/coach/fiches/${diag.fiche_client_id}/diagnostic-champs`, {
-        headers: { 'X-Coach-Key': coachKey },
-      })
-      if (res.status === 401) return handleAuthFailure()
-      if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de chargement')
-      const data = await res.json()
-      setChamps(data.champs)
-      setOriginalChamps(data.champs)
+      await rechargerChamps(diag.fiche_client_id)
     } catch (err) {
       setChampsError(err.message)
     } finally {
       setFicheLoading(false)
     }
+  }
+
+  async function rechargerChamps(ficheClientId) {
+    // Relit la fiche dans Notion : ce qui s'affiche est ce que voit le client.
+    const res = await fetch(`${API_BASE}/coach/fiches/${ficheClientId}/diagnostic-champs`, {
+      headers: { 'X-Coach-Key': coachKey },
+    })
+    if (res.status === 401) return handleAuthFailure()
+    if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de chargement')
+    const data = await res.json()
+    setChamps(data.champs)
+    setOriginalChamps(data.champs)
+    setMisAJour(data.mis_a_jour || null)
   }
 
   function updateChampValeur(index, valeur) {
@@ -112,6 +121,7 @@ export default function CoachOnboarding() {
       })
       if (res.status === 401) return handleAuthFailure()
       if (!res.ok) throw new Error((await res.json()).detail || 'Erreur de sauvegarde')
+      await rechargerChamps(ficheClientId)
       setSaved(true)
     } catch (err) {
       setChampsError(err.message)
@@ -365,6 +375,12 @@ export default function CoachOnboarding() {
                   <div className="mt-4 pt-4" style={{ borderTop: 'var(--border-subtle)' }}>
                     {ficheLoading && <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Chargement...</p>}
                     {champsError && <p className="text-sm mb-2" style={{ color: 'var(--danger)' }}>{champsError}</p>}
+
+                    {champs && misAJour && (
+                      <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                        Dernière mise à jour : {formaterMaj(misAJour)}
+                      </p>
+                    )}
 
                     {champs && (
                       <div className="space-y-2.5 mb-4">
