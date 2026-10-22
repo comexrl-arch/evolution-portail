@@ -1249,6 +1249,8 @@ function Portail() {
   const [error, setError] = useState('')
   const [dashboard, setDashboard] = useState(null)
   const [activeFicheId, setActiveFicheId] = useState(null)
+  const [ficheData, setFicheData] = useState(null)
+  const [livrableData, setLivrableData] = useState(null)
   const retourEnCours = ficheData?.entrees?.[ficheData.entrees.length - 1]?.retour_ia?.statut === 'en_cours'
 
   // Retour IA en cours de redaction : on relit la fiche toutes les 30 s
@@ -1282,8 +1284,6 @@ function Portail() {
 
     return () => clearInterval(minuteur)
   }, [retourEnCours, activeFicheId])
-  const [ficheData, setFicheData] = useState(null)
-  const [livrableData, setLivrableData] = useState(null)
   const [formValues, setFormValues] = useState({})
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
