@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, Loader2, Lock, Mail, MapPin, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, Users } from 'lucide-react'
+import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -713,6 +713,78 @@ function lireFiche(nom) {
   return numero ? { numero: numero[1], titre: casseDePhrase(numero[2]) } : { numero: null, titre: casseDePhrase(propre) }
 }
 
+const ONGLETS = [
+  { cle: 'tableau', libelle: 'Tableau de bord', icone: LayoutDashboard },
+  { cle: 'parcours', libelle: 'Mon parcours', icone: IconeCarte },
+  { cle: 'ressources', libelle: 'Ressources', icone: BookOpen },
+  { cle: 'communaute', libelle: 'Communauté', icone: Users },
+  { cle: 'profil', libelle: 'Profil', icone: UserRound },
+]
+
+// Jauge circulaire du tableau de bord.
+function Jauge({ pct, titre, detail }) {
+  const valeur = Math.max(0, Math.min(100, Math.round(pct || 0)))
+  const rayon = 34
+  const circonference = 2 * Math.PI * rayon
+
+  return (
+    <div className="jauge">
+      <svg viewBox="0 0 80 80" className="jauge-cercle" aria-hidden="true">
+        <circle cx="40" cy="40" r={rayon} className="jauge-fond" />
+        <circle
+          cx="40"
+          cy="40"
+          r={rayon}
+          className="jauge-valeur"
+          strokeDasharray={circonference}
+          strokeDashoffset={circonference * (1 - valeur / 100)}
+        />
+      </svg>
+      <div>
+        <p className="jauge-pct">{valeur}%</p>
+        <p className="jauge-titre">{titre}</p>
+        <p className="jauge-detail">{detail}</p>
+      </div>
+    </div>
+  )
+}
+
+function ProchaineEtape({ module, fiche, onOpen, onParcours }) {
+  if (!module) {
+    return (
+      <section className="prochaine-etape">
+        <div className="prochaine-etape-corps">
+          <p className="prochaine-etape-surtitre">Parcours terminé</p>
+          <h3 className="prochaine-etape-titre">Bravo, tu as terminé toutes tes fiches.</h3>
+        </div>
+      </section>
+    )
+  }
+
+  const { surtitre, titre } = lireModule(module.label)
+
+  return (
+    <section className="prochaine-etape">
+      <img src={illustrationDuModule(module.label)} alt="" className="prochaine-etape-image" />
+      <div className="prochaine-etape-corps">
+        <p className="prochaine-etape-surtitre">Prochaine étape · {surtitre}</p>
+        <h3 className="prochaine-etape-titre">{titre}</h3>
+        {fiche && <p className="prochaine-etape-fiche">{lireFiche(fiche.nom).titre}</p>}
+        <div className="prochaine-etape-actions">
+          {fiche && (
+            <button type="button" className="fiche-bouton" onClick={() => onOpen(fiche.id)}>
+              Reprendre <ChevronRight size={15} aria-hidden="true" />
+            </button>
+          )}
+          <button type="button" className="prochaine-etape-lien" onClick={onParcours}>
+            Voir mon parcours
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
   const { surtitre, titre } = lireModule(module.label)
   const illustration = illustrationDuModule(module.label)
@@ -723,7 +795,7 @@ function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
   const statut = terminees === total ? 'Terminé' : module.fiches.some((f) => f.etat === 'En cours' || f.etat === 'Terminé') ? 'En cours' : 'À venir'
 
   return (
-    <article className="module-carte">
+    <article className={`module-carte module-carte-${statut === 'Terminé' ? 'fini' : statut === 'En cours' ? 'actif' : 'avenir'}`}>
       {illustration && <img src={illustration} alt="" className="module-carte-image" loading="lazy" />}
       <div className="module-carte-corps">
         <div className="module-carte-entete">
@@ -991,6 +1063,8 @@ function Portail() {
   const [formValues, setFormValues] = useState({})
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
+  const [onglet, setOnglet] = useState('tableau')
+  const [menuOuvert, setMenuOuvert] = useState(false)
 
   const loadDashboard = useCallback(async () => {
     const token = localStorage.getItem(SESSION_KEY)
@@ -1488,69 +1562,174 @@ function Portail() {
     const kpiPct = toPct(dashboard.progression_kpi_j90)
     const avecKpi = kpiRenseignes(dashboard.kpi)
 
+    const moduleEnCours = modules.find((m) => m.label === moduleOuvertParDefaut)
+    const ficheAReprendre = moduleEnCours?.fiches.find((f) => f.etat !== 'Terminé' && !f.acces?.includes('Bloqué'))
+    const fichesTerminees = dashboard.fiches.filter((f) => f.etat === 'Terminé')
+
+    const changerOnglet = (cle) => {
+      setOnglet(cle)
+      setMenuOuvert(false)
+      window.scrollTo(0, 0)
+    }
+
     return (
-      <div className="min-h-screen p-5 md:p-10 max-w-4xl mx-auto">
-        <header className="accueil-entete">
-          <img src={logo} alt="RL-eVolution" className="accueil-logo" />
-          <div className="accueil-titre">
-            <h1>Système eVolution 2.0</h1>
-            <p>{libelleFormule(dashboard.parcours)}</p>
-          </div>
-          <div className="accueil-client">
-            <p className="accueil-client-nom">{dashboard.nom}</p>
-            <button onClick={logout} className="accueil-deconnexion">
-              Se déconnecter
+      <div className="espace">
+        <aside className={`espace-menu${menuOuvert ? ' espace-menu-ouvert' : ''}`}>
+          <img src={logo} alt="RL-eVolution" className="espace-menu-logo" />
+          <nav className="espace-menu-liens">
+            {ONGLETS.map(({ cle, libelle, icone: Icone }) => (
+              <button
+                key={cle}
+                type="button"
+                className={`espace-menu-lien${onglet === cle ? ' espace-menu-lien-actif' : ''}`}
+                aria-current={onglet === cle ? 'page' : undefined}
+                onClick={() => changerOnglet(cle)}
+              >
+                <Icone size={17} aria-hidden="true" />
+                {libelle}
+              </button>
+            ))}
+          </nav>
+        </aside>
+        {menuOuvert && <div className="espace-voile" onClick={() => setMenuOuvert(false)} />}
+
+        <main className="espace-contenu">
+          <header className="accueil-entete">
+            <button
+              type="button"
+              className="espace-hamburger"
+              aria-label={menuOuvert ? 'Fermer le menu' : 'Ouvrir le menu'}
+              onClick={() => setMenuOuvert((v) => !v)}
+            >
+              {menuOuvert ? <X size={20} /> : <Menu size={20} />}
             </button>
-          </div>
-        </header>
+            <div className="accueil-titre">
+              <h1>Système eVolution 2.0</h1>
+              <p className="accueil-formule">{libelleFormule(dashboard.parcours)}</p>
+            </div>
+            <div className="accueil-client">
+              <p className="accueil-client-nom">{dashboard.nom}</p>
+              <button onClick={logout} className="accueil-deconnexion">
+                Se déconnecter
+              </button>
+            </div>
+          </header>
 
-        {/* Bandeau de progression compact : une ligne discrete, sans jauge.
-            Les indicateurs sans donnee (pas de KPI, aucun livrable) ne sont
-            pas affiches. */}
-        <div className="progress-strip">
-          <ProgressStat pct={avancementPct}>{ficheDoneCount} / {totalFiches} fiches</ProgressStat>
-          <ProgressStat pct={modulesPct}>{modulesDoneCount} / {modules.length} modules</ProgressStat>
-          {avecKpi && <ProgressStat pct={kpiPct}>Progression KPI J90</ProgressStat>}
-          {livrablesTotal > 0 && (
-            <ProgressStat pct={livrablesPct}>Livrables ({livrablesTermines}/{livrablesTotal})</ProgressStat>
+          {onglet === 'tableau' && (
+            <>
+              <h2 className="accueil-section-titre">Tableau de bord</h2>
+              <div className="jauges">
+                <Jauge pct={avancementPct} titre="Fiches" detail={`${ficheDoneCount} / ${totalFiches} fiches`} />
+                <Jauge pct={modulesPct} titre="Modules" detail={`${modulesDoneCount} / ${modules.length} modules`} />
+                {avecKpi && <Jauge pct={kpiPct} titre="KPI J90" detail="Progression vers tes objectifs" />}
+                {livrablesTotal > 0 && (
+                  <Jauge pct={livrablesPct} titre="Livrables" detail={`${livrablesTermines} / ${livrablesTotal} livrables`} />
+                )}
+              </div>
+
+              <ProchaineEtape
+                module={moduleEnCours}
+                fiche={ficheAReprendre}
+                onOpen={openFiche}
+                onParcours={() => changerOnglet('parcours')}
+              />
+
+              {dashboard.objectif_90j && (
+                <section className="panel">
+                  <p className="panel-eyebrow">Objectif 90 jours</p>
+                  <p className="panel-lead">{dashboard.objectif_90j}</p>
+                </section>
+              )}
+
+              <SynthesesSection syntheses={dashboard.syntheses} />
+              <KpiTable kpis={dashboard.kpi} />
+            </>
           )}
-        </div>
 
-        {/* Le parcours est l'action principale : il vient juste apres. */}
-        <h2 className="accueil-section-titre">Mon parcours</h2>
-        <div className="modules-grille">
-          {modules.map((group) => (
-            <ModuleCarte
-              key={group.label}
-              module={group}
-              onOpen={openFiche}
-              ouvertParDefaut={group.label === moduleOuvertParDefaut}
-            />
-          ))}
-        </div>
+          {onglet === 'parcours' && (
+            <>
+              <h2 className="accueil-section-titre">Mon parcours</h2>
+              <div className="modules-grille parcours-frise">
+                {modules.map((group) => (
+                  <ModuleCarte
+                    key={group.label}
+                    module={group}
+                    onOpen={openFiche}
+                    ouvertParDefaut={group.label === moduleOuvertParDefaut}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
-        <SynthesesSection syntheses={dashboard.syntheses} />
-
-        {/* Informations de reference, apres le parcours, en presentation
-            sobre. Un bloc sans donnee n'est pas affiche. */}
-        <div className="portal-secondary">
-          <div className="portal-secondary-row">
-            <IdentiteCard identite={dashboard.identite} cohorte={dashboard.cohorte} sessions={dashboard.sessions} />
-
-            {dashboard.objectif_90j && (
+          {onglet === 'ressources' && (
+            <>
+              <h2 className="accueil-section-titre">Ressources</h2>
               <section className="panel">
-                <p className="panel-eyebrow">
-                  Objectif 90 jours
-                </p>
-                <p className="panel-lead">{dashboard.objectif_90j}</p>
+                <p className="panel-eyebrow">Mes fiches terminées</p>
+                {fichesTerminees.length ? (
+                  <ul className="module-carte-fiches ressources-liste">
+                    {fichesTerminees.map((fiche) => {
+                      const { numero: n, titre: t } = lireFiche(fiche.nom)
+                      return (
+                        <li key={fiche.id}>
+                          <button onClick={() => openFiche(fiche.id)} className="module-fiche module-fiche-fini">
+                            <span className="module-fiche-numero">{n ?? '•'}</span>
+                            <span className="module-fiche-titre">{t}</span>
+                            <ChevronRight size={14} className="module-fiche-icone" aria-hidden="true" />
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <p className="espace-vide">Tes fiches terminées apparaîtront ici, prêtes à être relues.</p>
+                )}
               </section>
-            )}
-          </div>
+              <ModulesBreakdown modules={modules} />
+            </>
+          )}
 
-          <KpiTable kpis={dashboard.kpi} />
+          {onglet === 'communaute' && (
+            <>
+              <h2 className="accueil-section-titre">Communauté</h2>
+              <section className="panel">
+                <p className="panel-eyebrow">Ma cohorte et mes sessions</p>
+                {dashboard.cohorte && (
+                  <p className="flex items-center gap-2 text-sm mb-3" style={{ color: 'var(--text-dimmed)' }}>
+                    <Users size={14} color="var(--gold)" />
+                    Cohorte {dashboard.cohorte.nom} {dashboard.cohorte.statut && `· ${dashboard.cohorte.statut}`}
+                  </p>
+                )}
+                {dashboard.sessions.length > 0 ? (
+                  dashboard.sessions.map((session) => (
+                    <p key={session.id} className="flex items-center gap-2 text-sm mb-1.5" style={{ color: 'var(--text-dimmed)' }}>
+                      <CalendarDays size={14} color="var(--text-soft)" />
+                      {session.nom} {session.date_heure && `— ${session.date_heure}`} {session.statut && `(${session.statut})`}
+                    </p>
+                  ))
+                ) : (
+                  <p className="espace-vide">Les dates de tes prochains points collectifs apparaîtront ici dès qu'elles seront planifiées.</p>
+                )}
+              </section>
+            </>
+          )}
 
-          <ModulesBreakdown modules={modules} />
-        </div>
+          {onglet === 'profil' && (
+            <>
+              <h2 className="accueil-section-titre">Profil</h2>
+              <div className="portal-secondary-row">
+                <IdentiteCard identite={dashboard.identite} cohorte={null} sessions={[]} />
+                {dashboard.objectif_90j && (
+                  <section className="panel">
+                    <p className="panel-eyebrow">Objectif 90 jours</p>
+                    <p className="panel-lead">{dashboard.objectif_90j}</p>
+                  </section>
+                )}
+              </div>
+            </>
+          )}
+        </main>
       </div>
     )
   }
