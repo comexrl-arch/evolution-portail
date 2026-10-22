@@ -1661,6 +1661,18 @@ def _contenu_master_cache(page_id: str) -> str:
     return _cache_set(cle, _get_page_content(page_id, checks=True), _TTL_MASTER)
 
 
+def _derniere_maj_blocs(page_id: str) -> str | None:
+    # Date de la derniere modification du contenu (pas des proprietes : la
+    # validation de la fiche ne doit pas compter comme une mise a jour).
+    try:
+        dates = [b.get("last_edited_time") for b in _list_children(page_id)]
+    except RuntimeError:
+        return None
+
+    dates = [d for d in dates if d]
+    return max(dates) if dates else None
+
+
 def _segments_recurrents(master_id: str, schema: dict) -> list[dict] | None:
     # Fiche de suivi (plan de la semaine, bilan hebdo) : le modele Notion
     # pose les memes questions que le formulaire, dans le meme ordre. On
@@ -1723,6 +1735,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
     livrables_future = _POOL.submit(_livrables_for_fiche, fiche_client_id, master_id)
 
     segments = None
+    mis_a_jour = None
 
     if mode == "unique":
         if master_id in _FICHES_DEBLOCAGE_COACH:
@@ -1740,6 +1753,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
             # client (sinon sa reponse enregistree masquerait les mises a
             # jour du coach).
             segments = _page_segments(fiche_client_id, questions_libres=False)
+            mis_a_jour = _derniere_maj_blocs(fiche_client_id)
         else:
             # Toujours lu depuis la fiche MASTER plutot que la copie client :
             # le pipeline n8n de duplication (Sub_InjectBlocksTree) peut
@@ -1826,6 +1840,9 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
         "livrables": livrables,
         "checks": checks_etat,
     }
+
+    if mis_a_jour:
+        result["mis_a_jour"] = mis_a_jour
 
     if mode == "unique":
         result["segments"] = segments

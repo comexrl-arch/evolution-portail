@@ -114,5 +114,10 @@ cles = ns._donnees_vers_cles({"Votre activité / Votre métier :": "Plombier", "
 check("ancienne reponse 'vous' retrouvee", cles.get("a") == "Plombier" and cles.get("b") == "TPE")
 check("etat des cases intact", "__checklist__" in cles)
 
+print("Horodatage de mise a jour")
+blocs = [{"last_edited_time": "2026-10-20T10:00:00.000Z"}, {"last_edited_time": "2026-10-22T11:31:00.000Z"}]
+with patch.object(ns, "_list_children", return_value=blocs):
+    check("derniere modification du contenu", ns._derniere_maj_blocs("p") == "2026-10-22T11:31:00.000Z")
+
 print(f"\n{passed} PASS, {failed} FAIL")
 sys.exit(1 if failed else 0)

@@ -635,6 +635,16 @@ function FicheSegments({ segments, formValues, onChange, surtitre }) {
   )
 }
 
+function formaterMaj(iso) {
+  // Heure de Guadeloupe, ou se trouvent les clients.
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const options = { timeZone: 'America/Guadeloupe' }
+  const jour = date.toLocaleDateString('fr-FR', { ...options, day: '2-digit', month: '2-digit', year: 'numeric' })
+  const heure = date.toLocaleTimeString('fr-FR', { ...options, hour: '2-digit', minute: '2-digit' })
+  return `${jour} à ${heure}`
+}
+
 function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error }) {
   // Fiche de suivi (plan de la semaine, bilan hebdo) : les reponses se
   // saisissent sous chaque question ; le bloc du bas date l'entree et
@@ -1842,6 +1852,10 @@ function Portail() {
               />
             ) : ficheData.mode === 'unique' && ficheData.segments ? (
               <>
+                {ficheData.mis_a_jour && (
+                  <p className="fiche-maj">Mis à jour le {formaterMaj(ficheData.mis_a_jour)}</p>
+                )}
+
                 <FicheSegments
                   surtitre={surtitreFiche(ficheData.nom)}
                   segments={ficheData.segments}
