@@ -119,5 +119,29 @@ blocs = [{"last_edited_time": "2026-10-20T10:00:00.000Z"}, {"last_edited_time": 
 with patch.object(ns, "_list_children", return_value=blocs):
     check("derniere modification du contenu", ns._derniere_maj_blocs("p") == "2026-10-22T11:31:00.000Z")
 
+print("Fiche 8 Autonome recalculee apres une reponse modifiee")
+ZONE = next(iter(ns._DIAGNOSTIC_ZONE_IDS))
+dash = {"parcours": "Autonome", "fiches": [
+    {"id": "zone-1", "master_id": ZONE, "etat": "Terminé"},
+    {"id": "f8", "master_id": ns._DIAGNOSTIC_FICHE8_MASTER_ID, "etat": "Terminé"},
+]}
+rapport = {"complet": True, "zones": [{"zone": "Prospection", "score": 0}],
+           "propositions": [{"label": "Score de Prospection", "valeur": "0 / 3"}, {"label": "SCORE TOTAL", "valeur": "8 / 15"}]}
+champs8 = [{"block_id": "b1", "type": "bulleted_list_item", "label": "Score de Prospection", "valeur": "3 / 3"},
+           {"block_id": "b2", "type": "bulleted_list_item", "label": "SCORE TOTAL", "valeur": "15 / 15"}]
+ecrits = []
+with patch.object(ns, "get_client_dashboard", return_value=dash), \
+        patch.object(ns, "get_diagnostic_rapport", return_value=rapport), \
+        patch.object(ns, "get_diagnostic_fiche8", return_value=champs8), \
+        patch.object(ns, "update_diagnostic_fiche8", side_effect=ecrits.extend), \
+        patch.object(ns, "_maj_recommandation_autonome") as reco:
+    check("recalcul fait", ns.recalculer_fiche8_autonome("c", "zone-1") is True)
+    check("scores mis a jour", [u["valeur"] for u in ecrits] == ["0 / 3", "8 / 15"])
+    check("recommandation de la zone la plus faible", reco.call_args[0][1] == ns._RECOMMANDATION_AUTONOME["Prospection"])
+
+    dash["parcours"] = ""
+    ecrits.clear()
+    check("Coaching : fiche 8 du coach intacte", ns.recalculer_fiche8_autonome("c", "zone-1") is False and not ecrits)
+
 print(f"\n{passed} PASS, {failed} FAIL")
 sys.exit(1 if failed else 0)

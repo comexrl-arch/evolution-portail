@@ -465,6 +465,7 @@ def portal_create_entry(
     fiche_id: str,
     request: PortalEntryRequest,
     authorization: str = Header(default=""),
+    background_tasks: BackgroundTasks = None,
 ):
     session = _session_from_header(authorization)
 
@@ -478,7 +479,18 @@ def portal_create_entry(
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_create_entry", error)
 
+    if background_tasks is not None:
+        background_tasks.add_task(_recalculer_fiche8, session["client_page_id"], fiche_id)
     return {"status": "saved", "entry": entry}
+
+
+def _recalculer_fiche8(client_page_id: str, fiche_id: str) -> None:
+    # Tache de fond, best-effort : une reponse de diagnostic modifiee apres
+    # coup met a jour la fiche 8 automatique (parcours Autonome).
+    try:
+        notion_service.recalculer_fiche8_autonome(client_page_id, fiche_id)
+    except Exception as error:
+        _journaliser_alerte_impossible("fiche8_recalcul", error)
 
 
 def _alerter_si_diagnostic_termine(client_page_id: str, fiche_id: str) -> None:

@@ -2651,6 +2651,79 @@ def remplir_fiche8_autonome(client_page_id: str) -> bool:
     return True
 
 
+def recalculer_fiche8_autonome(client_page_id: str, fiche_id: str) -> bool:
+    """Parcours Autonome : le client a modifie une fiche de diagnostic alors
+    que sa fiche 8 est deja remplie. On recalcule scores, priorites et
+    recommandation, sinon la fiche 8 garde les resultats de ses premieres
+    reponses. En Coaching, la fiche 8 appartient au coach : on n'y touche pas.
+    """
+    dashboard = get_client_dashboard(client_page_id)
+
+    if not _est_parcours_autonome(dashboard.get("parcours")):
+        return False
+
+    fiche_id = fiche_id.replace("-", "")
+    modifiee = next((f for f in dashboard["fiches"] if f["id"].replace("-", "") == fiche_id), None)
+    fiche8 = next((f for f in dashboard["fiches"] if f.get("master_id") == _DIAGNOSTIC_FICHE8_MASTER_ID), None)
+
+    if not modifiee or modifiee.get("master_id") not in _DIAGNOSTIC_ZONE_IDS:
+        return False
+
+    if not fiche8 or fiche8.get("etat") != "Terminé":
+        # Pas encore remplie : remplir_fiche8_autonome s'en chargera.
+        return False
+
+    rapport = get_diagnostic_rapport(client_page_id)
+
+    if not rapport.get("complet"):
+        return False
+
+    valeurs = {p["label"]: p["valeur"] for p in rapport.get("propositions", [])}
+    updates = [
+        {**champ, "valeur": valeurs[champ["label"]]}
+        for champ in get_diagnostic_fiche8(fiche8["id"])
+        if champ["label"] in valeurs and champ["valeur"] != valeurs[champ["label"]]
+    ]
+
+    if updates:
+        update_diagnostic_fiche8(updates)
+
+    zone = _zone_la_plus_faible(rapport)
+
+    if zone:
+        _maj_recommandation_autonome(fiche8["id"], _RECOMMANDATION_AUTONOME[zone])
+
+    return True
+
+
+def _maj_recommandation_autonome(fiche8_id: str, texte: str) -> None:
+    # Le paragraphe qui suit le titre "TA PRIORITE DES 30 PROCHAINS JOURS".
+    blocs = _list_children(fiche8_id)
+
+    for index, bloc in enumerate(blocs):
+        if bloc.get("type") == "heading_3" and "30 PROCHAINS JOURS" in _block_text(bloc):
+            suivant = blocs[index + 1] if index + 1 < len(blocs) else None
+
+            if not suivant or suivant.get("type") != "paragraph" or _block_text(suivant) == texte:
+                return
+
+            if _block_text(suivant) == _MENTION_FICHE8_AUTONOME:
+                return
+
+            try:
+                response = _http.patch(
+                    f"{NOTION_API_BASE}/blocks/{suivant['id']}",
+                    headers=_headers(),
+                    json={"paragraph": {"rich_text": [_rt(texte)]}},
+                    timeout=15,
+                )
+                response.raise_for_status()
+            except requests.RequestException as error:
+                raise RuntimeError(f"Erreur Notion (recommandation fiche 8 {fiche8_id}) : {error}") from error
+
+            return
+
+
 # --- Parcours Autonome : syntheses mensuelles redigees par n8n ---
 SYNTHESES_DATA_SOURCE_ID = os.getenv(
     "NOTION_SYNTHESES_DATA_SOURCE_ID", "9f11e9fa-34a4-48fb-9f27-658a4ad3bf83"
