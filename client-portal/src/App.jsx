@@ -934,6 +934,47 @@ function ParcoursSurMesure({ personnalisation, fiches, onOpen }) {
   )
 }
 
+function PourquoiPourToi({ fiche, personnalisation }) {
+  if (fiche?.priorite?.type !== 'prioritaire' || !personnalisation) return null
+
+  const zone = personnalisation.zones_prioritaires.find((z) => z.zone === fiche.priorite.zone)
+  if (!zone) return null
+
+  return (
+    <aside className="pourquoi-pour-toi">
+      <p className="pourquoi-pour-toi-titre">Pourquoi cette fiche est prioritaire pour toi</p>
+      <p>Ton diagnostic : {zone.zone} à {zone.score} / 3. {zone.pourquoi}</p>
+    </aside>
+  )
+}
+
+function RetourIA({ retour, actif }) {
+  if (!actif || !retour) return null
+
+  return (
+    <section className="retour-ia">
+      <header className="retour-ia-entete">
+        <Sparkles size={17} aria-hidden="true" />
+        <h2>Ton retour personnalisé</h2>
+      </header>
+      {retour.statut === 'publie' ? (
+        <>
+          {retour.texte.split(/\n\s*\n/).map((paragraphe, index) => (
+            <p key={index}>{paragraphe}</p>
+          ))}
+          {retour.date && <p className="retour-ia-date">Rédigé le {formaterMaj(retour.date)}</p>}
+        </>
+      ) : retour.statut === 'relecture' ? (
+        <p className="retour-ia-attente">Ton retour est prêt, Rony le relit. Il apparaîtra ici d'ici quelques heures.</p>
+      ) : (
+        <p className="retour-ia-attente">
+          <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Ton retour personnalisé est en cours de rédaction, il arrive dans quelques minutes.
+        </p>
+      )}
+    </section>
+  )
+}
+
 function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
   const { surtitre, titre } = lireModule(module.label)
   const illustration = illustrationDuModule(module.label)
@@ -1208,6 +1249,39 @@ function Portail() {
   const [error, setError] = useState('')
   const [dashboard, setDashboard] = useState(null)
   const [activeFicheId, setActiveFicheId] = useState(null)
+  const retourEnCours = ficheData?.entrees?.[ficheData.entrees.length - 1]?.retour_ia?.statut === 'en_cours'
+
+  // Retour IA en cours de redaction : on relit la fiche toutes les 30 s
+  // (10 fois au plus) sans toucher a ce que le client est en train de saisir.
+  useEffect(() => {
+    if (!retourEnCours || !activeFicheId) return undefined
+
+    let essais = 0
+    const minuteur = setInterval(async () => {
+      essais += 1
+      if (essais > 10) {
+        clearInterval(minuteur)
+        return
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/portal/fiches/${activeFicheId}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
+        })
+        if (!response.ok) return
+        const data = await response.json()
+        const derniere = data.entrees[data.entrees.length - 1]
+        if (derniere?.retour_ia?.statut && derniere.retour_ia.statut !== 'en_cours') {
+          setFicheData((prev) => (prev ? { ...prev, entrees: data.entrees } : prev))
+          clearInterval(minuteur)
+        }
+      } catch {
+        // Nouvel essai au prochain tour.
+      }
+    }, 30000)
+
+    return () => clearInterval(minuteur)
+  }, [retourEnCours, activeFicheId])
   const [ficheData, setFicheData] = useState(null)
   const [livrableData, setLivrableData] = useState(null)
   const [formValues, setFormValues] = useState({})
@@ -1454,7 +1528,8 @@ function Portail() {
 
     if (!response.ok) throw new Error("Erreur lors de l'enregistrement.")
 
-    const { entry } = await response.json()
+    const { entry: enregistree } = await response.json()
+    const entry = ficheData?.retour_ia_actif ? { ...enregistree, retour_ia: { statut: 'en_cours' } } : enregistree
 
     setFicheData((prev) => {
       if (!prev) return prev
@@ -1903,6 +1978,11 @@ function Portail() {
           <Loader2 className="animate-spin" color="var(--gold)" size={28} />
         ) : (
           <>
+            <PourquoiPourToi
+              fiche={dashboard?.fiches?.find((f) => f.id === activeFicheId)}
+              personnalisation={dashboard?.personnalisation}
+            />
+
             {/* Pas de titre ici : verifie sur les 22 fiches master, le
                 contenu commence toujours par son propre titre en "# "
                 (avec emoji) - un h1 au-dessus ferait doublon. */}
@@ -1990,6 +2070,11 @@ function Portail() {
                 )}
               </>
             )}
+
+            <RetourIA
+              actif={ficheData.retour_ia_actif}
+              retour={ficheData.entrees[ficheData.entrees.length - 1]?.retour_ia}
+            />
 
             <LivrablesSection livrables={ficheData.livrables} onOpen={openLivrable} />
 

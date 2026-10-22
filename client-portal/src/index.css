@@ -3120,3 +3120,65 @@ body[data-ecran="dashboard"] .portal-monogramme {
 .sur-mesure-fiche:not(:disabled):hover {
   color: var(--accent);
 }
+
+/* Retour IA et "pourquoi pour toi" sur la fiche */
+.pourquoi-pour-toi {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.pourquoi-pour-toi-titre {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.25rem;
+}
+
+.retour-ia {
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem;
+  border: var(--border-subtle);
+  border-top: 3px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 0.93rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+.retour-ia p {
+  margin: 0 0 0.6rem;
+}
+
+.retour-ia-entete {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.retour-ia-entete h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.retour-ia-attente {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-tertiary);
+  font-size: 0.88rem;
+}
+
+.retour-ia-date {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  margin: 0.25rem 0 0 !important;
+}
