@@ -1358,10 +1358,11 @@ def _options_du_todo(block: dict) -> list[str]:
 
 
 def _question_sans_zone(block: dict) -> str | None:
-    # Puce en gras sans sous-puce "Ecris ici..." : "**Le segment cible :**"
-    # ou "**Je vais contacter :**  nouveaux prospects." (trou a remplir).
+    # Puce en gras sans sous-puce "Ecris ici..." : "**Le segment cible :**".
     # Sans ce repere, la question s'affichait comme du texte, sans aucun
     # moyen d'y repondre. Renvoie le libelle de la question, sinon None.
+    # Pas de detection des "trous" (double espace) : la fiche 8 en contient
+    # ("**Score d'Offre :**  / 3") et ces lignes sont remplies par le coach.
     if block.get("type") != "bulleted_list_item" or block.get("has_children"):
         return None
 
@@ -1381,13 +1382,10 @@ def _question_sans_zone(block: dict) -> str | None:
     if not reste.strip() and propre.endswith((":", "?")):
         return propre
 
-    if re.search(r"\S {2,}\S", texte.strip()):
-        return re.sub(r" {2,}", " … ", propre)
-
     return None
 
 
-def _page_segments(page_id: str) -> list[dict]:
+def _page_segments(page_id: str, questions_libres: bool = True) -> list[dict]:
     # Rendu "fidele" d'une fiche Q&A : chaque question Notion (puce en gras
     # suivie d'une sous-puce "Ecrivez ici...") devient un champ affiche en
     # ligne juste apres son enonce, plutot qu'une zone de reponses separee.
@@ -1422,7 +1420,7 @@ def _page_segments(page_id: str) -> list[dict]:
             })
             continue
 
-        question = _question_sans_zone(block)
+        question = _question_sans_zone(block) if questions_libres else None
 
         if question:
             segments.append({
@@ -1738,7 +1736,10 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
             # portail tant qu'on lisait le master. Ces fiches n'ont pas de
             # champs to_do/sous-puce a proteger du bug de flattening n8n
             # decrit ci-dessous, donc rien ne justifie le repli sur master.
-            segments = _page_segments(fiche_client_id)
+            # Contenu ecrit par le coach : rien n'y est a remplir par le
+            # client (sinon sa reponse enregistree masquerait les mises a
+            # jour du coach).
+            segments = _page_segments(fiche_client_id, questions_libres=False)
         else:
             # Toujours lu depuis la fiche MASTER plutot que la copie client :
             # le pipeline n8n de duplication (Sub_InjectBlocksTree) peut
