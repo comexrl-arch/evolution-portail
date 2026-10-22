@@ -3195,3 +3195,105 @@ body[data-ecran="dashboard"] .portal-monogramme {
   color: var(--text-primary);
   margin: 0.25rem 0 0;
 }
+
+/* Entrainement aux objections */
+.entrainement {
+  margin: 1.5rem 0;
+  padding: 1rem 1.1rem;
+  border: var(--border-subtle);
+  border-top: 3px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.entrainement-intro {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.entrainement-scenarios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.entrainement-scenario {
+  font-size: 0.82rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  border: var(--border-subtle);
+  background: var(--surface-3);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.entrainement-scenario-actif {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-color: var(--accent);
+}
+
+.entrainement-chat {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.entrainement-bulle {
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  max-width: 85%;
+}
+
+.entrainement-bulle-prospect {
+  background: var(--surface-3);
+  justify-self: start;
+}
+
+.entrainement-bulle-client {
+  background: var(--accent-soft);
+  justify-self: end;
+}
+
+.entrainement-auteur {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 0.15rem;
+}
+
+.entrainement-saisie textarea {
+  width: 100%;
+  border: var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.entrainement-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.entrainement-retour {
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+}
+
+.entrainement-retour p {
+  margin: 0 0 0.5rem;
+}

@@ -1847,6 +1847,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
         result["mis_a_jour"] = mis_a_jour
 
     result["retour_ia_actif"] = master_id not in _FICHES_SANS_RETOUR_IA
+    result["entrainement"] = master_id in _FICHES_ENTRAINEMENT
 
     if mode == "unique":
         result["segments"] = segments
@@ -2771,6 +2772,10 @@ _DELAI_RELECTURE_RETOUR_IA_H = 12
 _FICHES_SANS_RETOUR_IA = _DIAGNOSTIC_ZONE_IDS | {_DIAGNOSTIC_FICHE8_MASTER_ID} | {
     master_id for master_id, schema in FICHE_SCHEMAS.items() if schema["nom"].startswith("Bonus")
 }
+
+# Fiches qui proposent l'entrainement aux objections : trame d'entretien
+# (interne 18) et gestion des objections (interne 16).
+_FICHES_ENTRAINEMENT = {_NUMERO_TO_MASTER_ID["18"], _NUMERO_TO_MASTER_ID["16"]}
 
 _RETOUR_IA_SYSTEME = """Tu es le coach IA du programme eVolution 2.0 de RL-Evolution (Rony), accompagnement commercial des indépendants et TPE des Antilles-Guyane. Un client vient d'enregistrer une fiche de travail. Tu lui écris un retour personnel.
 
