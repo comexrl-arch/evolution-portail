@@ -856,6 +856,90 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
 }
 
 
+.kpi-graphique {
+  margin-top: 0.75rem;
+}
+
+.kpi-graphique svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.kpi-graphique-axe {
+  stroke: var(--brand-line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.kpi-graphique-label {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--text-tertiary);
+}
+
+.kpi-graphique-valeur {
+  font-size: 10px;
+  font-weight: 800;
+  fill: var(--text-primary);
+}
+
+.kpi-graphique-realise,
+.kpi-graphique-objectif {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.kpi-graphique-realise {
+  stroke: var(--gold);
+}
+
+.kpi-graphique-objectif {
+  stroke: var(--text-tertiary);
+  stroke-dasharray: 4 4;
+}
+
+.kpi-graphique-point {
+  fill: var(--gold);
+  stroke: var(--brand-white);
+  stroke-width: 2;
+}
+
+.kpi-graphique-point-objectif {
+  fill: var(--brand-white);
+  stroke: var(--text-tertiary);
+  stroke-width: 1.5;
+}
+
+.kpi-graphique-legende {
+  display: flex;
+  gap: 0.9rem;
+  margin-top: 0.3rem;
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+}
+
+.kpi-graphique-legende span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.kpi-graphique-legende i {
+  display: inline-block;
+  width: 14px;
+  height: 0;
+  border-top: 2px solid var(--gold);
+}
+
+.kpi-graphique-legende .kpi-legende-objectif {
+  border-top: 2px dashed var(--text-tertiary);
+}
+
 .kpi-maj {
   margin-top: 0.75rem;
   align-self: flex-start;
