@@ -856,6 +856,37 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
 }
 
 
+.kpi-maj {
+  margin-top: 0.75rem;
+  align-self: flex-start;
+  font-size: 0.75rem;
+}
+
+.kpi-saisie {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.kpi-saisie-ligne {
+  display: grid;
+  grid-template-columns: 2.5rem 1fr 1fr;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.kpi-saisie-ligne .field-input {
+  padding: 0.4rem 0.55rem;
+  font-size: 0.85rem;
+  min-width: 0;
+}
+
+.kpi-saisie-erreur {
+  font-size: 0.75rem;
+  color: #A1442F;
+}
+
+
 /* ==========================================================================
    11. LISTES / CHECKLIST
    ========================================================================== */
