@@ -1385,6 +1385,74 @@ function versChamp(valeur) {
   return valeur === null || valeur === undefined ? '' : String(valeur)
 }
 
+// Petit graphique de progression d'un KPI : realise (trait plein) et objectif
+// (pointilles) de J0 a J90, sur une seule echelle.
+const KPI_POINTS = [
+  { label: 'J0', valeur: 'valeur_j0' },
+  { label: 'J30', valeur: 'valeur_j30', objectif: 'objectif_j30' },
+  { label: 'J60', valeur: 'valeur_j60', objectif: 'objectif_j60' },
+  { label: 'J90', valeur: 'valeur_j90', objectif: 'objectif_j90' },
+]
+
+function nombreOuNull(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') return null
+  const nombre = Number(valeur)
+  return Number.isFinite(nombre) ? nombre : null
+}
+
+function formaterKpi(nombre) {
+  return nombre.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
+}
+
+function KpiGraphique({ kpi }) {
+  const realise = KPI_POINTS.map((p, i) => ({ i, label: p.label, v: nombreOuNull(kpi[p.valeur]) })).filter((p) => p.v !== null)
+  const objectif = KPI_POINTS.map((p, i) => ({ i, label: p.label, v: p.objectif ? nombreOuNull(kpi[p.objectif]) : null })).filter((p) => p.v !== null)
+
+  // Une courbe n'a de sens qu'a partir de deux points.
+  if (realise.length + objectif.length < 2) return null
+
+  const L = 280
+  const H = 96
+  const marge = { haut: 14, bas: 18, gauche: 10, droite: 10 }
+  const max = Math.max(...realise.map((p) => p.v), ...objectif.map((p) => p.v), 1)
+  const x = (i) => marge.gauche + (i * (L - marge.gauche - marge.droite)) / 3
+  const y = (v) => H - marge.bas - (v / max) * (H - marge.haut - marge.bas)
+  const trace = (points) => points.map((p, k) => `${k ? 'L' : 'M'}${x(p.i)},${y(p.v)}`).join(' ')
+  const dernier = realise[realise.length - 1]
+
+  return (
+    <figure className="kpi-graphique" aria-label={`Progression ${kpi.nom}`}>
+      <svg viewBox={`0 0 ${L} ${H}`} role="img">
+        <line x1={marge.gauche} x2={L - marge.droite} y1={H - marge.bas} y2={H - marge.bas} className="kpi-graphique-axe" />
+        {KPI_POINTS.map((p, i) => (
+          <text key={p.label} x={x(i)} y={H - 4} textAnchor="middle" className="kpi-graphique-label">{p.label}</text>
+        ))}
+        {objectif.length > 1 && <path d={trace(objectif)} className="kpi-graphique-objectif" />}
+        {objectif.map((p) => (
+          <circle key={`o${p.i}`} cx={x(p.i)} cy={y(p.v)} r="3" className="kpi-graphique-point-objectif">
+            <title>{`${p.label} objectif : ${formaterKpi(p.v)}`}</title>
+          </circle>
+        ))}
+        {realise.length > 1 && <path d={trace(realise)} className="kpi-graphique-realise" />}
+        {realise.map((p) => (
+          <circle key={`r${p.i}`} cx={x(p.i)} cy={y(p.v)} r="4" className="kpi-graphique-point">
+            <title>{`${p.label} réalisé : ${formaterKpi(p.v)}`}</title>
+          </circle>
+        ))}
+        {dernier && (
+          <text x={x(dernier.i)} y={y(dernier.v) - 8} textAnchor={dernier.i === 3 ? 'end' : dernier.i === 0 ? 'start' : 'middle'} className="kpi-graphique-valeur">
+            {formaterKpi(dernier.v)}
+          </text>
+        )}
+      </svg>
+      <figcaption className="kpi-graphique-legende">
+        <span><i className="kpi-legende-realise" /> Réalisé</span>
+        <span><i className="kpi-legende-objectif" /> Objectif</span>
+      </figcaption>
+    </figure>
+  )
+}
+
 function KpiCard({ kpi, onSave }) {
   const [edition, setEdition] = useState(false)
   const [valeurs, setValeurs] = useState({})
@@ -1486,6 +1554,7 @@ function KpiCard({ kpi, onSave }) {
             <KpiPeriod label="J60" valeur={kpi.valeur_j60} objectif={kpi.objectif_j60} />
             <KpiPeriod label="J90" valeur={kpi.valeur_j90} objectif={kpi.objectif_j90} />
           </div>
+          <KpiGraphique kpi={kpi} />
           {onSave && (
             <button type="button" className="prochaine-etape-lien kpi-maj" onClick={ouvrir}>
               Mettre à jour mes chiffres
