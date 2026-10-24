@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -31,6 +31,76 @@ const SESSION_KEY = 'portal_session_token'
 function sansNomClient(nom) {
   const index = nom.indexOf(' - ')
   return index === -1 ? nom : nom.slice(index + 3)
+}
+
+// Dictee vocale : reconnaissance de la parole integree au navigateur
+// (gratuite, Chrome, Edge, Safari ; absente de Firefox, le bouton est alors
+// simplement masque). Proposee sur les reponses qu'on dit a l'oral : pitch,
+// presentation, script, phrase de positionnement.
+const SpeechRecognitionNavigateur =
+  typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : undefined
+const CHAMP_ORAL = /pitch|oral|pr[ée]sentation|pr[ée]sente|script|positionnement|elevator|accroche|discours/i
+
+function DicteeVocale({ value, onChange }) {
+  const [ecoute, setEcoute] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const reconnaissance = useRef(null)
+  const valeurCourante = useRef(value)
+  valeurCourante.current = value
+
+  useEffect(() => () => reconnaissance.current?.abort(), [])
+
+  if (!SpeechRecognitionNavigateur) return null
+
+  const demarrer = () => {
+    const rec = new SpeechRecognitionNavigateur()
+    rec.lang = 'fr-FR'
+    rec.continuous = true
+    rec.interimResults = false
+    rec.onresult = (event) => {
+      let texte = ''
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        if (event.results[i].isFinal) texte += event.results[i][0].transcript
+      }
+      texte = texte.trim()
+      if (!texte) return
+      const avant = (valeurCourante.current || '').trimEnd()
+      const suivant = avant ? `${avant} ${texte}` : texte.charAt(0).toUpperCase() + texte.slice(1)
+      valeurCourante.current = suivant
+      onChange(suivant)
+    }
+    rec.onerror = (event) => {
+      setErreur(event.error === 'not-allowed' || event.error === 'service-not-allowed'
+        ? "Autorise l'accès au micro dans ton navigateur pour dicter."
+        : "La dictée s'est interrompue. Réessaie.")
+    }
+    rec.onend = () => setEcoute(false)
+    reconnaissance.current = rec
+    setErreur('')
+    setEcoute(true)
+    try {
+      rec.start()
+    } catch {
+      setEcoute(false)
+    }
+  }
+
+  const arreter = () => reconnaissance.current?.stop()
+
+  return (
+    <div className="dictee">
+      <button
+        type="button"
+        className={`dictee-bouton${ecoute ? ' dictee-active' : ''}`}
+        onClick={ecoute ? arreter : demarrer}
+        aria-pressed={ecoute}
+      >
+        <Mic size={14} aria-hidden="true" />
+        {ecoute ? 'J’écoute… touche pour arrêter' : 'Dicter à voix haute'}
+      </button>
+      {erreur && <p className="dictee-erreur">{erreur}</p>}
+    </div>
+  )
 }
 
 function FieldInput({ champ, value, onChange }) {
@@ -75,7 +145,7 @@ function FieldInput({ champ, value, onChange }) {
     )
   }
 
-  return (
+  const zone = (
     <textarea
       className="field-input"
       rows={3}
@@ -83,6 +153,15 @@ function FieldInput({ champ, value, onChange }) {
       value={value ?? ''}
       onChange={(event) => onChange(event.target.value)}
     />
+  )
+
+  if (!CHAMP_ORAL.test(champ.libelle || '')) return zone
+
+  return (
+    <>
+      {zone}
+      <DicteeVocale value={value ?? ''} onChange={onChange} />
+    </>
   )
 }
 
