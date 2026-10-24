@@ -843,6 +843,42 @@ def _client_kpi(client_page_id: str) -> list[dict]:
     return kpis
 
 
+# Valeurs et objectifs KPI que le client peut saisir lui-meme depuis le
+# tableau de bord, a tout moment du parcours (indispensable pour l'Autonome,
+# qui n'a pas de coach pour les renseigner, et pour les clients crees par le
+# webhook DocuSeal, dont le J0 reste vide). Cle du portail -> propriete Notion.
+KPI_CHAMPS_SAISISSABLES = {
+    "valeur_j0": "Valeur J0",
+    "valeur_j30": "Valeur J30",
+    "valeur_j60": "Valeur J60",
+    "valeur_j90": "Valeur J90",
+    "objectif_j30": "Objectif J30",
+    "objectif_j60": "Objectif J60",
+    "objectif_j90": "Objectif J90",
+}
+
+
+def update_kpi(kpi_id: str, valeurs: dict, etat_actuel: str | None = None) -> None:
+    # None efface la valeur. Les cles inconnues sont ignorees (la route les
+    # refuse deja en amont).
+    properties = {
+        KPI_CHAMPS_SAISISSABLES[cle]: {"number": None if valeur is None else float(valeur)}
+        for cle, valeur in valeurs.items()
+        if cle in KPI_CHAMPS_SAISISSABLES
+    }
+
+    if not properties:
+        return
+
+    # Une premiere saisie fait passer l'indicateur de "Pas commencé" a "En cours"
+    # (un indicateur "Terminé" garde son etat).
+    if etat_actuel == "Pas commencé" and any(v.get("number") is not None for v in properties.values()):
+        properties["État"] = {"status": {"name": "En cours"}}
+
+    _update_page(kpi_id, properties)
+    _cache_clear("dashboard:")
+
+
 def _livrables_for_fiche(fiche_client_id: str, master_id: str) -> list[dict]:
     # "[DB] Livrables" relie chaque livrable a une fiche via deux relations
     # possibles : "Fiche Master (référence)" pour les 13 modeles generiques

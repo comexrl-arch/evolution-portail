@@ -7,6 +7,7 @@
 import hashlib
 import hmac
 import logging
+import math
 import os
 import time
 from datetime import date, datetime, timezone
@@ -593,6 +594,46 @@ def portal_valider_fiche(
         tableau = None
 
     return {"status": "validee", "dashboard": tableau}
+
+
+class PortalKpiRequest(BaseModel):
+    valeurs: dict
+
+
+@app.post("/portal/kpi/{kpi_id}")
+def portal_update_kpi(kpi_id: str, request: PortalKpiRequest, authorization: str = Header(default="")):
+    # Saisie des valeurs et objectifs KPI par le client lui-meme, depuis le
+    # tableau de bord. Le client ne peut modifier que ses propres indicateurs.
+    session = _session_from_header(authorization)
+    valeurs = request.valeurs or {}
+
+    if not valeurs or any(cle not in notion_service.KPI_CHAMPS_SAISISSABLES for cle in valeurs):
+        raise HTTPException(status_code=400, detail="Champ KPI inconnu.")
+
+    for valeur in valeurs.values():
+        if valeur is None:
+            continue
+
+        if isinstance(valeur, bool) or not isinstance(valeur, (int, float)) or not math.isfinite(valeur) or valeur < 0:
+            raise HTTPException(status_code=400, detail="Les KPI doivent etre des nombres positifs.")
+
+    try:
+        dashboard = notion_service.get_client_dashboard(session["client_page_id"])
+        kpi = next(
+            (k for k in dashboard.get("kpi") or [] if k["id"].replace("-", "") == kpi_id.replace("-", "")),
+            None,
+        )
+
+        if not kpi:
+            raise HTTPException(status_code=404, detail="Indicateur introuvable.")
+
+        notion_service.update_kpi(kpi["id"], valeurs, etat_actuel=kpi.get("etat"))
+        tableau = notion_service.get_client_dashboard(session["client_page_id"])
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_update_kpi", error)
+
+    return {"status": "enregistre", "dashboard": tableau}
 
 
 # --- Espace Onboarding Coach (mobile) : protege par un code d'acces simple,

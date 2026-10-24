@@ -1373,8 +1373,135 @@ function kpiRenseignes(kpis) {
   return Array.isArray(kpis) && kpis.some((kpi) => KPI_CHAMPS.some((champ) => kpi[champ] !== null && kpi[champ] !== undefined && kpi[champ] !== ''))
 }
 
-function KpiTable({ kpis }) {
-  if (!kpiRenseignes(kpis)) return null
+// Champs saisissables par le client, dans l'ordre d'affichage du formulaire.
+const KPI_SAISIE = [
+  { periode: 'J0', valeur: 'valeur_j0' },
+  { periode: 'J30', valeur: 'valeur_j30', objectif: 'objectif_j30' },
+  { periode: 'J60', valeur: 'valeur_j60', objectif: 'objectif_j60' },
+  { periode: 'J90', valeur: 'valeur_j90', objectif: 'objectif_j90' },
+]
+
+function versChamp(valeur) {
+  return valeur === null || valeur === undefined ? '' : String(valeur)
+}
+
+function KpiCard({ kpi, onSave }) {
+  const [edition, setEdition] = useState(false)
+  const [valeurs, setValeurs] = useState({})
+  const [enCours, setEnCours] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const ouvrir = () => {
+    setValeurs(Object.fromEntries(KPI_CHAMPS.map((champ) => [champ, versChamp(kpi[champ])])))
+    setErreur('')
+    setEdition(true)
+  }
+
+  const enregistrer = async (event) => {
+    event.preventDefault()
+    // N'envoie que les champs modifies ; un champ vide efface la valeur.
+    const modifies = {}
+
+    for (const champ of KPI_CHAMPS) {
+      if (valeurs[champ] === versChamp(kpi[champ])) continue
+      const texte = valeurs[champ].trim().replace(',', '.')
+      const nombre = texte === '' ? null : Number(texte)
+
+      if (nombre !== null && (!Number.isFinite(nombre) || nombre < 0)) {
+        setErreur('Saisis uniquement des nombres positifs.')
+        return
+      }
+
+      modifies[champ] = nombre
+    }
+
+    if (Object.keys(modifies).length === 0) {
+      setEdition(false)
+      return
+    }
+
+    setEnCours(true)
+    setErreur('')
+
+    try {
+      await onSave(kpi.id, modifies)
+      setEdition(false)
+    } catch {
+      setErreur("Tes chiffres n'ont pas pu être enregistrés. Réessaie.")
+    } finally {
+      setEnCours(false)
+    }
+  }
+
+  return (
+    <div className="kpi-card">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div>
+          <p className="kpi-nom">{kpi.nom}</p>
+          <p className="kpi-categorie">{kpi.categorie || '—'}</p>
+        </div>
+        <AccesBadge acces={kpi.etat} />
+      </div>
+
+      {edition ? (
+        <form className="kpi-saisie" onSubmit={enregistrer}>
+          {KPI_SAISIE.map(({ periode, valeur, objectif }) => (
+            <div key={periode} className="kpi-saisie-ligne">
+              <span className="kpi-period-label">{periode}</span>
+              <input
+                className="field-input"
+                inputMode="decimal"
+                aria-label={`${kpi.nom} ${periode} réalisé`}
+                placeholder="Réalisé"
+                value={valeurs[valeur]}
+                onChange={(e) => setValeurs({ ...valeurs, [valeur]: e.target.value })}
+              />
+              {objectif ? (
+                <input
+                  className="field-input"
+                  inputMode="decimal"
+                  aria-label={`${kpi.nom} ${periode} objectif`}
+                  placeholder="Objectif"
+                  value={valeurs[objectif]}
+                  onChange={(e) => setValeurs({ ...valeurs, [objectif]: e.target.value })}
+                />
+              ) : <span />}
+            </div>
+          ))}
+          {erreur && <p className="kpi-saisie-erreur">{erreur}</p>}
+          <div className="flex items-center gap-3 mt-2">
+            <button type="submit" className="fiche-bouton" disabled={enCours}>
+              {enCours ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+            <button type="button" className="prochaine-etape-lien" disabled={enCours} onClick={() => setEdition(false)}>
+              Annuler
+            </button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <div className="kpi-periods">
+            <KpiPeriod label="J0" valeur={kpi.valeur_j0} />
+            <KpiPeriod label="J30" valeur={kpi.valeur_j30} objectif={kpi.objectif_j30} />
+            <KpiPeriod label="J60" valeur={kpi.valeur_j60} objectif={kpi.objectif_j60} />
+            <KpiPeriod label="J90" valeur={kpi.valeur_j90} objectif={kpi.objectif_j90} />
+          </div>
+          {onSave && (
+            <button type="button" className="prochaine-etape-lien kpi-maj" onClick={ouvrir}>
+              Mettre à jour mes chiffres
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function KpiTable({ kpis, onSave }) {
+  // Avec la saisie client, les cartes s'affichent meme vides : c'est
+  // justement la que le client renseigne ses premiers chiffres.
+  if (!Array.isArray(kpis) || kpis.length === 0) return null
+  if (!onSave && !kpiRenseignes(kpis)) return null
 
   return (
     <section className="panel">
@@ -1382,23 +1509,16 @@ function KpiTable({ kpis }) {
         <TrendingUp size={16} color="var(--gold)" />
         Mes indicateurs (KPI)
       </h2>
+      {onSave && (
+        <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
+          {kpiRenseignes(kpis)
+            ? 'Mets tes chiffres à jour à chaque étape (J30, J60, J90) pour suivre ta progression.'
+            : 'Commence par tes chiffres de départ (J0) et fixe-toi un objectif pour J30, J60 et J90.'}
+        </p>
+      )}
       <div className="kpi-grid">
         {kpis.map((kpi) => (
-          <div key={kpi.id} className="kpi-card">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div>
-                <p className="kpi-nom">{kpi.nom}</p>
-                <p className="kpi-categorie">{kpi.categorie || '—'}</p>
-              </div>
-              <AccesBadge acces={kpi.etat} />
-            </div>
-            <div className="kpi-periods">
-              <KpiPeriod label="J0" valeur={kpi.valeur_j0} />
-              <KpiPeriod label="J30" valeur={kpi.valeur_j30} objectif={kpi.objectif_j30} />
-              <KpiPeriod label="J60" valeur={kpi.valeur_j60} objectif={kpi.objectif_j60} />
-              <KpiPeriod label="J90" valeur={kpi.valeur_j90} objectif={kpi.objectif_j90} />
-            </div>
-          </div>
+          <KpiCard key={kpi.id} kpi={kpi} onSave={onSave} />
         ))}
       </div>
     </section>
@@ -1789,6 +1909,19 @@ function Portail() {
     }
   }
 
+  const saveKpi = async (kpiId, valeurs) => {
+    const token = localStorage.getItem(SESSION_KEY)
+    const response = await fetch(`${API_BASE}/portal/kpi/${kpiId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ valeurs }),
+    })
+
+    if (!response.ok) throw new Error()
+    const data = await response.json()
+    if (data.dashboard) setDashboard(data.dashboard)
+  }
+
   const saveCurrentEntry = async () => {
     const token = localStorage.getItem(SESSION_KEY)
 
@@ -2149,7 +2282,7 @@ function Portail() {
               )}
 
               <SynthesesSection syntheses={dashboard.syntheses} />
-              <KpiTable kpis={dashboard.kpi} />
+              <KpiTable kpis={dashboard.kpi} onSave={saveKpi} />
             </>
           )}
 
