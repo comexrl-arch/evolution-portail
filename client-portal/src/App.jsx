@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -875,6 +875,7 @@ function lireFiche(nom) {
 const ONGLETS = [
   { cle: 'tableau', libelle: 'Tableau de bord', icone: LayoutDashboard },
   { cle: 'parcours', libelle: 'Mon parcours', icone: IconeCarte },
+  { cle: 'idris', libelle: 'Idris, ton assistant', icone: MessageCircle },
   { cle: 'ressources', libelle: 'Ressources', icone: BookOpen },
   { cle: 'communaute', libelle: 'Communauté', icone: Users },
   { cle: 'profil', libelle: 'Profil', icone: UserRound },
@@ -1449,6 +1450,304 @@ function Entrainement() {
         </div>
       )}
     </section>
+  )
+}
+
+// --- Espace Idris (lot 2, decision de Rony du 25/10/2026) ---
+// Questions libres de strategie commerciale, messages prets a envoyer,
+// preparation de rendez-vous (Coaching) et entrainement aux objections.
+async function appelIdris(chemin, corps) {
+  const response = await fetch(`${API_BASE}/portal/idris${chemin}`, {
+    method: corps ? 'POST' : 'GET',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
+    body: corps ? JSON.stringify(corps) : undefined,
+  })
+  if (!response.ok) {
+    const erreur = new Error('idris')
+    erreur.status = response.status
+    throw erreur
+  }
+  return response.json()
+}
+
+const QUESTIONS_SUGGEREES = [
+  'Comment fixer le prix de mon offre ?',
+  'Quel canal de prospection choisir en premier ?',
+  "Je n'ai eu aucun RDV cette semaine, je fais quoi ?",
+]
+
+function DemandeIdris({ etat }) {
+  const [messages, setMessages] = useState([])
+  const [saisie, setSaisie] = useState('')
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const [restantes, setRestantes] = useState(etat.questions_restantes)
+  const finRef = useRef(null)
+
+  useEffect(() => {
+    if (messages.length) finRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [messages, attente])
+
+  const envoyer = async (texte) => {
+    const question = texte.trim()
+    if (!question || attente) return
+    const historique = [...messages, { role: 'client', texte: question }]
+    setMessages(historique)
+    setSaisie('')
+    setAttente(true)
+    setErreur('')
+
+    try {
+      const data = await appelIdris('/question', { messages: historique })
+      setMessages([...historique, { role: 'idris', texte: data.texte }])
+      setRestantes(data.questions_restantes)
+    } catch (err) {
+      setMessages(messages)
+      setSaisie(question)
+      setErreur(err.status === 429
+        ? (restantes === null
+          ? "Tu as posé beaucoup de questions aujourd'hui : reprends demain."
+          : `Tu as utilisé tes ${etat.questions_par_mois} questions du mois : elles reviennent le 1er du mois prochain. Le Coaching 90 jours inclut des questions illimitées.`)
+        : "Idris n'est pas disponible pour le moment. Réessaie dans quelques minutes.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  return (
+    <section className="idris-espace-bloc">
+      <h2 className="idris-espace-titre">Demande à Idris</h2>
+      <p className="idris-espace-intro">
+        Une question sur ton offre, ton prix, ta prospection ou tes rendez-vous ? Idris répond à partir de ta méthode et de tes vrais chiffres.
+        {restantes === null ? ' Questions illimitées avec ton Coaching.' : ` Il te reste ${restantes} question${restantes > 1 ? 's' : ''} ce mois-ci.`}
+      </p>
+
+      <div className="idris-chat">
+        <IdrisMessage>
+          <p>Bonjour ! Je connais tes fiches, ton diagnostic et tes bilans. Pose-moi ta question, je te réponds avec une action concrète pour ta semaine.</p>
+        </IdrisMessage>
+        {messages.map((m, index) => (m.role === 'idris' ? (
+          <IdrisMessage key={index}><ParagraphesIdris texte={m.texte} /></IdrisMessage>
+        ) : (
+          <p key={index} className="idris-question">{m.texte}</p>
+        )))}
+        {attente && (
+          <p className="retour-ia-attente idris-attente"><Loader2 size={14} className="animate-spin" aria-hidden="true" /> Idris réfléchit…</p>
+        )}
+        <span ref={finRef} />
+      </div>
+
+      {messages.length === 0 && (
+        <div className="idris-suggestions">
+          {QUESTIONS_SUGGEREES.map((q) => (
+            <button key={q} type="button" className="idris-suggestion" onClick={() => envoyer(q)} disabled={attente}>{q}</button>
+          ))}
+        </div>
+      )}
+
+      <form className="idris-saisie" onSubmit={(e) => { e.preventDefault(); envoyer(saisie) }}>
+        <textarea
+          value={saisie}
+          onChange={(e) => setSaisie(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(saisie) } }}
+          placeholder="Pose ta question à Idris…"
+          rows={2}
+          maxLength={800}
+          disabled={attente || restantes === 0}
+          aria-label="Ta question à Idris"
+        />
+        <button type="submit" className="fiche-bouton" disabled={attente || !saisie.trim() || restantes === 0}>Envoyer</button>
+      </form>
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+      <p className="idris-mention">Idris est une IA : il peut se tromper. Pour le juridique, la fiscalité ou une grande décision, parles-en à Rony.</p>
+    </section>
+  )
+}
+
+function BoutonCopier({ texte }) {
+  const [copie, setCopie] = useState(false)
+
+  const copier = async () => {
+    try {
+      await navigator.clipboard.writeText(texte)
+      setCopie(true)
+      setTimeout(() => setCopie(false), 2000)
+    } catch {
+      setCopie(false)
+    }
+  }
+
+  return (
+    <button type="button" className="idris-copier" onClick={copier}>
+      {copie ? <CheckCircle2 size={14} /> : <Copy size={14} />} {copie ? 'Copié' : 'Copier'}
+    </button>
+  )
+}
+
+function MessagesPrets({ types }) {
+  const [type, setType] = useState(types[0]?.id)
+  const [precision, setPrecision] = useState('')
+  const [variantes, setVariantes] = useState([])
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const rediger = async (event) => {
+    event.preventDefault()
+    setAttente(true)
+    setErreur('')
+
+    try {
+      const data = await appelIdris('/message', { type, precision })
+      setVariantes(data.variantes)
+    } catch (err) {
+      setErreur(err.status === 429 ? "Tu as demandé beaucoup de messages aujourd'hui : reprends demain." : "Idris n'a pas pu rédiger ton message. Réessaie dans quelques minutes.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  return (
+    <section className="idris-espace-bloc">
+      <h2 className="idris-espace-titre">Messages prêts à envoyer</h2>
+      <p className="idris-espace-intro">Idris rédige ton message avec tes mots, ta cible et ton offre. Tu le relis, tu l'ajustes, tu l'envoies.</p>
+      <form onSubmit={rediger}>
+        <div className="idris-suggestions">
+          {types.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`idris-suggestion${type === t.id ? ' idris-suggestion-active' : ''}`}
+              aria-pressed={type === t.id}
+              onClick={() => setType(t.id)}
+            >
+              {t.titre}
+            </button>
+          ))}
+        </div>
+        <input
+          className="field-input idris-champ"
+          value={precision}
+          onChange={(e) => setPrecision(e.target.value)}
+          maxLength={500}
+          placeholder="Précision (facultatif) : à qui, dans quelle situation…"
+          aria-label="Précision sur le destinataire"
+        />
+        <button type="submit" className="brouillon-ia-bouton" disabled={attente || !type}>
+          {attente ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          {attente ? 'Idris rédige…' : 'Rédiger mon message'}
+        </button>
+      </form>
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+      {variantes.map((texte, index) => (
+        <IdrisMessage key={index} titre={`Version ${index + 1}`}>
+          <p className="idris-message-texte">{texte}</p>
+          <BoutonCopier texte={texte} />
+        </IdrisMessage>
+      ))}
+    </section>
+  )
+}
+
+function PreparationRdv({ disponible }) {
+  const [valeurs, setValeurs] = useState({ prospect: '', besoin: '', objectif: '' })
+  const [preparation, setPreparation] = useState(null)
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  if (!disponible) {
+    return (
+      <section className="idris-espace-bloc idris-verrou">
+        <h2 className="idris-espace-titre"><Lock size={16} /> Préparer un rendez-vous</h2>
+        <p className="idris-espace-intro">
+          Avant chaque rendez-vous, Idris te prépare tes questions de découverte, les objections probables avec leurs réponses et la prochaine étape à proposer. Inclus dans le Coaching 90 jours.
+        </p>
+      </section>
+    )
+  }
+
+  const preparer = async (event) => {
+    event.preventDefault()
+    setAttente(true)
+    setErreur('')
+
+    try {
+      setPreparation(await appelIdris('/rdv', valeurs))
+    } catch (err) {
+      setErreur(err.status === 429 ? "Tu as préparé beaucoup de rendez-vous aujourd'hui : reprends demain." : "Idris n'a pas pu préparer ton rendez-vous. Réessaie dans quelques minutes.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  const champ = (cle, libelle, placeholder) => (
+    <label className="idris-rdv-champ">
+      <span>{libelle}</span>
+      <textarea
+        className="field-input"
+        rows={2}
+        maxLength={600}
+        value={valeurs[cle]}
+        placeholder={placeholder}
+        onChange={(e) => setValeurs({ ...valeurs, [cle]: e.target.value })}
+      />
+    </label>
+  )
+
+  return (
+    <section className="idris-espace-bloc">
+      <h2 className="idris-espace-titre">Préparer un rendez-vous</h2>
+      <p className="idris-espace-intro">Décris ton prospect : Idris te prépare la trame de ton rendez-vous découverte.</p>
+      <form onSubmit={preparer}>
+        {champ('prospect', 'Ton prospect', 'Ex. : gérante d’un salon de coiffure à Baie-Mahault, 2 salariées')}
+        {champ('besoin', 'Ce que tu sais de son besoin (facultatif)', 'Ex. : agenda vide en semaine')}
+        {champ('objectif', 'Ce que tu veux obtenir de ce rendez-vous (facultatif)', 'Ex. : envoyer une proposition')}
+        <button type="submit" className="brouillon-ia-bouton" disabled={attente || !valeurs.prospect.trim()}>
+          {attente ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          {attente ? 'Idris prépare…' : 'Préparer mon rendez-vous'}
+        </button>
+      </form>
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+      {preparation && (
+        <IdrisMessage titre="Ta préparation">
+          {preparation.objectif && <p><strong>Objectif :</strong> {preparation.objectif}</p>}
+          <p className="idris-rdv-sous-titre">Tes questions de découverte</p>
+          <ol className="idris-rdv-liste">{preparation.questions.map((q, i) => <li key={i}>{q}</li>)}</ol>
+          {preparation.objections.length > 0 && (
+            <>
+              <p className="idris-rdv-sous-titre">Les objections probables</p>
+              <ul className="idris-rdv-liste">
+                {preparation.objections.map((o, i) => (
+                  <li key={i}><strong>« {o.objection} »</strong><br />{o.reponse}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {preparation.prochaine_etape && <p className="idris-action">Prochaine étape à proposer : {preparation.prochaine_etape}</p>}
+        </IdrisMessage>
+      )}
+    </section>
+  )
+}
+
+function EspaceIdris() {
+  const [etat, setEtat] = useState(null)
+  const [erreur, setErreur] = useState(false)
+
+  useEffect(() => {
+    appelIdris('').then(setEtat).catch(() => setErreur(true))
+  }, [])
+
+  if (erreur) return <p className="espace-vide">Idris n'est pas disponible pour le moment. Réessaie dans quelques minutes.</p>
+  if (!etat) return <Loader2 className="animate-spin" color="var(--gold)" size={24} />
+  if (!etat.disponible) return <p className="espace-vide">Idris arrive bientôt dans ton espace.</p>
+
+  return (
+    <div className="idris-espace">
+      <DemandeIdris etat={etat} />
+      <MessagesPrets types={etat.types_messages} />
+      <PreparationRdv disponible={etat.rdv_disponible} />
+      <Entrainement />
+    </div>
   )
 }
 
@@ -2541,6 +2840,15 @@ function Portail() {
 
               <PresentationIdris nom={dashboard.nom} />
 
+              <button type="button" className="idris-raccourci" onClick={() => changerOnglet('idris')}>
+                <IdrisAvatar taille={36} />
+                <span>
+                  <strong>Une question sur ta stratégie commerciale ?</strong>
+                  <span>Demande à Idris, prépare un message ou un rendez-vous.</span>
+                </span>
+                <ChevronRight size={16} aria-hidden="true" />
+              </button>
+
               <ProchaineEtape
                 module={moduleEnCours}
                 fiche={ficheAReprendre}
@@ -2580,10 +2888,16 @@ function Portail() {
             </>
           )}
 
+          {onglet === 'idris' && (
+            <>
+              <h2 className="accueil-section-titre">Idris, ton assistant commercial</h2>
+              <EspaceIdris />
+            </>
+          )}
+
           {onglet === 'ressources' && (
             <>
               <h2 className="accueil-section-titre">Ressources</h2>
-              <Entrainement />
               <section className="panel">
                 <p className="panel-eyebrow">Mes fiches terminées</p>
                 {fichesTerminees.length ? (

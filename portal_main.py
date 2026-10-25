@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from backend.services import cockpit_service
 from backend.services import docuseal_service
-from backend.services import brouillon_service, entrainement_service
+from backend.services import brouillon_service, entrainement_service, idris_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -893,6 +893,76 @@ def portal_entrainement(request: EntrainementRequest, authorization: str = Heade
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_entrainement", error)
+
+
+# --- Idris au quotidien : questions, messages, preparation de RDV (lot 2) ---
+
+class IdrisQuestionRequest(BaseModel):
+    messages: list[dict] = []
+
+
+class IdrisMessageRequest(BaseModel):
+    type: str
+    precision: str = ""
+
+
+class IdrisRdvRequest(BaseModel):
+    prospect: str
+    besoin: str = ""
+    objectif: str = ""
+
+
+def _appel_idris(nom: str, fonction, *args):
+    # Erreurs communes aux 3 fonctions d'Idris, sans jamais exposer le detail.
+    try:
+        return fonction(*args)
+
+    except LookupError:
+        raise HTTPException(status_code=403, detail="Cette fonction est incluse dans le Coaching 90 jours.")
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Demande invalide.")
+
+    except PermissionError:
+        raise HTTPException(status_code=429, detail="Limite atteinte : reviens plus tard.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible(nom, error)
+
+
+def _dashboard_idris(authorization: str) -> tuple[dict, dict]:
+    session = _session_from_header(authorization)
+
+    try:
+        return session, notion_service.get_client_dashboard(session["client_page_id"])
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_idris", error)
+
+
+@app.get("/portal/idris")
+def portal_idris_etat(authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+    return idris_service.etat(session["client_page_id"], dashboard)
+
+
+@app.post("/portal/idris/question")
+def portal_idris_question(request: IdrisQuestionRequest, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+    return _appel_idris("portal_idris_question", idris_service.repondre_question, session["client_page_id"], dashboard, request.messages)
+
+
+@app.post("/portal/idris/message")
+def portal_idris_message(request: IdrisMessageRequest, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+    return _appel_idris("portal_idris_message", idris_service.rediger_message, session["client_page_id"], dashboard, request.type, request.precision)
+
+
+@app.post("/portal/idris/rdv")
+def portal_idris_rdv(request: IdrisRdvRequest, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+    return _appel_idris(
+        "portal_idris_rdv", idris_service.preparer_rdv, session["client_page_id"], dashboard, request.prospect, request.besoin, request.objectif
+    )
 
 
 # --- Retours IA sur les fiches (workflow n8n + Gemini), meme cle technique. ---
