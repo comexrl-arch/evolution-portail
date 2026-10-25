@@ -3991,3 +3991,276 @@ ul.idris-rdv-liste {
     margin-left: 0;
   }
 }
+
+
+/* ---------- Lot 3 : jalons, bilan J90, attestation, installation ---------- */
+.jalons-fete {
+  margin: 0.4rem 0 0.9rem;
+}
+
+.jalons-serie {
+  margin: 0.3rem 0 0.8rem;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.jalons-serie strong {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  color: var(--accent);
+  margin-right: 0.2rem;
+}
+
+.jalons-serie span {
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.jalons-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.jalon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px dashed var(--brand-line-strong);
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+}
+
+.jalon-fait {
+  border: 1px solid var(--brand-gold-metal);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.jalon-fait svg {
+  color: var(--accent);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.bilan-final {
+  border: 1px solid var(--brand-gold-metal);
+}
+
+.bilan-final-titre {
+  margin: 0.2rem 0 0.4rem;
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+}
+
+.bilan-final-intro {
+  margin: 0 0 0.8rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.bilan-final-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.bilan-final-actions .brouillon-ia-bouton {
+  margin-top: 0;
+}
+
+.bilan-final-actions .fiche-bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.attestation-page {
+  min-height: 100vh;
+  padding: 1.5rem 1rem 3rem;
+  background: var(--surface-0);
+}
+
+.attestation-barre {
+  max-width: 760px;
+  margin: 0 auto 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.attestation-barre .fiche-bouton,
+.attestation-barre .prochaine-etape-lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.attestation {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 3rem 2.5rem;
+  background: #FFFFFF;
+  border: 1px solid var(--brand-line);
+  border-top: 6px solid var(--brand-gold-metal);
+  border-radius: 6px;
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  color: var(--brand-ink);
+}
+
+.attestation-logo {
+  height: 44px;
+  margin: 0 auto 1.2rem;
+}
+
+.attestation-surtitre {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand-gold);
+}
+
+.attestation h1 {
+  margin: 0.4rem 0 1.4rem;
+  font-family: var(--font-serif);
+  font-size: 2.3rem;
+  font-weight: 600;
+}
+
+.attestation-texte {
+  max-width: 34rem;
+  margin: 0 auto 1.8rem;
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+
+.attestation-chiffres {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem;
+  margin: 0 auto 1.4rem;
+}
+
+.attestation-chiffres div {
+  padding: 0.9rem 0.6rem;
+  border: 1px solid var(--brand-line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.attestation-chiffres strong {
+  font-family: var(--font-serif);
+  font-size: 1.6rem;
+  color: var(--brand-gold);
+}
+
+.attestation-chiffres span {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.attestation-kpi {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.attestation-note {
+  margin: 0 0 2rem;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.attestation-pied {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  text-align: left;
+  font-size: 0.88rem;
+}
+
+.attestation-pied p {
+  margin: 0;
+}
+
+.attestation-signature {
+  font-family: var(--font-serif);
+  font-size: 1.3rem !important;
+  text-align: right;
+}
+
+.attestation-signature span {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 520px) {
+  .attestation {
+    padding: 2rem 1.2rem;
+  }
+
+  .attestation h1 {
+    font-size: 1.8rem;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .attestation-page {
+    padding: 0;
+    background: #FFFFFF;
+  }
+
+  .attestation {
+    box-shadow: none;
+    border-color: var(--brand-gold-metal);
+  }
+}
+
+.installer-appli .panel-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.installer-etapes {
+  margin: 0.6rem 0 0;
+  padding-left: 1.1rem;
+  list-style: disc;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.installer-etapes li {
+  margin-bottom: 0.35rem;
+}

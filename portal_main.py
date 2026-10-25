@@ -965,6 +965,23 @@ def portal_idris_rdv(request: IdrisRdvRequest, authorization: str = Header(defau
     )
 
 
+@app.post("/portal/bilan-j90")
+def portal_bilan_j90(authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    try:
+        return idris_service.rediger_bilan_j90(session["client_page_id"], dashboard)
+
+    except LookupError:
+        raise HTTPException(status_code=403, detail="Ton bilan J90 s'ouvre à partir de J80.")
+
+    except PermissionError:
+        raise HTTPException(status_code=429, detail="Limite atteinte : reviens plus tard.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_bilan_j90", error)
+
+
 # --- Retours IA sur les fiches (workflow n8n + Gemini), meme cle technique. ---
 
 class RetourIARequest(BaseModel):
