@@ -8,7 +8,7 @@ import threading
 import time
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -1119,6 +1119,7 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "kpi": kpi_future.result(),
         "syntheses": syntheses_du_client(client_page_id, fiches) if autonome else [],
         "personnalisation": _personnaliser_parcours(fiches),
+        "regularite": _regularite_bilans(fiches),
     }
 
 
@@ -2892,6 +2893,54 @@ def _historique_bilans(fiche_bilan_id: str) -> list[dict]:
         }
 
     return [semaines[cle] for cle in sorted(semaines)]
+
+
+def serie_de_semaines(semaines_du: list[str], aujourd_hui=None) -> int:
+    """Semaines d'affilee avec un bilan, jusqu'a cette semaine ou la
+    precedente (le bilan du vendredi peut ne pas etre encore fait)."""
+    aujourd_hui = aujourd_hui or datetime.now(timezone.utc).date()
+    lundis = set()
+
+    for valeur in semaines_du:
+        try:
+            jour = datetime.fromisoformat(str(valeur)[:10]).date()
+        except ValueError:
+            continue
+        lundis.add(jour - timedelta(days=jour.weekday()))
+
+    lundi = aujourd_hui - timedelta(days=aujourd_hui.weekday())
+
+    if lundi not in lundis:
+        lundi -= timedelta(days=7)
+
+    serie = 0
+
+    while lundi in lundis:
+        serie += 1
+        lundi -= timedelta(days=7)
+
+    return serie
+
+
+def _regularite_bilans(fiches: list[dict]) -> dict | None:
+    # Serie de regularite (lot 3, 25/10/2026) : affichee sur le tableau de
+    # bord. None tant que le bilan hebdomadaire n'est pas ouvert.
+    fiche_bilan = next((f for f in fiches if f.get("master_id") == _BILAN_HEBDO_MASTER_ID), None)
+
+    if not fiche_bilan or "Bloqué" in str(fiche_bilan.get("acces") or ""):
+        return None
+
+    try:
+        historique = _historique_bilans(fiche_bilan["id"])
+    except Exception as error:
+        logger.warning("Regularite des bilans illisible (%s)", error)
+        return None
+
+    return {
+        "serie": serie_de_semaines([s["semaine_du"] for s in historique]),
+        "semaines": len(historique),
+        "derniere": historique[-1]["semaine_du"] if historique else None,
+    }
 
 
 def _periode_kpi(jour: int) -> str:

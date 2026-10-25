@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Printer, Quote, Smartphone, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -1751,6 +1751,257 @@ function EspaceIdris() {
   )
 }
 
+// --- Lot 3 (decision de Rony du 25/10/2026) : jalons, regularite, bilan J90,
+// attestation de parcours et installation sur le telephone. ---
+function jourDuParcours(dateDemarrage) {
+  // Meme calcul que le serveur (_jour_parcours) : jours ecoules en UTC.
+  if (!dateDemarrage) return null
+  const debut = Date.parse(String(dateDemarrage).slice(0, 10))
+  if (Number.isNaN(debut)) return null
+  const maintenant = new Date()
+  return Math.floor((Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth(), maintenant.getUTCDate()) - debut) / 86400000)
+}
+
+function kpiAtteint(kpis, nom) {
+  const kpi = (kpis || []).find((k) => (k.nom || '').toLowerCase() === nom)
+  return Boolean(kpi) && ['valeur_j30', 'valeur_j60', 'valeur_j90'].some((c) => (nombreOuNull(kpi[c]) || 0) > 0)
+}
+
+const ETAPES_JALONS = ['Clarifier', 'Prospecter', 'Convertir', 'Stabiliser']
+
+function calculerJalons(dashboard, modules) {
+  const jour = jourDuParcours(dashboard.date_demarrage)
+  const etapeFinie = (etape) => {
+    const concernes = modules.filter((m) => m.label.startsWith(etape))
+    return concernes.length > 0 && concernes.every((m) => m.fiches.every((f) => f.etat === 'Terminé'))
+  }
+  const serie = dashboard.regularite?.serie || 0
+
+  return [
+    { id: 'diagnostic', titre: 'Diagnostic posé', fait: Boolean(dashboard.personnalisation), bravo: 'Ton diagnostic est posé : tu sais maintenant où mettre ton énergie en premier.' },
+    { id: 'j30', titre: 'Cap des 30 jours', fait: jour !== null && jour >= 30, bravo: "Un mois de parcours ! Tu as posé les bases, c'est le moment de passer à l'action terrain." },
+    ...ETAPES_JALONS.map((etape) => ({
+      id: `etape-${etape}`, titre: `Étape « ${etape} » terminée`, fait: etapeFinie(etape),
+      bravo: `Tu as terminé toute l'étape « ${etape} ». Chaque fiche validée, c'est un outil de plus pour vendre.`,
+    })),
+    { id: 'rdv', titre: 'Premier rendez-vous', fait: kpiAtteint(dashboard.kpi, 'rdv'), bravo: 'Ton premier rendez-vous est dans tes chiffres. Prépare-le avec moi dans l\'onglet Idris !' },
+    { id: 'vente', titre: 'Première vente', fait: kpiAtteint(dashboard.kpi, 'nouveaux clients'), bravo: 'Première vente signée ! Note ce qui a marché : c\'est ta méthode qui se met en place.' },
+    { id: 'serie4', titre: "4 semaines de bilan d'affilée", fait: serie >= 4, bravo: "4 semaines de bilan d'affilée : la régularité, c'est ce qui fait la différence sur 90 jours." },
+    { id: 'j60', titre: 'Cap des 60 jours', fait: jour !== null && jour >= 60, bravo: 'Deux mois de parcours : place à la conversion. Tes rendez-vous sont ta priorité.' },
+    { id: 'j90', titre: 'Cap des 90 jours', fait: jour !== null && jour >= 90, bravo: 'Tu as bouclé tes 90 jours. Demande ton bilan et ton attestation de parcours !' },
+  ]
+}
+
+const JALONS_VUS_KEY = 'jalons_vus'
+
+function Jalons({ jalons, regularite }) {
+  const faits = jalons.filter((j) => j.fait)
+  const [aFeter, setAFeter] = useState(() => {
+    try {
+      const brut = localStorage.getItem(JALONS_VUS_KEY)
+      // Premiere visite : rien a feter, on memorise l'existant.
+      if (brut === null) {
+        localStorage.setItem(JALONS_VUS_KEY, JSON.stringify(faits.map((j) => j.id)))
+        return null
+      }
+      const vus = JSON.parse(brut)
+      return [...faits].reverse().find((j) => !vus.includes(j.id)) || null
+    } catch {
+      return null
+    }
+  })
+
+  const merci = () => {
+    try {
+      localStorage.setItem(JALONS_VUS_KEY, JSON.stringify(faits.map((j) => j.id)))
+    } catch {
+      // Navigation privee : le message reviendra a la prochaine visite.
+    }
+    setAFeter(null)
+  }
+
+  if (!faits.length && !regularite) return null
+
+  return (
+    <section className="panel jalons">
+      <p className="panel-eyebrow">Mes jalons</p>
+      {aFeter && (
+        <div className="jalons-fete">
+          <IdrisMessage titre={`Bravo · ${aFeter.titre}`}>
+            <p>{aFeter.bravo}</p>
+            <button type="button" className="brouillon-ia-bouton" onClick={merci}>Merci Idris !</button>
+          </IdrisMessage>
+        </div>
+      )}
+      {regularite && (
+        <p className="jalons-serie">
+          <strong>{regularite.serie}</strong> semaine{regularite.serie > 1 ? 's' : ''} de bilan d'affilée
+          <span> · {regularite.semaines} bilan{regularite.semaines > 1 ? 's' : ''} au total</span>
+        </p>
+      )}
+      <ul className="jalons-liste">
+        {jalons.map((jalon) => (
+          <li key={jalon.id} className={jalon.fait ? 'jalon jalon-fait' : 'jalon'}>
+            {jalon.fait ? <Award size={15} aria-hidden="true" /> : <Lock size={13} aria-hidden="true" />}
+            <span>{jalon.titre}</span>
+            <span className="sr-only">{jalon.fait ? ' (atteint)' : ' (à venir)'}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function bilanFinalOuvert(dashboard) {
+  const jour = jourDuParcours(dashboard.date_demarrage)
+  return dashboard.fiches.length > 0 && (dashboard.fiches.every((f) => f.etat === 'Terminé') || (jour !== null && jour >= 80))
+}
+
+function BilanFinal({ onAttestation }) {
+  const [texte, setTexte] = useState('')
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const demander = async () => {
+    setAttente(true)
+    setErreur('')
+
+    try {
+      const response = await fetch(`${API_BASE}/portal/bilan-j90`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
+      })
+      if (!response.ok) throw new Error(response.status === 429 ? "Tu as déjà demandé plusieurs bilans aujourd'hui : reviens demain." : "Ton bilan n'est pas disponible pour le moment. Réessaie dans quelques minutes.")
+      setTexte((await response.json()).texte)
+    } catch (err) {
+      setErreur(err.message)
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  return (
+    <section className="panel bilan-final">
+      <p className="panel-eyebrow">Fin de parcours</p>
+      <h3 className="bilan-final-titre">Ton bilan des 90 jours</h3>
+      <p className="bilan-final-intro">Idris rédige le bilan de ton parcours à partir de tes vrais chiffres, et tu peux télécharger ton attestation de parcours.</p>
+      <div className="bilan-final-actions">
+        <button type="button" className="brouillon-ia-bouton" onClick={demander} disabled={attente}>
+          {attente ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+          {attente ? 'Idris rédige…' : texte ? 'Rédiger à nouveau' : 'Demander mon bilan à Idris'}
+        </button>
+        <button type="button" className="fiche-bouton" onClick={onAttestation}>
+          <Award size={16} /> Mon attestation de parcours
+        </button>
+      </div>
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+      {texte && (
+        <IdrisMessage titre="Ton bilan des 90 jours">
+          <ParagraphesIdris texte={texte} />
+        </IdrisMessage>
+      )}
+    </section>
+  )
+}
+
+function dateLongue(valeur) {
+  const date = valeur ? new Date(valeur) : new Date()
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
+// Attestation de parcours : imprimable ou enregistrable en PDF depuis le
+// navigateur. Elle ne reprend que des donnees du portail, et le dit.
+function Attestation({ dashboard, modules, onRetour }) {
+  const fichesFaites = dashboard.fiches.filter((f) => f.etat === 'Terminé').length
+  const modulesFaits = modules.filter((m) => m.fiches.every((f) => f.etat === 'Terminé')).length
+  const perso = dashboard.personnalisation
+  const prenom = (dashboard.nom || '').split(' ')[0]
+  const lignesKpi = (dashboard.kpi || [])
+    .map((kpi) => {
+      const depart = nombreOuNull(kpi.valeur_j0)
+      const derniere = KPI_DERNIERES.map(([champ, periode]) => ({ periode, valeur: nombreOuNull(kpi[champ]) })).find((p) => p.valeur !== null)
+      return depart === null || !derniere ? null : `${kpi.nom} : ${formaterKpi(depart)} à J0, ${formaterKpi(derniere.valeur)} à ${derniere.periode}`
+    })
+    .filter(Boolean)
+
+  return (
+    <div className="attestation-page">
+      <div className="attestation-barre no-print">
+        <button type="button" className="prochaine-etape-lien" onClick={onRetour}><ArrowLeft size={15} /> Retour</button>
+        <button type="button" className="fiche-bouton" onClick={() => window.print()}><Printer size={16} /> Imprimer ou enregistrer en PDF</button>
+      </div>
+      <article className="attestation">
+        <img src={logo} alt="RL-eVolution" className="attestation-logo" />
+        <p className="attestation-surtitre">Système eVolution 2.0</p>
+        <h1>Attestation de parcours</h1>
+        <p className="attestation-texte">
+          RL-Evolution atteste que <strong>{dashboard.nom}</strong> a suivi le parcours d'accompagnement commercial
+          eVolution 2.0, {libelleFormule(dashboard.parcours)}
+          {dashboard.date_demarrage ? `, démarré le ${dateLongue(dashboard.date_demarrage)}` : ''}.
+        </p>
+        <div className="attestation-chiffres">
+          <div><strong>{fichesFaites}</strong><span>fiches validées sur {dashboard.fiches.length}</span></div>
+          <div><strong>{modulesFaits}</strong><span>modules terminés sur {modules.length}</span></div>
+          {perso?.scores_diagnostic && (
+            <div><strong>{perso.total} → {perso.total_actuel ?? perso.total}</strong><span>score de diagnostic sur 15</span></div>
+          )}
+          {dashboard.regularite?.semaines > 0 && (
+            <div><strong>{dashboard.regularite.semaines}</strong><span>bilans hebdomadaires</span></div>
+          )}
+        </div>
+        {lignesKpi.length > 0 && (
+          <ul className="attestation-kpi">{lignesKpi.map((ligne) => <li key={ligne}>{ligne}</li>)}</ul>
+        )}
+        <p className="attestation-note">Chiffres issus de l'espace eVolution 2.0 de {prenom || 'ce participant'}, tels qu'il les a saisis.</p>
+        <div className="attestation-pied">
+          <p>Délivrée le {dateLongue()}</p>
+          <p className="attestation-signature">Rony<br /><span>Coach, RL-Evolution</span></p>
+        </div>
+      </article>
+    </div>
+  )
+}
+
+// Installation sur le telephone : bouton natif quand le navigateur le
+// propose (Android, Chrome), sinon la marche a suivre (iPhone, Safari).
+function InstallerAppli() {
+  const [invite, setInvite] = useState(null)
+  const [installee, setInstallee] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
+
+  useEffect(() => {
+    const garder = (event) => {
+      event.preventDefault()
+      setInvite(event)
+    }
+    const fini = () => setInstallee(true)
+    window.addEventListener('beforeinstallprompt', garder)
+    window.addEventListener('appinstalled', fini)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', garder)
+      window.removeEventListener('appinstalled', fini)
+    }
+  }, [])
+
+  if (installee) return null
+
+  return (
+    <section className="panel installer-appli">
+      <p className="panel-eyebrow"><Smartphone size={14} /> Ton espace sur ton téléphone</p>
+      <p className="panel-lead">Ajoute eVolution 2.0 sur ton écran d'accueil : tu l'ouvres en un geste, comme une application.</p>
+      {invite ? (
+        <button type="button" className="fiche-bouton" onClick={async () => { invite.prompt(); await invite.userChoice; setInvite(null) }}>
+          Installer l'application
+        </button>
+      ) : (
+        <ul className="installer-etapes">
+          <li><strong>iPhone (Safari) :</strong> touche le bouton Partager, puis « Sur l'écran d'accueil ».</li>
+          <li><strong>Android (Chrome) :</strong> touche le menu ⋮, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».</li>
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
   const { surtitre, titre } = lireModule(module.label)
   const illustration = illustrationDuModule(module.label)
@@ -2255,6 +2506,7 @@ function Portail() {
   const [saving, setSaving] = useState(false)
   const [validating, setValidating] = useState(false)
   const [onglet, setOnglet] = useState('tableau')
+  const [attestationOuverte, setAttestationOuverte] = useState(false)
   const [menuOuvert, setMenuOuvert] = useState(false)
 
   const loadDashboard = useCallback(async () => {
@@ -2777,6 +3029,12 @@ function Portail() {
     const ficheAReprendre = moduleEnCours?.fiches.find((f) => f.etat !== 'Terminé' && !f.acces?.includes('Bloqué'))
     const fichesTerminees = dashboard.fiches.filter((f) => f.etat === 'Terminé')
 
+    if (attestationOuverte) {
+      return <Attestation dashboard={dashboard} modules={modules} onRetour={() => setAttestationOuverte(false)} />
+    }
+
+    const jalons = calculerJalons(dashboard, modules)
+
     const changerOnglet = (cle) => {
       setOnglet(cle)
       setMenuOuvert(false)
@@ -2856,7 +3114,11 @@ function Portail() {
                 onParcours={() => changerOnglet('parcours')}
               />
 
+              {bilanFinalOuvert(dashboard) && <BilanFinal onAttestation={() => { setAttestationOuverte(true); window.scrollTo(0, 0) }} />}
+
               <AvantMaintenant personnalisation={dashboard.personnalisation} kpis={dashboard.kpi} />
+
+              <Jalons jalons={jalons} regularite={dashboard.regularite} />
 
               <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
 
@@ -2951,6 +3213,7 @@ function Portail() {
           {onglet === 'profil' && (
             <>
               <h2 className="accueil-section-titre">Profil</h2>
+              <InstallerAppli />
               <div className="portal-secondary-row">
                 <IdentiteCard identite={dashboard.identite} cohorte={null} sessions={[]} />
                 {dashboard.objectif_90j && (

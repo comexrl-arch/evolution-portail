@@ -336,3 +336,74 @@ def preparer_rdv(client_page_id: str, dashboard: dict, prospect: str, besoin: st
         "objections": objections,
         "prochaine_etape": str(valeurs.get("prochaine_etape") or "").strip(),
     }
+
+
+# --- Bilan J90 redige par Idris (lot 3, 25/10/2026) ---
+# Disponible a partir de J80, ou des que toutes les fiches sont terminees.
+JOUR_BILAN_FINAL = 80
+_BILAN_J90_MASTER_ID = "3f0faffd87588137927fda435c873a9f"
+
+_SYSTEME_BILAN_J90 = """Tu es Idris, l'assistant IA du programme eVolution 2.0 (RL-Evolution), aux côtés de Rony. Le client arrive au terme de ses 90 jours. Tu lui écris son bilan de parcours.
+
+RÈGLES
+- Français, tutoiement, chaleureux, fier de son travail sans flatterie, concret.
+- Appuie-toi UNIQUEMENT sur les données fournies (parcours, avant / après, chiffres, ses réponses au bilan J90). N'invente aucun chiffre ni résultat ; si une donnée manque, n'en parle pas.
+- 180 à 250 mots, 4 paragraphes séparés par une ligne vide, pas de titre, pas de markdown, pas de signature.
+
+STRUCTURE
+1. Le chemin parcouru : ce qu'il a construit (fiches, modules, régularité).
+2. Ses progrès en chiffres : avant / maintenant, tels que fournis.
+3. Ce qui a marché pour lui et ce qui reste à travailler, avec ses mots.
+4. Ses 3 priorités pour les 90 prochains jours, en une phrase chacune, puis un mot de fin."""
+
+
+def bilan_final_disponible(dashboard: dict) -> bool:
+    fiches = dashboard.get("fiches") or []
+    jour = notion_service._jour_parcours(dashboard.get("date_demarrage"))
+    return bool(fiches) and (all(f.get("etat") == "Terminé" for f in fiches) or (jour is not None and jour >= JOUR_BILAN_FINAL))
+
+
+def _lignes_avant_apres(dashboard: dict) -> list[str]:
+    fiches = dashboard.get("fiches") or []
+    lignes = [f"Fiches validées : {sum(1 for f in fiches if f.get('etat') == 'Terminé')} sur {len(fiches)}"]
+    perso = dashboard.get("personnalisation") or {}
+
+    if perso.get("scores_diagnostic"):
+        lignes.append(f"Diagnostic : {perso['total']}/15 au départ, {perso.get('total_actuel', perso['total'])}/15 aujourd'hui")
+
+    for kpi in dashboard.get("kpi") or []:
+        depart = kpi.get("valeur_j0")
+        derniere = next(((p, kpi.get(c)) for c, p in (("valeur_j90", "J90"), ("valeur_j60", "J60"), ("valeur_j30", "J30")) if kpi.get(c) is not None), None)
+
+        if depart is not None and derniere:
+            nombre = notion_service._nombre
+            lignes.append(f"{kpi.get('nom')} : {nombre(depart):g} à J0, {nombre(derniere[1]):g} à {derniere[0]}")
+
+    regularite = dashboard.get("regularite") or {}
+
+    if regularite.get("semaines"):
+        lignes.append(f"Bilans hebdomadaires remplis : {regularite['semaines']}")
+
+    return lignes
+
+
+def rediger_bilan_j90(client_page_id: str, dashboard: dict) -> dict:
+    if not bilan_final_disponible(dashboard):
+        raise LookupError("Bilan pas encore disponible")
+
+    if not _quota_jour_ok(f"b:{client_page_id}", 5):
+        raise PermissionError("Limite du jour atteinte")
+
+    blocs = [_contexte(client_page_id, dashboard), "Avant / maintenant :", *_lignes_avant_apres(dashboard)]
+
+    try:
+        sources = notion_service.reponses_des_fiches(client_page_id, dashboard.get("fiches") or [], [_BILAN_J90_MASTER_ID])
+    except Exception:
+        sources = []
+
+    for source in sources:
+        blocs.append("Ses réponses au bilan J90 :")
+        blocs.extend(f"- {libelle} {valeur[:400]}" for libelle, valeur in source["reponses"])
+
+    texte = ia_service.generer(_SYSTEME_BILAN_J90, [{"role": "user", "texte": "\n".join(blocs)}], temperature=0.5, max_tokens=900)
+    return {"texte": texte}
