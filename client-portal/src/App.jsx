@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Quote, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Quote, Rocket, Sparkles, Minus, Target, TrendingDown, TrendingUp, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -1483,6 +1483,34 @@ function formaterKpi(nombre) {
   return nombre.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
 }
 
+// Tendance d'un KPI, pour colorer sa courbe : vert (bon), rouge (mauvais),
+// gris (neutre). On compare d'abord le dernier realise a l'objectif de la
+// meme etape ; sans objectif, au realise precedent.
+const KPI_TENDANCES = {
+  bon: { classe: 'tendance-bon', Icone: TrendingUp },
+  mauvais: { classe: 'tendance-mauvais', Icone: TrendingDown },
+  neutre: { classe: 'tendance-neutre', Icone: Minus },
+}
+
+function kpiTendance(kpi) {
+  const realise = KPI_POINTS.map((p) => ({ ...p, v: nombreOuNull(kpi[p.valeur]) })).filter((p) => p.v !== null)
+  const dernier = realise[realise.length - 1]
+  if (!dernier) return { niveau: 'neutre', texte: 'Pas encore de chiffres' }
+
+  const objectif = dernier.objectif ? nombreOuNull(kpi[dernier.objectif]) : null
+  if (objectif !== null) {
+    return dernier.v >= objectif
+      ? { niveau: 'bon', texte: `Objectif ${dernier.label} atteint` }
+      : { niveau: 'mauvais', texte: `Sous l'objectif ${dernier.label}` }
+  }
+
+  const precedent = realise[realise.length - 2]
+  if (!precedent) return { niveau: 'neutre', texte: 'Pas encore de tendance' }
+  if (dernier.v > precedent.v) return { niveau: 'bon', texte: 'En progression' }
+  if (dernier.v < precedent.v) return { niveau: 'mauvais', texte: 'En baisse' }
+  return { niveau: 'neutre', texte: 'Stable' }
+}
+
 function KpiGraphique({ kpi }) {
   const realise = KPI_POINTS.map((p, i) => ({ i, label: p.label, v: nombreOuNull(kpi[p.valeur]) })).filter((p) => p.v !== null)
   const objectif = KPI_POINTS.map((p, i) => ({ i, label: p.label, v: p.objectif ? nombreOuNull(kpi[p.objectif]) : null })).filter((p) => p.v !== null)
@@ -1498,9 +1526,14 @@ function KpiGraphique({ kpi }) {
   const y = (v) => H - marge.bas - (v / max) * (H - marge.haut - marge.bas)
   const trace = (points) => points.map((p, k) => `${k ? 'L' : 'M'}${x(p.i)},${y(p.v)}`).join(' ')
   const dernier = realise[realise.length - 1]
+  const tendance = kpiTendance(kpi)
+  const { classe, Icone } = KPI_TENDANCES[tendance.niveau]
 
   return (
-    <figure className="kpi-graphique" aria-label={`Progression ${kpi.nom}`}>
+    <figure className={`kpi-graphique ${classe}`} aria-label={`Progression ${kpi.nom}`}>
+      <p className="kpi-tendance">
+        <Icone size={13} aria-hidden="true" /> {tendance.texte}
+      </p>
       <svg viewBox={`0 0 ${L} ${H}`} role="img">
         <line x1={marge.gauche} x2={L - marge.droite} y1={H - marge.bas} y2={H - marge.bas} className="kpi-graphique-axe" />
         {KPI_POINTS.map((p, i) => (

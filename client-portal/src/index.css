@@ -860,7 +860,7 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   margin-top: 0.75rem;
 }
 
-.kpi-graphique svg {
+.kpi-graphique > svg {
   display: block;
   width: 100%;
   height: auto;
@@ -913,6 +913,46 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   fill: var(--brand-white);
   stroke: var(--text-tertiary);
   stroke-width: 1.5;
+}
+
+.kpi-graphique {
+  --tendance: var(--text-tertiary);
+  --tendance-fond: var(--surface-3);
+}
+
+.kpi-graphique.tendance-bon {
+  --tendance: var(--success);
+  --tendance-fond: var(--success-soft);
+}
+
+.kpi-graphique.tendance-mauvais {
+  --tendance: var(--danger);
+  --tendance-fond: var(--danger-soft);
+}
+
+.kpi-tendance {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--tendance);
+  background: var(--tendance-fond);
+}
+
+.kpi-graphique .kpi-graphique-realise {
+  stroke: var(--tendance);
+}
+
+.kpi-graphique .kpi-graphique-point {
+  fill: var(--tendance);
+}
+
+.kpi-graphique .kpi-graphique-legende .kpi-legende-realise {
+  border-top-color: var(--tendance);
 }
 
 .kpi-graphique-legende {
