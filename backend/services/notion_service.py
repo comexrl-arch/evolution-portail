@@ -2844,6 +2844,125 @@ def _scores_reels(fiche_bilan_id: str, maintenant: datetime | None = None) -> di
     }
 
 
+# --- Report des bilans hebdomadaires dans les KPI (decision de Rony du 25/10/2026) ---
+# La fiche 0 promet "Tes chiffres se reportent tout seuls dans ton Tableau de
+# bord" : a chaque bilan hebdomadaire enregistre, les RDV et les ventes de la
+# periode (J0-J30, J30-J60, J60-J90, d'apres "Semaine du") sont additionnes et
+# ecrits dans Valeur J30 / J60 / J90 des KPI "RDV" et "Nouveaux clients". Une
+# periode sans bilan garde la valeur saisie a la main. Les contacts tentes ne
+# sont pas des leads : le KPI "Leads" reste saisi par le client.
+_KPI_DEPUIS_BILAN = {
+    "nb_rdv_obtenus": {"nom": "RDV", "categorie": "Acquisition"},
+    "nb_ventes_conclues": {"nom": "Nouveaux clients", "categorie": "Conversion"},
+}
+# Un bilan saisi un peu apres J90 compte encore pour la derniere periode.
+_BILAN_JOUR_MAX = 97
+
+
+def _historique_bilans(fiche_bilan_id: str) -> list[dict]:
+    """Bilans hebdomadaires du client, une ligne par semaine (la derniere
+    saisie l'emporte), du plus ancien au plus recent."""
+    champs = FICHE_SCHEMAS[_BILAN_HEBDO_MASTER_ID]["champs"]
+    pages = _query_data_source(
+        ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={"property": "Fiche Client", "relation": {"contains": fiche_bilan_id}},
+    )
+    pages = sorted(pages, key=lambda page: page.get("created_time") or "")
+    semaines = {}
+
+    for page in pages:
+        if "checklist" in str(_prop_value(_prop(page.get("properties", {}), "Nom")) or ""):
+            continue
+
+        entree = _parse_entry(page, champs)
+        donnees = entree["donnees"]
+        quand = str(donnees.get("semaine_du") or entree.get("date") or "")[:10]
+
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", quand):
+            continue
+
+        semaines[quand] = {
+            "semaine_du": quand,
+            "contacts": _nombre(donnees.get("nb_contacts_tentes")),
+            "rdv": _nombre(donnees.get("nb_rdv_obtenus")),
+            "propositions": _nombre(donnees.get("nb_propositions_envoyees")),
+            "ventes": _nombre(donnees.get("nb_ventes_conclues")),
+            "ce_qui_a_marche": donnees.get("ce_qui_a_le_mieux_fonctionne") or "",
+            "difficulte": donnees.get("difficulte_principale") or "",
+        }
+
+    return [semaines[cle] for cle in sorted(semaines)]
+
+
+def _periode_kpi(jour: int) -> str:
+    return "valeur_j30" if jour < 30 else "valeur_j60" if jour < 60 else "valeur_j90"
+
+
+def totaux_bilans_par_periode(historique: list[dict], date_demarrage) -> dict:
+    """{"valeur_j30": {"nb_rdv_obtenus": 4.0, ...}, ...} : seules les periodes
+    ayant au moins un bilan apparaissent."""
+    try:
+        debut = datetime.fromisoformat(str(date_demarrage)[:10]).date()
+    except (TypeError, ValueError):
+        return {}
+
+    totaux = {}
+    correspondance = {"nb_rdv_obtenus": "rdv", "nb_ventes_conclues": "ventes"}
+
+    for semaine in historique:
+        jour = (datetime.fromisoformat(semaine["semaine_du"]).date() - debut).days
+
+        if jour > _BILAN_JOUR_MAX:
+            continue
+
+        periode = totaux.setdefault(_periode_kpi(max(jour, 0)), {cle: 0.0 for cle in _KPI_DEPUIS_BILAN})
+
+        for cle, champ in correspondance.items():
+            periode[cle] += semaine[champ]
+
+    return totaux
+
+
+def reporter_bilans_dans_kpi(client_page_id: str, fiche_client_id: str) -> bool:
+    """Apres un bilan hebdomadaire : met a jour les KPI RDV et Nouveaux
+    clients. False si la fiche n'est pas le bilan ou sans date de demarrage."""
+    _schema, _nom, master_id = _fiche_schema_for(fiche_client_id)
+
+    if master_id != _BILAN_HEBDO_MASTER_ID:
+        return False
+
+    props = _get_page(client_page_id).get("properties", {})
+    date_demarrage = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
+    totaux = totaux_bilans_par_periode(_historique_bilans(fiche_client_id), date_demarrage)
+
+    if not totaux:
+        return False
+
+    kpis = {(kpi.get("nom") or "").strip().lower(): kpi for kpi in _client_kpi(client_page_id)}
+
+    for cle, definition in _KPI_DEPUIS_BILAN.items():
+        valeurs = {periode: total[cle] for periode, total in totaux.items()}
+        kpi = kpis.get(definition["nom"].lower())
+
+        if kpi:
+            modifies = {champ: v for champ, v in valeurs.items() if _nombre(kpi.get(champ)) != v or kpi.get(champ) is None}
+            if modifies:
+                update_kpi(kpi["id"], modifies, kpi.get("etat"))
+            continue
+
+        properties = {
+            "Nom": {"title": [{"text": {"content": definition["nom"]}}]},
+            "Client": {"relation": [{"id": client_page_id}]},
+            "Catégorie": {"select": {"name": definition["categorie"]}},
+            "État": {"status": {"name": "En cours"}},
+        }
+        properties.update({KPI_CHAMPS_SAISISSABLES[champ]: {"number": v} for champ, v in valeurs.items()})
+        _create_page(KPI_DATA_SOURCE_ID, properties)
+
+    _cache_clear("dashboard:")
+    return True
+
+
 # --- Retours IA personnalises (decision de Rony du 22/10/2026) ---
 # Apres chaque enregistrement, l'IA commente les reponses du client, l'encourage
 # et lui explique l'interet de la fiche pour SES zones faibles. Circuit :
@@ -2872,6 +2991,36 @@ STRUCTURE
 1. Ce que tu retiens de ses réponses : un point fort précis, et si une réponse est vague ou vide, dis-le simplement et propose comment la préciser.
 2. Pourquoi cette fiche compte pour lui : relie-la à son diagnostic (zone prioritaire, score) et à son objectif 90 jours s'il est fourni.
 3. Un encouragement sincère et UNE action concrète pour les 7 prochains jours."""
+
+
+# Bilan hebdomadaire (25/10/2026) : Idris compare les semaines au lieu de
+# commenter la seule semaine enregistree.
+_RETOUR_IA_BILAN_SYSTEME = """Tu es Idris, l'assistant IA du programme eVolution 2.0 de RL-Evolution (Rony), accompagnement commercial des indépendants et TPE des Antilles-Guyane. Un client vient d'enregistrer son bilan hebdomadaire de prospection. Tu lui écris l'analyse de sa semaine.
+
+RÈGLES
+- Français, tutoiement, ton chaleureux, direct et concret, sans jargon.
+- Appuie-toi UNIQUEMENT sur les chiffres et réponses fournis. Ne calcule que ce qui est fourni (les taux sont déjà calculés), n'invente aucun chiffre, ne promets aucun résultat.
+- 90 à 150 mots, 3 courts paragraphes, pas de titre, pas de markdown, pas de signature.
+
+STRUCTURE
+1. La tendance : compare cette semaine aux précédentes (contacts, RDV, ventes). S'il n'y a qu'une semaine, dis que c'est la base de départ et que la comparaison viendra la semaine prochaine.
+2. Le point qui coince le plus dans l'enchaînement contacts → RDV → ventes, relié à sa difficulté et à ce qui a marché.
+3. UNE action précise et chiffrée pour la semaine prochaine (par exemple "5 relances de propositions d'ici mercredi"), puis un encouragement sincère."""
+
+
+def _lignes_historique_bilans(historique: list[dict]) -> list[str]:
+    lignes = ["Ses bilans (du plus ancien au plus récent, 5 dernières semaines au plus) :"]
+
+    for semaine in historique[-5:]:
+        taux_rdv = f"{semaine['rdv'] / semaine['contacts']:.0%}" if semaine["contacts"] else "n/a"
+        taux_vente = f"{semaine['ventes'] / semaine['rdv']:.0%}" if semaine["rdv"] else "n/a"
+        lignes.append(
+            f"- Semaine du {semaine['semaine_du']} : {semaine['contacts']:.0f} contacts, {semaine['rdv']:.0f} RDV, "
+            f"{semaine['propositions']:.0f} propositions, {semaine['ventes']:.0f} ventes "
+            f"(contacts → RDV {taux_rdv}, RDV → ventes {taux_vente})"
+        )
+
+    return lignes
 
 
 def _retour_ia_visible(props: dict) -> dict | None:
@@ -2962,6 +3111,21 @@ def _prompt_retour_ia(entree: dict) -> dict | None:
     elif priorite.get("type") == "point_fort":
         lignes.append(f"Cette fiche touche un de ses points forts : {priorite['zone']}. Encourage-le à la boucler vite pour se concentrer sur ses priorités.")
 
+    systeme = _RETOUR_IA_SYSTEME
+
+    if fiche.get("master_id") == _BILAN_HEBDO_MASTER_ID:
+        systeme = _RETOUR_IA_BILAN_SYSTEME
+
+        try:
+            historique = _historique_bilans(fiche["id"])
+        except Exception as error:
+            logger.warning("Historique des bilans illisible (%s) : analyse de la seule semaine.", error)
+            historique = []
+
+        if historique:
+            lignes.append("")
+            lignes.extend(_lignes_historique_bilans(historique))
+
     lignes.append("")
     lignes.append("Ses réponses :")
     lignes.extend(f"- {question} {valeur}" for question, valeur in reponses.items())
@@ -2974,7 +3138,7 @@ def _prompt_retour_ia(entree: dict) -> dict | None:
         "client": dashboard.get("nom"),
         "fiche": fiche["nom"].split(" - ", 1)[-1],
         "autonome": _est_parcours_autonome(dashboard.get("parcours")),
-        "systeme": _RETOUR_IA_SYSTEME,
+        "systeme": systeme,
         "message": "\n".join(ligne for ligne in lignes if ligne is not None),
     }
 
