@@ -980,6 +980,35 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   border-top: 2px dashed var(--text-tertiary);
 }
 
+.dictee {
+  margin-top: 0.4rem;
+}
+
+.dictee-bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--brand-line-strong);
+  background: var(--brand-white);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.dictee-bouton.dictee-active {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.dictee-erreur {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--danger);
+}
+
 .kpi-maj {
   margin-top: 0.75rem;
   align-self: flex-start;
