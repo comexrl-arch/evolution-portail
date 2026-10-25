@@ -923,8 +923,8 @@ def _appel_idris(nom: str, fonction, *args):
     except ValueError:
         raise HTTPException(status_code=422, detail="Demande invalide.")
 
-    except PermissionError as error:
-        raise HTTPException(status_code=429, detail=str(error))
+    except PermissionError:
+        raise HTTPException(status_code=429, detail="Limite atteinte : reviens plus tard.")
 
     except RuntimeError as error:
         raise _erreur_service_indisponible(nom, error)
