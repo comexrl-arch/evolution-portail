@@ -507,6 +507,7 @@ def portal_create_entry(
 
     if background_tasks is not None:
         background_tasks.add_task(_recalculer_fiche8, session["client_page_id"], fiche_id)
+        background_tasks.add_task(_reporter_bilans_kpi, session["client_page_id"], fiche_id)
         background_tasks.add_task(_demander_retour_ia, fiche_id, (entry or {}).get("id"))
     return {"status": "saved", "entry": entry}
 
@@ -519,6 +520,15 @@ def _demander_retour_ia(fiche_id: str, entry_id: str | None) -> None:
     except Exception as error:
         # L'entree reste "À générer" : le workflow n8n prendra le relais.
         _journaliser_alerte_impossible("retour_ia", error)
+
+
+def _reporter_bilans_kpi(client_page_id: str, fiche_id: str) -> None:
+    # Tache de fond, best-effort : un bilan hebdomadaire met a jour les KPI
+    # RDV et Nouveaux clients du tableau de bord.
+    try:
+        notion_service.reporter_bilans_dans_kpi(client_page_id, fiche_id)
+    except Exception as error:
+        _journaliser_alerte_impossible("kpi_bilans", error)
 
 
 def _recalculer_fiche8(client_page_id: str, fiche_id: str) -> None:

@@ -567,6 +567,7 @@ function SyntheseCard({ synthese }) {
   if (!parties) {
     return (
       <div className="synthese">
+        <SignatureIdris />
         <SyntheseJauge synthese={synthese} />
         <SyntheseResultats resultats={synthese.resultats} />
         <FicheContent texte={synthese.texte} />
@@ -580,6 +581,7 @@ function SyntheseCard({ synthese }) {
 
   return (
     <div className="synthese">
+      <SignatureIdris />
       {axe && <span className={`badge ${axe.classe} synthese-axe`}>{axe.libelle}</span>}
       <SyntheseJauge synthese={synthese} />
       {intro.length > 0 && <p className="synthese-intro">{renderInline(intro.join(' '))}</p>}
@@ -1019,6 +1021,82 @@ function ParcoursSurMesure({ personnalisation, fiches, onOpen }) {
   )
 }
 
+// "Avant / Maintenant" (decision de Rony du 25/10/2026) : la preuve de
+// progression. Score du diagnostic de depart contre score actuel (diagnostic
+// vivant, voir notion_service._scores_reels), et chaque KPI J0 contre sa
+// derniere valeur connue. Rien d'affiche tant qu'il n'y a rien a comparer.
+const KPI_DERNIERES = [['valeur_j90', 'J90'], ['valeur_j60', 'J60'], ['valeur_j30', 'J30']]
+
+function Evolution({ avant, apres }) {
+  const ecart = apres - avant
+  if (ecart === 0) return <span className="avant-apres-ecart avant-apres-ecart-egal">=</span>
+  return (
+    <span className={`avant-apres-ecart ${ecart > 0 ? 'avant-apres-ecart-plus' : 'avant-apres-ecart-moins'}`}>
+      {ecart > 0 ? '+' : '−'}{formaterKpi(Math.abs(ecart))}
+    </span>
+  )
+}
+
+function AvantMaintenant({ personnalisation, kpis }) {
+  const lignesKpi = (kpis || [])
+    .map((kpi) => {
+      const depart = nombreOuNull(kpi.valeur_j0)
+      const derniere = KPI_DERNIERES.map(([champ, periode]) => ({ periode, valeur: nombreOuNull(kpi[champ]) })).find((p) => p.valeur !== null)
+      return depart === null || !derniere ? null : { nom: kpi.nom, depart, ...derniere }
+    })
+    .filter(Boolean)
+  const diagnostic = personnalisation?.scores_diagnostic
+
+  if (!diagnostic && !lignesKpi.length) return null
+
+  const actuel = personnalisation?.total_actuel ?? personnalisation?.total
+
+  return (
+    <section className="panel avant-apres">
+      <p className="panel-eyebrow">Avant / Maintenant</p>
+      {diagnostic && (
+        <>
+          <div className="avant-apres-scores">
+            <div>
+              <p className="avant-apres-label">Au départ</p>
+              <p className="avant-apres-total">{personnalisation.total}<small> / 15</small></p>
+            </div>
+            <ChevronRight size={22} className="avant-apres-fleche" aria-hidden="true" />
+            <div>
+              <p className="avant-apres-label">Aujourd'hui</p>
+              <p className="avant-apres-total avant-apres-total-actuel">{actuel}<small> / 15</small></p>
+            </div>
+            <Evolution avant={personnalisation.total} apres={actuel} />
+          </div>
+          <ul className="avant-apres-lignes">
+            {Object.entries(diagnostic).map(([zone, depart]) => (
+              <li key={zone}>
+                <span className="avant-apres-nom">{zone}</span>
+                <span className="avant-apres-valeurs">{depart} → {personnalisation.scores?.[zone] ?? depart} / 3</span>
+                <Evolution avant={depart} apres={personnalisation.scores?.[zone] ?? depart} />
+              </li>
+            ))}
+          </ul>
+          {!personnalisation.chiffres && (
+            <p className="avant-apres-note">Remplis au moins 2 bilans hebdomadaires : ton score suivra alors tes vrais chiffres de prospection, de conversion et de suivi.</p>
+          )}
+        </>
+      )}
+      {lignesKpi.length > 0 && (
+        <ul className="avant-apres-lignes">
+          {lignesKpi.map((ligne) => (
+            <li key={ligne.nom}>
+              <span className="avant-apres-nom">{ligne.nom}</span>
+              <span className="avant-apres-valeurs">{formaterKpi(ligne.depart)} (J0) → {formaterKpi(ligne.valeur)} ({ligne.periode})</span>
+              <Evolution avant={ligne.depart} apres={ligne.valeur} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function PourquoiPourToi({ fiche, personnalisation }) {
   if (fiche?.priorite?.type !== 'prioritaire' || !personnalisation) return null
 
@@ -1035,29 +1113,79 @@ function PourquoiPourToi({ fiche, personnalisation }) {
   )
 }
 
+// Tout ce qu'Idris ecrit (retours, brouillons, entrainement, syntheses) prend
+// la meme forme, une bulle sombre signee, pour que le client distingue d'un
+// coup d'oeil la formation (papier clair) de l'IA (decision de Rony du
+// 25/10/2026). Emblème en attendant le portrait d'Idris (croquis).
+function IdrisAvatar({ taille = 44 }) {
+  return (
+    <span className="idris-avatar" style={{ width: taille, height: taille }} aria-hidden="true">
+      <svg viewBox="0 0 34 34" width={taille * 0.66} height={taille * 0.66} fill="none" strokeWidth="1.6" strokeLinecap="round">
+        <circle cx="17" cy="12" r="6" stroke="var(--brand-gold-metal)" />
+        <path d="M6 31c1.5-6 6-9 11-9s9.5 3 11 9" stroke="var(--brand-gold-metal)" />
+        <path d="M25 5.5l1.8-1.8M27 9.5h2.4" stroke="var(--brand-gold-champagne)" />
+      </svg>
+    </span>
+  )
+}
+
+function IdrisMessage({ titre, meta, children }) {
+  return (
+    <div className="idris-message">
+      <IdrisAvatar />
+      <div className="idris-bulle">
+        <header className="idris-bulle-entete">
+          <strong>Idris</strong>
+          <span className="idris-tag">Assistant IA</span>
+          {titre && <span className="idris-bulle-titre">{titre}</span>}
+        </header>
+        {children}
+        {meta && <p className="idris-bulle-meta">{meta}</p>}
+      </div>
+    </div>
+  )
+}
+
+function SignatureIdris() {
+  return <p className="synthese-signature"><IdrisAvatar taille={30} /> <strong>Idris</strong> <span className="idris-tag">Assistant IA</span></p>
+}
+
+function IdrisSeparateur({ children = 'Ton échange avec Idris' }) {
+  return <p className="idris-separateur">{children}</p>
+}
+
+// Paragraphes d'un texte d'Idris ; le dernier (action de la semaine et
+// encouragement, voir les prompts) est mis en avant.
+function ParagraphesIdris({ texte }) {
+  const paragraphes = (texte || '').split(/\n\s*\n/).filter((p) => p.trim())
+
+  return paragraphes.map((paragraphe, index) => (
+    <p key={index} className={paragraphes.length > 1 && index === paragraphes.length - 1 ? 'idris-action' : undefined}>
+      {paragraphe}
+    </p>
+  ))
+}
+
 function RetourIA({ retour, actif }) {
   if (!actif || !retour) return null
 
   return (
-    <section className="retour-ia">
-      <header className="retour-ia-entete">
-        <Sparkles size={17} aria-hidden="true" />
-        <h2>Le retour d'Idris</h2>
-      </header>
-      {retour.statut === 'publie' ? (
-        <>
-          {retour.texte.split(/\n\s*\n/).map((paragraphe, index) => (
-            <p key={index}>{paragraphe}</p>
-          ))}
-          {retour.date && <p className="retour-ia-date">Rédigé par Idris le {formaterMaj(retour.date)}</p>}
-        </>
-      ) : retour.statut === 'relecture' ? (
-        <p className="retour-ia-attente">Idris a rédigé ton retour, Rony le relit. Il apparaîtra ici d'ici quelques heures.</p>
-      ) : (
-        <p className="retour-ia-attente">
-          <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Idris rédige ton retour personnalisé, il arrive dans un instant.
-        </p>
-      )}
+    <section className="retour-ia" aria-label="Le retour d'Idris">
+      <IdrisSeparateur />
+      <IdrisMessage
+        titre="Ton retour"
+        meta={retour.statut === 'publie' && retour.date ? `Rédigé par Idris le ${formaterMaj(retour.date)}` : null}
+      >
+        {retour.statut === 'publie' ? (
+          <ParagraphesIdris texte={retour.texte} />
+        ) : retour.statut === 'relecture' ? (
+          <p className="retour-ia-attente">J'ai rédigé ton retour, Rony le relit. Il apparaîtra ici d'ici quelques heures.</p>
+        ) : (
+          <p className="retour-ia-attente">
+            <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Je rédige ton retour personnalisé, il arrive dans un instant.
+          </p>
+        )}
+      </IdrisMessage>
     </section>
   )
 }
@@ -1092,10 +1220,7 @@ function PresentationIdris({ nom }) {
 
   return (
     <section className="idris-presentation">
-      <header className="retour-ia-entete">
-        <Sparkles size={17} aria-hidden="true" />
-        <h2>{prenom ? `Bonjour ${prenom}, moi c'est Idris` : "Bonjour, moi c'est Idris"}</h2>
-      </header>
+      <IdrisMessage titre={prenom ? `Bonjour ${prenom}, moi c'est Idris` : "Bonjour, moi c'est Idris"}>
       <p>
         Je suis l'assistant IA de ton parcours eVolution 2.0, aux côtés de Rony. Je m'appuie sur ton diagnostic
         et sur tes vrais chiffres pour t'aider là où ça compte le plus pour toi.
@@ -1107,6 +1232,7 @@ function PresentationIdris({ nom }) {
       </ul>
       <p>Rony garde l'œil sur ton parcours ; moi, je suis là au quotidien. On y va ?</p>
       <button type="button" className="brouillon-ia-bouton" onClick={fermer}>Enchanté, Idris !</button>
+      </IdrisMessage>
     </section>
   )
 }
@@ -1159,9 +1285,9 @@ function BrouillonIA({ ficheId, champs, formValues, onRemplir }) {
   return (
     <section className="brouillon-ia">
       <div className="brouillon-ia-entete">
-        <Sparkles size={18} className="brouillon-ia-icone" />
+        <IdrisAvatar taille={38} />
         <div>
-          <p className="brouillon-ia-titre">Besoin d'un point de départ ?</p>
+          <p className="brouillon-ia-titre">Besoin d'un point de départ ? <span className="idris-tag">Idris · IA</span></p>
           <p className="brouillon-ia-texte">
             Idris te propose une première version à partir de ce que tu as écrit dans tes fiches précédentes. Tu la corriges avec tes mots.
           </p>
@@ -1178,7 +1304,7 @@ function BrouillonIA({ ficheId, champs, formValues, onRemplir }) {
 
       {Object.entries(propositions).map(([cle, texte]) => (
         <div key={cle} className="brouillon-ia-proposition">
-          <p className="brouillon-ia-libelle">{libelle(cle)}</p>
+          <p className="brouillon-ia-libelle">Proposition d'Idris · {libelle(cle)}</p>
           <p className="brouillon-ia-texte-propose">{texte}</p>
           <button
             type="button"
@@ -1286,7 +1412,7 @@ function Entrainement() {
         <div className="entrainement-chat">
           {messages.map((m, index) => (
             <p key={index} className={`entrainement-bulle entrainement-bulle-${m.role}`}>
-              <span className="entrainement-auteur">{m.role === 'prospect' ? 'Prospect' : 'Toi'}</span>
+              <span className="entrainement-auteur">{m.role === 'prospect' ? 'Prospect (joué par Idris)' : 'Toi'}</span>
               {m.texte}
             </p>
           ))}
@@ -1294,8 +1420,9 @@ function Entrainement() {
 
           {retour ? (
             <div className="entrainement-retour">
-              <p className="pourquoi-pour-toi-titre">Le retour d'Idris</p>
-              {retour.split(/\n\s*\n/).map((paragraphe, index) => <p key={index}>{paragraphe}</p>)}
+              <IdrisMessage titre="Ton retour de coach">
+                <ParagraphesIdris texte={retour} />
+              </IdrisMessage>
               <button type="button" className="prochaine-etape-lien" onClick={() => demarrer(scenario)}>Recommencer</button>
             </div>
           ) : messages.length > 0 && (
@@ -1662,6 +1789,7 @@ function KpiTable({ kpis, onSave }) {
           {kpiRenseignes(kpis)
             ? 'Mets tes chiffres à jour à chaque étape (J30, J60, J90) pour suivre ta progression.'
             : 'Commence par tes chiffres de départ (J0) et fixe-toi un objectif pour J30, J60 et J90.'}
+          {' '}Tes RDV et tes nouveaux clients se remplissent tout seuls à chaque bilan hebdomadaire.
         </p>
       )}
       <div className="kpi-grid">
@@ -2419,6 +2547,8 @@ function Portail() {
                 onOpen={openFiche}
                 onParcours={() => changerOnglet('parcours')}
               />
+
+              <AvantMaintenant personnalisation={dashboard.personnalisation} kpis={dashboard.kpi} />
 
               <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
 

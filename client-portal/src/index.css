@@ -3284,18 +3284,6 @@ body[data-ecran="dashboard"] .portal-monogramme {
 
 .retour-ia {
   margin-top: 1.5rem;
-  padding: 1rem 1.1rem;
-  border: var(--border-subtle);
-  border-top: 3px solid var(--accent);
-  border-radius: 12px;
-  background: var(--surface-2);
-  font-size: 0.93rem;
-  line-height: 1.55;
-  color: var(--text-primary);
-}
-
-.retour-ia p {
-  margin: 0 0 0.6rem;
 }
 
 .retour-ia-entete {
@@ -3317,7 +3305,7 @@ body[data-ecran="dashboard"] .portal-monogramme {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  color: var(--text-tertiary);
+  color: var(--idris-texte-doux);
   font-size: 0.88rem;
 }
 
@@ -3431,15 +3419,9 @@ body[data-ecran="dashboard"] .portal-monogramme {
 }
 
 .entrainement-retour {
-  border-left: 3px solid var(--accent);
-  background: var(--accent-soft);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  font-size: 0.9rem;
-}
-
-.entrainement-retour p {
-  margin: 0 0 0.5rem;
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 /* Brouillon pre-rempli par l'IA (fiches positionnement et script) */
@@ -3456,6 +3438,10 @@ body[data-ecran="dashboard"] .portal-monogramme {
   display: flex;
   gap: 0.6rem;
   align-items: flex-start;
+}
+
+.brouillon-ia-entete .idris-avatar {
+  margin-top: 0.1rem;
 }
 
 .brouillon-ia-icone {
@@ -3504,47 +3490,42 @@ body[data-ecran="dashboard"] .portal-monogramme {
 .brouillon-ia-proposition {
   margin-top: 0.8rem;
   padding: 0.75rem 0.9rem;
-  border-radius: 10px;
-  background: var(--accent-soft);
+  border-radius: 4px 14px 14px 14px;
+  background: var(--idris-fond);
+  color: var(--idris-texte);
 }
 
 .brouillon-ia-libelle {
   font-size: 0.8rem;
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: var(--brand-gold-metal);
   margin: 0 0 0.3rem;
 }
 
 .brouillon-ia-texte-propose {
   margin: 0 0 0.5rem;
-  color: var(--text-primary);
+  color: var(--idris-texte);
   white-space: pre-wrap;
 }
 
 .brouillon-ia-remplacer {
   font-size: 0.85rem;
   padding: 0.35rem 0.8rem;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--brand-gold-metal);
   border-radius: 999px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--idris-texte);
   cursor: pointer;
 }
 
 /* Presentation d'Idris, l'assistant IA, en debut de parcours */
 .idris-presentation {
   margin: 1.5rem 0;
-  padding: 1rem 1.1rem;
-  border: var(--border-subtle);
-  border-left: 3px solid var(--accent);
-  border-radius: 12px;
-  background: var(--surface-2);
 }
 
 .idris-presentation p,
 .idris-presentation li {
   font-size: 0.92rem;
-  color: var(--text-secondary);
   margin: 0 0 0.6rem;
 }
 
@@ -3552,4 +3533,241 @@ body[data-ecran="dashboard"] .portal-monogramme {
   margin: 0 0 0.6rem;
   padding-left: 1.1rem;
   list-style: disc;
+}
+
+
+/* ---------- Idris : l'IA se distingue de la formation (25/10/2026) ----------
+   Formation = papier clair ; Idris = bulle encre signee, avatar dore. */
+:root {
+  --idris-fond: var(--brand-ink-2);
+  --idris-texte: #EDEBE6;
+  --idris-texte-doux: #A9A69D;
+}
+
+.idris-separateur {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0 0 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.idris-separateur::before,
+.idris-separateur::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--brand-gold-metal);
+  opacity: 0.5;
+}
+
+.idris-message {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.idris-avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-ink);
+  border: 2px solid var(--brand-gold-metal);
+}
+
+.idris-bulle {
+  flex: 1;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 4px 16px 16px 16px;
+  background: var(--idris-fond);
+  color: var(--idris-texte);
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  box-shadow: 0 6px 18px rgba(20, 23, 31, 0.18);
+}
+
+.idris-bulle p,
+.idris-bulle li {
+  color: var(--idris-texte);
+  margin: 0 0 0.6rem;
+}
+
+.idris-bulle-entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.idris-bulle-entete strong {
+  color: #FFFFFF;
+  font-size: 0.95rem;
+}
+
+.idris-tag {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--brand-gold-metal);
+  color: var(--brand-ink);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.idris-bulle-titre {
+  color: var(--idris-texte-doux);
+  font-size: 0.82rem;
+}
+
+.idris-bulle-titre::before {
+  content: "· ";
+}
+
+.idris-action {
+  padding: 0.55rem 0.75rem;
+  border-left: 3px solid var(--brand-gold-champagne);
+  border-radius: 6px;
+  background: rgba(201, 162, 101, 0.14);
+}
+
+.idris-bulle-meta {
+  font-size: 0.75rem;
+  color: var(--idris-texte-doux) !important;
+  margin: 0.2rem 0 0 !important;
+}
+
+.idris-bulle .brouillon-ia-bouton {
+  background: var(--brand-gold-metal);
+  color: var(--brand-ink);
+}
+
+.synthese-signature {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.6rem;
+  font-size: 0.88rem;
+}
+
+@media (max-width: 520px) {
+  .idris-message {
+    gap: 0.55rem;
+  }
+
+  .idris-message > .idris-avatar {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
+/* ---------- Avant / Maintenant ---------- */
+.avant-apres-scores {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 0.4rem 0 0.9rem;
+}
+
+.avant-apres-label {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+}
+
+.avant-apres-total {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  line-height: 1.1;
+  color: var(--text-secondary);
+}
+
+.avant-apres-total small {
+  font-size: 0.95rem;
+}
+
+.avant-apres-total-actuel {
+  color: var(--accent);
+}
+
+.avant-apres-fleche {
+  color: var(--brand-gold-metal);
+}
+
+.avant-apres-lignes {
+  max-width: 34rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.avant-apres-lignes + .avant-apres-lignes {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: var(--border-subtle);
+}
+
+.avant-apres-lignes li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+.avant-apres-nom {
+  color: var(--text-primary);
+  font-weight: 600;
+  min-width: 0;
+}
+
+.avant-apres-valeurs {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.avant-apres-ecart {
+  min-width: 2.4rem;
+  text-align: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.avant-apres-ecart-plus {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.avant-apres-ecart-moins {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.avant-apres-ecart-egal {
+  color: var(--text-tertiary);
+  background: var(--surface-3);
+}
+
+.avant-apres-note {
+  margin: 0.8rem 0 0;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
 }
