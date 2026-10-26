@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -676,6 +676,52 @@ function SynthesesSection({ syntheses }) {
           <SyntheseCard synthese={synthese} />
         </details>
       ))}
+    </>
+  )
+}
+
+// Synthese du mois en version courte sur le tableau de bord (lot D) : la
+// realisation et les actions des 30 prochains jours. Le texte complet reste
+// a un clic, avec les syntheses precedentes.
+function SyntheseCourte({ syntheses }) {
+  const [complete, setComplete] = useState(false)
+  if (!syntheses?.length) return null
+
+  const derniere = syntheses[0]
+  const parties = decouperSynthese(derniere.texte)
+  const intro = parties ? parties.intro.join(' ') : ''
+  const actions = parties?.sections[4] || []
+  const { fiches_terminees: faites, fiches_prevues: prevues } = derniere
+
+  return (
+    <>
+      <section className="synthese-courte">
+        <div className="synthese-courte-chiffre">
+          <p className="cap-surtitre">Synthèse du mois {derniere.mois}</p>
+          {faites != null && prevues > 0 && (
+            <>
+              <p className="synthese-courte-taux">{Math.min(faites, prevues)} / {prevues}</p>
+              <p className="synthese-courte-legende">fiches prévues faites à J{30 * derniere.mois}</p>
+            </>
+          )}
+        </div>
+        <div>
+          {intro && <p className="synthese-courte-intro">{renderInline(intro)}</p>}
+          {actions.length > 0 && (
+            <>
+              <p className="synthese-courte-sous-titre">Tes actions des 30 prochains jours</p>
+              <ol className="synthese-courte-actions">
+                {actions.slice(0, 3).map((ligne, i) => <li key={i}>{renderInline(sansPuce(ligne))}</li>)}
+              </ol>
+            </>
+          )}
+          <button type="button" className="synthese-courte-lien" aria-expanded={complete} onClick={() => setComplete((v) => !v)}>
+            {complete ? 'Masquer la synthèse complète' : 'Lire la synthèse complète'}
+            <ChevronDown size={15} aria-hidden="true" className={complete ? 'resultats-chevron-ouvert' : undefined} />
+          </button>
+        </div>
+      </section>
+      {complete && <SynthesesSection syntheses={syntheses} />}
     </>
   )
 }
@@ -1893,7 +1939,8 @@ function calculerJalons(dashboard, modules) {
 
 const JALONS_VUS_KEY = 'jalons_vus'
 
-function Jalons({ jalons, regularite }) {
+// Jalon atteint depuis la derniere visite, fete une fois par Idris.
+function useJalonAFeter(jalons) {
   const faits = jalons.filter((j) => j.fait)
   const [aFeter, setAFeter] = useState(() => {
     try {
@@ -1919,19 +1966,15 @@ function Jalons({ jalons, regularite }) {
     setAFeter(null)
   }
 
-  if (!faits.length && !regularite) return null
+  return [aFeter, merci]
+}
+
+function Jalons({ jalons, regularite }) {
+  if (!jalons.some((j) => j.fait) && !regularite) return null
 
   return (
     <section className="panel jalons">
       <p className="panel-eyebrow">Mes jalons</p>
-      {aFeter && (
-        <div className="jalons-fete">
-          <IdrisMessage titre={`Bravo · ${aFeter.titre}`}>
-            <p>{aFeter.bravo}</p>
-            <button type="button" className="brouillon-ia-bouton" onClick={merci}>Merci Idris !</button>
-          </IdrisMessage>
-        </div>
-      )}
       {regularite && (
         <p className="jalons-serie">
           <strong>{regularite.serie}</strong> semaine{regularite.serie > 1 ? 's' : ''} de bilan d'affilée
@@ -1949,6 +1992,172 @@ function Jalons({ jalons, regularite }) {
       </ul>
     </section>
   )
+}
+
+// --- Lot D (affichage du 26/10/2026) : bas du tableau de bord en version
+// courte. Le detail (parcours sur mesure, tous les jalons) est dans Mon parcours. ---
+function bilanDeCetteSemaine(derniere) {
+  // `derniere` : la semaine du dernier bilan hebdomadaire (date ISO).
+  if (!derniere) return false
+  const lundi = (valeur) => {
+    const date = new Date(valeur)
+    date.setHours(0, 0, 0, 0)
+    date.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+    return date.getTime()
+  }
+  return lundi(`${String(derniere).slice(0, 10)}T12:00:00`) === lundi(Date.now())
+}
+
+function PrioritesCourtes({ personnalisation, fiches, onOpen }) {
+  const zones = personnalisation?.zones_prioritaires || []
+  if (!zones.length) return null
+
+  const parId = Object.fromEntries(fiches.map((f) => [f.id, f]))
+
+  return (
+    <div className="energie-carte">
+      <p className="energie-surtitre">{zones.length > 1 ? `Tes ${zones.length} priorités` : 'Ta priorité'}, d'après ton diagnostic</p>
+      <ul className="priorites">
+        {zones.map((zone) => (
+          <li key={zone.zone} className="priorite">
+            <span className={`priorite-score${zone.score >= 2 ? ' priorite-score-moyen' : ''}`}>{zone.score}/3</span>
+            <div className="priorite-texte">
+              <p className="priorite-zone">{zone.zone}</p>
+              <p className="priorite-constat">{zone.constat ? `D'après tes chiffres : ${zone.constat}` : zone.pourquoi}</p>
+              <div className="priorite-fiches">
+                {zone.fiches.map((id) => parId[id]).filter(Boolean).map((fiche) => {
+                  const { numero, titre } = lireFiche(fiche.nom)
+                  const faite = fiche.etat === 'Terminé'
+                  const bloquee = fiche.acces?.includes('Bloqué')
+                  return (
+                    <button
+                      key={fiche.id}
+                      type="button"
+                      title={titre}
+                      disabled={bloquee}
+                      onClick={() => onOpen(fiche.id)}
+                      className={`priorite-fiche${faite ? ' priorite-fiche-faite' : ''}`}
+                    >
+                      {faite ? <CheckCircle2 size={12} aria-label="Terminée" /> : bloquee ? <Lock size={11} aria-label="Pas encore ouverte" /> : null}
+                      {numero ? `Fiche ${numero}` : titre}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function RegulariteJalons({ jalons, regularite, onVoirTout }) {
+  const faits = jalons.filter((j) => j.fait)
+  const prochain = jalons.find((j) => !j.fait)
+
+  if (!faits.length && !regularite) return null
+
+  const serie = regularite?.serie || 0
+  const conseil = bilanDeCetteSemaine(regularite?.derniere)
+    ? 'Bilan de cette semaine fait. Le suivant, c\'est la semaine prochaine.'
+    : serie > 0
+      ? `Fais ton bilan de la semaine avant dimanche pour passer à ${serie + 1}.`
+      : 'Fais ton bilan de la semaine pour lancer ta série.'
+
+  return (
+    <div className="energie-carte">
+      {regularite && (
+        <>
+          <p className="energie-surtitre">Ta régularité</p>
+          <p className="regularite-serie">{serie} semaine{serie > 1 ? 's' : ''} de bilan d'affilée</p>
+          <p className="regularite-conseil">{conseil}</p>
+        </>
+      )}
+      <button type="button" className="jalons-resume" onClick={onVoirTout}>
+        {faits.length > 0 && (
+          <span className="jalons-medailles" aria-hidden="true">
+            {faits.slice(-4).map((j) => <span key={j.id}><Award size={12} /></span>)}
+          </span>
+        )}
+        <span className="jalons-resume-texte">
+          <strong>{faits.length} jalon{faits.length > 1 ? 's' : ''} sur {jalons.length}</strong>
+          {prochain && <> · prochain : {prochain.titre}</>}
+        </span>
+        <ChevronRight size={15} aria-hidden="true" />
+      </button>
+    </div>
+  )
+}
+
+function OuMettreTonEnergie({ personnalisation, fiches, jalons, regularite, onOpen, onVoirJalons }) {
+  const [aFeter, merci] = useJalonAFeter(jalons)
+  if (!personnalisation?.zones_prioritaires?.length && !regularite && !jalons.some((j) => j.fait)) return null
+
+  return (
+    <section className="energie">
+      <h2 className="resultats-titre">Où mettre ton énergie</h2>
+      {aFeter && (
+        <div className="jalons-fete">
+          <IdrisMessage titre={`Bravo · ${aFeter.titre}`}>
+            <p>{aFeter.bravo}</p>
+            <button type="button" className="brouillon-ia-bouton" onClick={merci}>Merci Idris !</button>
+          </IdrisMessage>
+        </div>
+      )}
+      <div className="energie-grille">
+        <PrioritesCourtes personnalisation={personnalisation} fiches={fiches} onOpen={onOpen} />
+        <RegulariteJalons jalons={jalons} regularite={regularite} onVoirTout={onVoirJalons} />
+      </div>
+    </section>
+  )
+}
+
+// Idris en une ligne, avec une proposition qui colle a l'etape du calendrier.
+// La preparation de rendez-vous est reservee au Coaching : elle n'est pas
+// proposee ici.
+const SUGGESTIONS_IDRIS = {
+  Démarrage: 'Une question sur ton diagnostic ? Je t\'explique ce qu\'il dit de ton activité.',
+  Clarifier: 'Une question sur ton offre ou ta cible ? Je t\'aide à la formuler.',
+  Prospecter: 'Tu veux que je prépare ton prochain message de premier contact, sur WhatsApp ou LinkedIn ?',
+  Convertir: 'Un devis envoyé sans réponse ? Je t\'écris la relance.',
+  Stabiliser: 'Un client content ? Je t\'aide à lui demander une recommandation.',
+}
+
+function IdrisLigne({ etape, onOuvrir }) {
+  return (
+    <button type="button" className="idris-ligne" onClick={onOuvrir}>
+      <IdrisAvatar taille={34} />
+      <span className="idris-ligne-texte">
+        <strong>Idris</strong> · {SUGGESTIONS_IDRIS[etape] || 'Une question sur ta stratégie commerciale ? Prépare un message avec moi.'}
+      </span>
+      <span className="idris-ligne-action">Parler à Idris <ChevronRight size={14} aria-hidden="true" /></span>
+    </button>
+  )
+}
+
+function prochaineSession(sessions) {
+  // Un point collectif reste « prochain » jusqu'a 2 h apres son debut.
+  const maintenant = Date.now()
+  return (sessions || []).find((s) => s.date_heure && Date.parse(s.date_heure) + 2 * 3600000 >= maintenant) || null
+}
+
+function ProchaineSession({ sessions, onVoir }) {
+  const session = prochaineSession(sessions)
+  if (!session) return null
+
+  return (
+    <button type="button" className="session-ligne" onClick={onVoir}>
+      <CalendarDays size={16} aria-hidden="true" />
+      <span className="session-ligne-texte"><strong>Prochain point collectif</strong> · {session.nom} · {dateSession(session.date_heure)}</span>
+      <ChevronRight size={15} aria-hidden="true" />
+    </button>
+  )
+}
+
+function etapeDuCalendrier(rythme) {
+  if (!rythme || rythme.jour < 0 || rythme.jour > rythme.duree) return null
+  return [...(rythme.etapes || [])].reverse().find((e) => rythme.jour >= e.debut)?.libelle || null
 }
 
 function bilanFinalOuvert(dashboard) {
@@ -2212,9 +2421,8 @@ function lienSur(lien) {
 
 // Onglet Communaute (lot 4) : lien du groupe, prochain point collectif, replays.
 function Communaute({ dashboard }) {
-  const maintenant = Date.now()
   const sessions = dashboard.sessions || []
-  const prochaine = sessions.find((s) => s.date_heure && Date.parse(s.date_heure) + 2 * 3600000 >= maintenant)
+  const prochaine = prochaineSession(sessions)
   const replays = sessions.filter((s) => lienSur(s.replay))
 
   return (
@@ -2557,65 +2765,144 @@ function PagePartage({ jeton }) {
   )
 }
 
-function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
+// Mon parcours en frise (affichage du 26/10/2026, lot C) : une seule
+// colonne rangee par etape, avec le repere « Aujourd'hui ». Les modules
+// termines tiennent sur une ligne, le module en cours est ouvert avec sa
+// grande illustration, les modules a venir disent quand ils s'ouvrent.
+function etapeDuModule(label) {
+  const etape = (label || '').replace(/⁠/g, '').split(' · ')[0].trim()
+  // « Démarrage · J0 » et « Diagnostic · J1 à J3 » forment une seule etape.
+  return etape === 'Diagnostic' ? 'Démarrage' : etape
+}
+
+const NOMS_ETAPES = { Démarrage: 'Démarrage et diagnostic' }
+
+function ListeFiches({ fiches, onOpen }) {
+  return (
+    <ul className="module-carte-fiches">
+      {fiches.map((fiche) => {
+        const bloquee = fiche.acces?.includes('Bloqué')
+        const { numero: n, titre: t } = lireFiche(fiche.nom)
+        const etat = fiche.etat === 'Terminé' ? 'fini' : fiche.etat === 'En cours' ? 'actif' : 'avenir'
+        const ouverture = bloquee ? fiche.acces.match(/ouvre à (J\d+)/)?.[1] : null
+
+        return (
+          <li key={fiche.id}>
+            <button disabled={bloquee} onClick={() => onOpen(fiche.id)} className={`module-fiche module-fiche-${etat}`}>
+              <span className="module-fiche-numero">{n ?? '•'}</span>
+              <span className="module-fiche-titre">{t}</span>
+              <BadgePriorite priorite={fiche.priorite} />
+              {ouverture && <span className="module-fiche-ouverture">S'ouvre à {ouverture}</span>}
+              {bloquee ? (
+                <Lock size={13} className="module-fiche-icone" aria-label="Bloquée" />
+              ) : etat === 'fini' ? (
+                <CheckCircle2 size={14} className="module-fiche-icone module-fiche-icone-fini" aria-label="Terminée" />
+              ) : (
+                <ChevronRight size={14} className="module-fiche-icone" aria-hidden="true" />
+              )}
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function ModuleEtape({ module, enCours, jour, onOpen }) {
   const { surtitre, titre } = lireModule(module.label)
-  const illustration = illustrationDuModule(module.label)
-  const [ouvert, setOuvert] = useState(ouvertParDefaut)
+  const [ouvert, setOuvert] = useState(enCours)
   const terminees = module.fiches.filter((f) => f.etat === 'Terminé').length
   const total = module.fiches.length
-  const pct = total ? Math.round((terminees / total) * 100) : 0
-  const statut = terminees === total ? 'Terminé' : module.fiches.some((f) => f.etat === 'En cours' || f.etat === 'Terminé') ? 'En cours' : 'À venir'
+  const fini = total > 0 && terminees === total
+  const statut = fini ? 'fini' : enCours ? 'actif' : 'avenir'
+  // Seule la prochaine fiche porte « ouvre à JXX » : sinon, le jour d'ouverture
+  // vient du nom du module (« … (J68) »).
+  const jourOuverture = Number(
+    module.fiches.find((f) => f.etat !== 'Terminé')?.acces?.match(/ouvre à J(\d+)/)?.[1] ??
+    (module.label || '').match(/\(J(\d+)/)?.[1],
+  )
+  const ouverture = statut === 'avenir' && jourOuverture && (jour === null || jourOuverture > jour) ? jourOuverture : null
+  const dans = ouverture && jour !== null ? ouverture - jour : null
+  // Le surtitre repete l'etape, deja en titre de section : on garde la suite.
+  const detail = surtitre.split(' · ').filter((partie) => partie !== etapeDuModule(module.label)).join(' · ')
 
   return (
-    <article className={`module-carte module-carte-${statut === 'Terminé' ? 'fini' : statut === 'En cours' ? 'actif' : 'avenir'}`}>
-      {illustration && <img src={illustration} alt="" className="module-carte-image" loading="lazy" />}
-      <div className="module-carte-corps">
-        <div className="module-carte-entete">
-          <p className="module-carte-surtitre">{surtitre}</p>
-          <span className={`module-carte-statut module-carte-statut-${statut === 'Terminé' ? 'fini' : statut === 'En cours' ? 'actif' : 'avenir'}`}>
-            {statut}
-          </span>
-        </div>
-        <h3 className="module-carte-titre">{titre}</h3>
-        <div className="module-carte-progression">
-          <div className="module-carte-barre"><span style={{ width: `${pct}%` }} /></div>
-          <span>{terminees} / {total} fiches</span>
-        </div>
-        <button
-          type="button"
-          className="module-carte-bascule"
-          aria-expanded={ouvert}
-          onClick={() => setOuvert((v) => !v)}
-        >
-          <span>{ouvert ? 'Masquer les fiches' : `Afficher les fiches (${total})`}</span>
-          <ChevronDown size={15} className={`module-carte-bascule-icone${ouvert ? ' module-carte-bascule-icone-ouverte' : ''}`} aria-hidden="true" />
-        </button>
-        {ouvert && <ul className="module-carte-fiches">
-          {module.fiches.map((fiche) => {
-            const bloquee = fiche.acces?.includes('Bloqué')
-            const { numero: n, titre: t } = lireFiche(fiche.nom)
-            const etat = fiche.etat === 'Terminé' ? 'fini' : fiche.etat === 'En cours' ? 'actif' : 'avenir'
+    <li className={`etape-module etape-module-${statut}`}>
+      <button type="button" className="etape-module-entete" aria-expanded={ouvert} onClick={() => setOuvert((v) => !v)}>
+        <img src={illustrationDuModule(module.label)} alt="" className="etape-module-image" loading="lazy" />
+        <span className="etape-module-texte">
+          <span className="etape-module-titre">{titre}</span>
+          <span className="etape-module-detail">{detail}</span>
+        </span>
+        <span className="etape-module-etat">
+          {statut === 'avenir' && ouverture ? (
+            <>S'ouvre à J{ouverture}{dans > 0 && <small>dans {dans} jour{dans > 1 ? 's' : ''}</small>}</>
+          ) : (
+            <>
+              {terminees} / {total} fiche{total > 1 ? 's' : ''}
+              {statut === 'actif' && <span className="etape-module-barre"><span style={{ width: `${total ? (terminees / total) * 100 : 0}%` }} /></span>}
+            </>
+          )}
+        </span>
+        <ChevronDown size={16} aria-hidden="true" className={`etape-module-chevron${ouvert ? ' etape-module-chevron-ouvert' : ''}`} />
+      </button>
+      {ouvert && <ListeFiches fiches={module.fiches} onOpen={onOpen} />}
+    </li>
+  )
+}
 
-            return (
-              <li key={fiche.id}>
-                <button disabled={bloquee} onClick={() => onOpen(fiche.id)} className={`module-fiche module-fiche-${etat}`}>
-                  <span className="module-fiche-numero">{n ?? '•'}</span>
-                  <span className="module-fiche-titre">{t}</span>
-                  <BadgePriorite priorite={fiche.priorite} />
-                  {bloquee ? (
-                    <Lock size={13} className="module-fiche-icone" aria-label="Bloquée" />
-                  ) : etat === 'fini' ? (
-                    <CheckCircle2 size={14} className="module-fiche-icone module-fiche-icone-fini" aria-label="Terminée" />
-                  ) : (
-                    <ChevronRight size={14} className="module-fiche-icone" aria-hidden="true" />
-                  )}
-                </button>
-              </li>
-            )
-          })}
-        </ul>}
-      </div>
-    </article>
+function FriseParcours({ modules, moduleEnCours, rythme, onOpen }) {
+  const jour = rythme ? rythme.jour : null
+  const etapesCalendrier = rythme?.etapes || []
+  const etapeDuJour = etapeDuCalendrier(rythme)
+
+  const groupes = []
+  for (const module of modules) {
+    const cle = etapeDuModule(module.label)
+    const groupe = groupes.find((g) => g.cle === cle)
+    if (groupe) groupe.modules.push(module)
+    else groupes.push({ cle, modules: [module] })
+  }
+
+  const periode = (cle) => {
+    const index = etapesCalendrier.findIndex((e) => e.libelle === cle)
+    if (index < 0) return null
+    const fin = (etapesCalendrier[index + 1]?.debut ?? (rythme.duree + 1)) - 1
+    return `J${etapesCalendrier[index].debut} à J${fin}`
+  }
+
+  return (
+    <div className="frise">
+      {jour !== null && jour < 0 && (
+        <p className="frise-aujourdhui">Ton parcours démarre dans {-jour} jour{jour < -1 ? 's' : ''}</p>
+      )}
+      {groupes.map((groupe) => {
+        const fini = groupe.modules.every((m) => m.fiches.every((f) => f.etat === 'Terminé'))
+        const enCours = groupe.modules.includes(moduleEnCours)
+        const statut = fini ? 'fini' : enCours || groupe.cle === etapeDuJour ? 'actif' : 'avenir'
+
+        return (
+          <section key={groupe.cle} className="frise-etape">
+            <div className="frise-etape-entete">
+              <span className={`frise-etape-statut frise-etape-statut-${statut}`}>
+                {statut === 'fini' ? <><CheckCircle2 size={13} aria-hidden="true" /> Terminé</> : statut === 'actif' ? 'En cours' : 'À venir'}
+              </span>
+              <h3 className="frise-etape-titre">{NOMS_ETAPES[groupe.cle] || groupe.cle}</h3>
+              {periode(groupe.cle) && <span className="frise-etape-periode">{periode(groupe.cle)}</span>}
+            </div>
+            {groupe.cle === etapeDuJour && <p className="frise-aujourdhui">Aujourd'hui · J{jour}</p>}
+            <ol className="frise-modules">
+              {groupe.modules.map((module) => (
+                <ModuleEtape key={module.label} module={module} enCours={module === moduleEnCours} jour={jour} onOpen={onOpen} />
+              ))}
+            </ol>
+          </section>
+        )
+      })}
+      {jour !== null && rythme && jour > rythme.duree && (
+        <p className="frise-aujourdhui">Aujourd'hui · J{jour} · tes {rythme.duree} jours sont bouclés</p>
+      )}
+    </div>
   )
 }
 
@@ -2879,14 +3166,15 @@ function KpiCard({ kpi, onSave }) {
   )
 }
 
-function KpiTable({ kpis, onSave, integre = false }) {
-  // Avec la saisie client, les cartes s'affichent meme vides : c'est
-  // justement la que le client renseigne ses premiers chiffres.
+function KpiTable({ kpis, onSave }) {
+  // Detail J0 a J90 et saisie, sous « Mes résultats ». Avec la saisie client,
+  // les cartes s'affichent meme vides : c'est justement la que le client
+  // renseigne ses premiers chiffres.
   if (!Array.isArray(kpis) || kpis.length === 0) return null
   if (!onSave && !kpiRenseignes(kpis)) return null
 
-  const contenu = (
-    <>
+  return (
+    <div className="resultats-detail">
       {onSave && (
         <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
           {kpiRenseignes(kpis)
@@ -2900,19 +3188,7 @@ function KpiTable({ kpis, onSave, integre = false }) {
           <KpiCard key={kpi.id} kpi={kpi} onSave={onSave} />
         ))}
       </div>
-    </>
-  )
-
-  if (integre) return <div className="resultats-detail">{contenu}</div>
-
-  return (
-    <section className="panel">
-      <h2 className="panel-title flex items-center gap-2" style={{ color: 'var(--text-pure)' }}>
-        <TrendingUp size={16} color="var(--gold)" />
-        Mes indicateurs (KPI)
-      </h2>
-      {contenu}
-    </section>
+    </div>
   )
 }
 
@@ -3095,10 +3371,10 @@ function MesResultats({ kpis, personnalisation, jour, onSave }) {
               <ChevronDown size={15} aria-hidden="true" className={detail ? 'resultats-chevron-ouvert' : undefined} />
             </button>
           </div>
-          {detail && <KpiTable kpis={liste} onSave={onSave} integre />}
+          {detail && <KpiTable kpis={liste} onSave={onSave} />}
         </>
       ) : (
-        <KpiTable kpis={liste} onSave={onSave} integre />
+        <KpiTable kpis={liste} onSave={onSave} />
       ))}
     </section>
   )
@@ -3757,10 +4033,8 @@ function Portail() {
       group.fiches.push(fiche)
     }
 
-    // Seul le module en cours (le premier non termine) est deplie a l'ouverture.
-    const moduleOuvertParDefaut = modules.find((m) => !m.fiches.every((f) => f.etat === 'Terminé'))?.label
-
-    const moduleEnCours = modules.find((m) => m.label === moduleOuvertParDefaut)
+    // Module en cours : le premier non termine (deplie dans Mon parcours).
+    const moduleEnCours = modules.find((m) => !m.fiches.every((f) => f.etat === 'Terminé'))
     const ficheAReprendre = moduleEnCours?.fiches.find((f) => f.etat !== 'Terminé' && !f.acces?.includes('Bloqué'))
     const fichesTerminees = dashboard.fiches.filter((f) => f.etat === 'Terminé')
 
@@ -3858,39 +4132,31 @@ function Portail() {
                 onSave={saveKpi}
               />
 
-              <SynthesesSection syntheses={dashboard.syntheses} />
+              <SyntheseCourte syntheses={dashboard.syntheses} />
+
+              <OuMettreTonEnergie
+                personnalisation={dashboard.personnalisation}
+                fiches={dashboard.fiches}
+                jalons={jalons}
+                regularite={dashboard.regularite}
+                onOpen={openFiche}
+                onVoirJalons={() => changerOnglet('parcours')}
+              />
 
               {/* Relue apres l'accueil guide, qui presente deja Idris. */}
               <PresentationIdris key={accueilFerme ? 'apres-accueil' : 'avant-accueil'} nom={dashboard.nom} />
 
-              <button type="button" className="idris-raccourci" onClick={() => changerOnglet('idris')}>
-                <IdrisAvatar taille={36} />
-                <span>
-                  <strong>Une question sur ta stratégie commerciale ?</strong>
-                  <span>Demande à Idris, prépare un message ou un rendez-vous.</span>
-                </span>
-                <ChevronRight size={16} aria-hidden="true" />
-              </button>
-
-              <Jalons jalons={jalons} regularite={dashboard.regularite} />
-
-              <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
+              <IdrisLigne etape={etapeDuCalendrier(dashboard.rythme)} onOuvrir={() => changerOnglet('idris')} />
+              <ProchaineSession sessions={dashboard.sessions} onVoir={() => changerOnglet('communaute')} />
             </>
           )}
 
           {onglet === 'parcours' && (
             <>
               <h2 className="accueil-section-titre">Mon parcours</h2>
-              <div className="modules-grille parcours-frise">
-                {modules.map((group) => (
-                  <ModuleCarte
-                    key={group.label}
-                    module={group}
-                    onOpen={openFiche}
-                    ouvertParDefaut={group.label === moduleOuvertParDefaut}
-                  />
-                ))}
-              </div>
+              <FriseParcours modules={modules} moduleEnCours={moduleEnCours} rythme={dashboard.rythme} onOpen={openFiche} />
+              <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
+              <Jalons jalons={jalons} regularite={dashboard.regularite} />
             </>
           )}
 
