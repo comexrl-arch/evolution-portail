@@ -10,7 +10,6 @@
    - Titres : Newsreader ; corps : Plus Jakarta Sans
    ========================================================================== */
 
-
 /* ==========================================================================
    1. TOKENS
    ========================================================================== */
@@ -139,7 +138,6 @@
     Consolas,
     monospace;
 
-
   /* ==========================================================================
      COMPATIBILITÉ V1
      ========================================================================== */
@@ -172,7 +170,6 @@
   --border-glass: var(--border-subtle);
   --border-glass-hover: var(--border-accent);
 }
-
 
 /* ==========================================================================
    2. GLOBAL
@@ -232,7 +229,6 @@ body {
   background: var(--brand-line-strong);
   border-radius: 999px;
 }
-
 
 /* ==========================================================================
    3. TYPOGRAPHIE
@@ -296,7 +292,6 @@ h3 {
 h1.gold-title {
   font-size: 1.75rem;
 }
-
 
 /* ==========================================================================
    4. CARTES
@@ -376,7 +371,6 @@ h1.gold-title {
   background: var(--brand-white);
 }
 
-
 /* ==========================================================================
    5. CARTES INTERACTIVES
    ========================================================================== */
@@ -408,7 +402,6 @@ h1.gold-title {
   cursor: not-allowed;
   opacity: 0.7;
 }
-
 
 /* ==========================================================================
    6. CHAMPS DE SAISIE
@@ -472,7 +465,6 @@ select.field-input option {
   background: var(--brand-white);
   color: var(--text-primary);
 }
-
 
 /* ==========================================================================
    7. BOUTONS
@@ -561,7 +553,6 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   color: var(--brand-gold) !important;
 }
 
-
 /* ==========================================================================
    8. LOGO
    ========================================================================== */
@@ -593,7 +584,6 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
 
   height: auto;
 }
-
 
 /* ==========================================================================
    9. JAUGES
@@ -711,7 +701,6 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
 
   margin-top: 0.3rem;
 }
-
 
 /* ==========================================================================
    10. KPI
@@ -854,7 +843,6 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
 
   margin-top: 0.1rem;
 }
-
 
 .kpi-graphique {
   margin-top: 0.75rem;
@@ -1016,7 +1004,6 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   color: #A1442F;
 }
 
-
 /* ==========================================================================
    11. LISTES / CHECKLIST
    ========================================================================== */
@@ -1082,7 +1069,6 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   accent-color: var(--brand-gold);
 }
 
-
 /* ==========================================================================
    12. BADGES
    ========================================================================== */
@@ -1133,7 +1119,6 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   background: var(--accent-soft);
   border-color: rgba(142, 108, 56, 0.22);
 }
-
 
 /* ==========================================================================
    13. ACCORDÉONS — PARCOURS
@@ -1306,7 +1291,6 @@ button.card-glass > span:last-child {
   white-space: nowrap;
 }
 
-
 /* ==========================================================================
    14. BARRE DE MODULES
    ========================================================================== */
@@ -1348,7 +1332,6 @@ button.card-glass > span:last-child {
 
   flex-shrink: 0;
 }
-
 
 /* ==========================================================================
    15. TABLEAUX
@@ -1421,7 +1404,6 @@ table tbody tr:hover,
   background: rgba(142, 108, 56, 0.05);
 }
 
-
 /* ==========================================================================
    16. LIENS / ICÔNES
    ========================================================================== */
@@ -1445,7 +1427,6 @@ svg {
   flex-shrink: 0;
 }
 
-
 /* ==========================================================================
    17. PAGE LOGIN
    ========================================================================== */
@@ -1458,7 +1439,6 @@ svg {
 .max-w-sm.card-glass {
   box-shadow: var(--shadow-lg);
 }
-
 
 /* ==========================================================================
    18. ÉTATS / FOCUS
@@ -1485,7 +1465,6 @@ summary:focus-visible {
 .field-input:focus-visible {
   outline: none;
 }
-
 
 /* ==========================================================================
    19. ANIMATION D'ENTRÉE
@@ -1515,7 +1494,6 @@ summary:focus-visible {
   animation:
     card-entry 420ms var(--ease-standard) both;
 }
-
 
 /* ==========================================================================
    20. CONTENU DES FICHES
@@ -1574,7 +1552,6 @@ summary:focus-visible {
   font-weight:
     700;
 }
-
 
 /* ==========================================================================
    20b. TABLEAU DE BORD ALLÉGÉ
@@ -1804,7 +1781,6 @@ summary:focus-visible {
   min-width: 0;
 }
 
-
 /* ==========================================================================
    21. MOBILE
    ========================================================================== */
@@ -1880,7 +1856,6 @@ summary:focus-visible {
   }
 }
 
-
 /* ==========================================================================
    22. RÉDUCTION DES ANIMATIONS
    ========================================================================== */
@@ -1904,7 +1879,6 @@ summary:focus-visible {
       auto !important;
   }
 }
-
 
 /* ==========================================================================
    SYNTHÈSE MENSUELLE (parcours Autonome)
@@ -2541,119 +2515,6 @@ body[data-ecran="dashboard"] .portal-monogramme {
   color: var(--text-secondary);
 }
 
-.modules-grille {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  align-items: start;
-  gap: 1rem;
-  margin-bottom: 2.25rem;
-}
-
-.module-carte {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: var(--brand-white);
-  border: var(--border-subtle);
-  box-shadow: var(--shadow-sm);
-}
-
-.module-carte-image {
-  display: block;
-  width: 100%;
-  aspect-ratio: 900 / 460;
-  object-fit: cover;
-  object-position: center;
-  border-bottom: var(--border-subtle);
-  background: #FBFAF6;
-}
-
-.module-carte-corps {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.9rem 1rem 1rem;
-}
-
-.module-carte-entete {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.module-carte-surtitre {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.module-carte-statut {
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 600;
-}
-
-.module-carte-statut-fini { background: var(--success-soft); color: var(--success); }
-.module-carte-statut-actif { background: var(--accent-soft); color: var(--accent); }
-.module-carte-statut-avenir { background: var(--surface-3); color: var(--text-tertiary); }
-
-.module-carte-titre {
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--text-primary);
-}
-
-.module-carte-progression {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.72rem;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.module-carte-barre {
-  flex: 1;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--brand-line);
-  overflow: hidden;
-}
-
-.module-carte-barre span {
-  display: block;
-  height: 100%;
-  background: var(--brand-gold);
-}
-
-.module-carte-bascule {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 0.5rem;
-  padding: 0.5rem 0;
-  border-top: var(--border-subtle);
-  background: none;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--accent, #8a6d3b);
-  cursor: pointer;
-}
-
-.module-carte-bascule:hover { text-decoration: underline; }
-
-.module-carte-bascule-icone { transition: transform 0.2s ease; }
-.module-carte-bascule-icone-ouverte { transform: rotate(180deg); }
-
 .module-carte-fiches {
   display: flex;
   flex-direction: column;
@@ -2989,94 +2850,6 @@ body[data-ecran="dashboard"] .portal-monogramme {
   text-decoration: underline;
 }
 
-/* Cartes de modules : image moins haute, vrai bouton d'accordéon */
-.espace .module-carte-image {
-  aspect-ratio: 900 / 340;
-}
-
-.espace .module-carte-statut-actif {
-  background: var(--brand-gold);
-  color: #FFFFFF;
-}
-
-.espace .module-carte-bascule {
-  justify-content: center;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
-  padding: 0.5rem 0.9rem;
-  border: var(--border-accent);
-  border-radius: 999px;
-  background: var(--accent-soft);
-}
-
-.espace .module-carte-bascule:hover {
-  text-decoration: none;
-  background: rgba(142, 108, 56, 0.14);
-}
-
-.espace .module-carte-bascule + .module-carte-fiches {
-  margin-top: 0.75rem;
-}
-
-/* Frise : axe vertical entre les deux colonnes, un point par module */
-.parcours-frise {
-  position: relative;
-  column-gap: 2.5rem;
-  row-gap: 1.5rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.parcours-frise::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  transform: translateX(-50%);
-  background: linear-gradient(var(--brand-gold-metal), rgba(201, 162, 101, 0.15));
-}
-
-.parcours-frise > .module-carte {
-  position: relative;
-  overflow: visible;
-}
-
-.parcours-frise > .module-carte > .module-carte-image {
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
-}
-
-.parcours-frise > .module-carte::after {
-  content: "";
-  position: absolute;
-  top: 1.5rem;
-  width: 14px;
-  height: 14px;
-  border: 3px solid var(--surface-0);
-  border-radius: 50%;
-  background: var(--brand-gold-metal);
-  box-shadow: 0 0 0 1px var(--brand-gold-metal);
-}
-
-.parcours-frise > .module-carte:nth-child(odd)::after {
-  right: calc(-1.25rem - 7px);
-}
-
-.parcours-frise > .module-carte:nth-child(even)::after {
-  top: 3.25rem;
-  left: calc(-1.25rem - 7px);
-}
-
-.parcours-frise > .module-carte-fini::after {
-  background: var(--success);
-  box-shadow: 0 0 0 1px var(--success);
-}
-
-.parcours-frise > .module-carte-avenir::after {
-  background: #D9D4C7;
-  box-shadow: 0 0 0 1px #D9D4C7;
-}
-
 .ressources-liste {
   border-top: none;
 }
@@ -3130,10 +2903,6 @@ body[data-ecran="dashboard"] .portal-monogramme {
     grid-row: 1;
   }
 
-  .parcours-frise > .module-carte:nth-child(even)::after {
-    top: 1.5rem;
-  }
-
   .prochaine-etape {
     grid-template-columns: 1fr;
   }
@@ -3143,22 +2912,6 @@ body[data-ecran="dashboard"] .portal-monogramme {
     aspect-ratio: 900 / 340;
     border-right: none;
     border-bottom: var(--border-subtle);
-  }
-
-  .parcours-frise {
-    grid-template-columns: 1fr;
-    padding-left: 1.5rem;
-  }
-
-  .parcours-frise::before {
-    left: 0.4rem;
-    transform: none;
-  }
-
-  .parcours-frise > .module-carte:nth-child(odd)::after,
-  .parcours-frise > .module-carte:nth-child(even)::after {
-    left: calc(-1.5rem + 0.4rem - 6px);
-    right: auto;
   }
 }
 
@@ -3552,7 +3305,6 @@ body[data-ecran="dashboard"] .portal-monogramme {
   list-style: disc;
 }
 
-
 /* ---------- Idris : l'IA se distingue de la formation (25/10/2026) ----------
    Formation = papier clair ; Idris = bulle encre signee, avatar dore. */
 :root {
@@ -3789,7 +3541,6 @@ body[data-ecran="dashboard"] .portal-monogramme {
   color: var(--text-tertiary);
 }
 
-
 /* ---------- Espace Idris (lot 2) ---------- */
 .idris-espace {
   display: grid;
@@ -3963,37 +3714,6 @@ ul.idris-rdv-liste {
   background: var(--surface-3);
 }
 
-.idris-raccourci {
-  display: flex;
-  align-items: center;
-  gap: 0.8rem;
-  width: 100%;
-  margin: 0 0 1.25rem;
-  padding: 0.8rem 1rem;
-  border: 1px solid var(--brand-gold-metal);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  text-align: left;
-  cursor: pointer;
-}
-
-.idris-raccourci > span:not(.idris-avatar) {
-  flex: 1;
-  display: grid;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.idris-raccourci strong {
-  color: var(--text-primary);
-  font-size: 0.95rem;
-}
-
-.idris-raccourci > span > span {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-}
-
 @media (max-width: 520px) {
   .idris-espace-bloc {
     padding: 0.9rem;
@@ -4008,7 +3728,6 @@ ul.idris-rdv-liste {
     margin-left: 0;
   }
 }
-
 
 /* ---------- Lot 3 : jalons, bilan J90, attestation, installation ---------- */
 .jalons-fete {
@@ -4573,7 +4292,6 @@ ul.idris-rdv-liste {
   }
 }
 
-
 /* ==========================================================================
    AFFICHAGE DU 26/10/2026 : bandeau « Ton cap 90 jours » et « Mes résultats »
    Ordre du tableau de bord : où j'en suis, quoi faire, est-ce que ça marche.
@@ -5089,5 +4807,615 @@ ul.idris-rdv-liste {
 
   .resultats-bouton {
     justify-content: center;
+  }
+}
+
+/* ===== AFFICHAGE DU 26/10/2026, LOTS C ET D ===== */
+
+/* Mon parcours : une colonne par étape, repère « Aujourd'hui » */
+.frise {
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+  margin-bottom: 2rem;
+}
+
+.frise-etape-entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  margin-bottom: 0.7rem;
+}
+
+.frise-etape-statut {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.frise-etape-statut-fini { background: var(--success-soft); color: var(--success); }
+.frise-etape-statut-actif { background: rgba(201, 162, 101, 0.16); color: var(--brand-gold); }
+.frise-etape-statut-avenir { background: var(--surface-3); color: var(--text-tertiary); }
+
+.frise-etape-titre {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.frise-etape-periode {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.frise-aujourdhui {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.1rem 0 0.8rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-gold);
+}
+
+.frise-aujourdhui::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, var(--brand-gold-metal) 0 6px, transparent 6px 10px);
+}
+
+.frise-modules {
+  --frise-retrait: 2.1rem;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-left: var(--frise-retrait);
+}
+
+.frise-modules::before {
+  content: "";
+  position: absolute;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  left: 0.7rem;
+  width: 2px;
+  background: var(--brand-line-strong);
+}
+
+.etape-module {
+  position: relative;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+/* Point sur l'axe, centré sur la ligne de 2 px */
+.etape-module::before {
+  content: "";
+  position: absolute;
+  top: 1.45rem;
+  left: calc(0.7rem + 1px - var(--frise-retrait) - 7px);
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--brand-line-strong);
+  border-radius: 50%;
+  background: var(--surface-2);
+}
+
+.etape-module-fini::before {
+  border-color: var(--success);
+  background: var(--success);
+}
+
+.etape-module-actif {
+  border: 1.5px solid var(--brand-gold-metal);
+  box-shadow: 0 8px 24px rgba(142, 108, 56, 0.1);
+}
+
+.etape-module-actif::before {
+  left: calc(0.7rem + 1px - var(--frise-retrait) - 9px);
+  width: 18px;
+  height: 18px;
+  border-color: var(--brand-gold);
+  background: var(--brand-gold-champagne);
+}
+
+.etape-module-avenir {
+  border-style: dashed;
+  background: transparent;
+}
+
+.etape-module-entete {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border-radius: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.etape-module-image {
+  width: 64px;
+  height: 46px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.etape-module-fini .etape-module-image,
+.etape-module-avenir .etape-module-image {
+  filter: grayscale(0.6);
+  opacity: 0.75;
+}
+
+.etape-module-actif .etape-module-entete {
+  grid-template-columns: 150px minmax(0, 1fr) auto auto;
+}
+
+.etape-module-actif .etape-module-image {
+  width: 150px;
+  height: 104px;
+  border-radius: 10px;
+}
+
+.etape-module-texte {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.etape-module-titre {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.etape-module-actif .etape-module-titre {
+  font-size: 1.05rem;
+}
+
+.etape-module-detail {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.etape-module-etat {
+  display: grid;
+  justify-items: end;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.etape-module-etat small {
+  font-size: 0.72rem;
+}
+
+.etape-module-actif .etape-module-etat {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.etape-module-barre {
+  display: block;
+  width: 110px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--brand-line);
+}
+
+.etape-module-barre span {
+  display: block;
+  height: 100%;
+  background: var(--brand-gold);
+}
+
+.etape-module-chevron {
+  color: var(--text-tertiary);
+  transition: transform 0.2s ease;
+}
+
+.etape-module-chevron-ouvert {
+  transform: rotate(180deg);
+}
+
+.etape-module .module-carte-fiches {
+  margin: 0 0.9rem;
+  padding: 0.2rem 0 0.45rem;
+}
+
+.module-fiche-ouverture {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+
+/* Synthèse du mois en version courte (Autonome) */
+.synthese-courte {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1rem 1.75rem;
+  margin-bottom: 1.75rem;
+  padding: 1.2rem 1.5rem;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--brand-ink) 0%, var(--brand-ink-2) 100%);
+  color: #EDE8DD;
+}
+
+.synthese-courte-taux {
+  margin-top: 0.3rem;
+  font-family: var(--font-serif);
+  font-size: 2.2rem;
+  line-height: 1.1;
+  color: var(--brand-gold-champagne);
+}
+
+.synthese-courte-legende {
+  font-size: 0.75rem;
+  color: #B9B3A6;
+}
+
+.synthese-courte-intro {
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.synthese-courte-sous-titre {
+  margin-top: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--brand-gold-champagne);
+}
+
+.synthese-courte-actions {
+  margin: 0.35rem 0 0 1.1rem;
+  list-style: decimal;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.synthese-courte-actions li {
+  margin-bottom: 0.2rem;
+}
+
+.synthese-courte-lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.75rem;
+  background: none;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--brand-gold-champagne);
+  cursor: pointer;
+}
+
+.synthese-courte-lien:hover {
+  text-decoration: underline;
+}
+
+/* Où mettre ton énergie : priorités, régularité et jalons */
+.energie {
+  margin-bottom: 1.5rem;
+}
+
+.energie .resultats-titre {
+  margin-bottom: 0.75rem;
+}
+
+.energie-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 0.85rem;
+}
+
+.energie-carte {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 1rem 1.1rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.energie-surtitre {
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.priorite {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.7rem 0;
+  border-top: var(--border-subtle);
+}
+
+.priorite:first-child {
+  padding-top: 0.3rem;
+  border-top: none;
+}
+
+.priorite:last-child {
+  padding-bottom: 0;
+}
+
+.priorite-score {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--danger-soft);
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--danger);
+}
+
+.priorite-score-moyen {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.priorite-zone {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.priorite-constat {
+  margin-top: 0.1rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.priorite-fiches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.priorite-fiche {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  border: var(--border-accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.priorite-fiche:hover:not(:disabled) {
+  background: rgba(142, 108, 56, 0.14);
+}
+
+.priorite-fiche:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.priorite-fiche-faite {
+  border-color: rgba(47, 107, 79, 0.25);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.energie .jalons-fete {
+  margin-bottom: 0.85rem;
+}
+
+.regularite-serie {
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.regularite-conseil {
+  margin: 0.2rem 0 0.9rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.jalons-resume {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 0.8rem;
+  border-top: var(--border-subtle);
+  background: none;
+  text-align: left;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.jalons-resume:hover strong {
+  text-decoration: underline;
+}
+
+.jalons-medailles {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.jalons-medailles span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: -6px;
+  border: 2px solid var(--surface-2);
+  border-radius: 50%;
+  background: var(--brand-gold-champagne);
+  color: var(--brand-ink);
+}
+
+.jalons-medailles span:first-child {
+  margin-left: 0;
+}
+
+.jalons-resume-texte {
+  flex: 1;
+  min-width: 0;
+}
+
+.jalons-resume-texte strong {
+  color: var(--text-primary);
+}
+
+/* Idris en une ligne, prochain point collectif */
+.idris-ligne,
+.session-ligne {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  padding: 0.65rem 0.9rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.idris-ligne:hover,
+.session-ligne:hover {
+  border-color: var(--brand-gold-metal);
+}
+
+.idris-ligne {
+  margin-bottom: 0.6rem;
+}
+
+.session-ligne {
+  margin-bottom: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.idris-ligne-texte,
+.session-ligne-texte {
+  flex: 1;
+  min-width: 0;
+}
+
+.idris-ligne-texte {
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.idris-ligne-texte strong,
+.session-ligne-texte strong {
+  color: var(--text-primary);
+}
+
+.idris-ligne-action {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.session-ligne > svg:first-child {
+  flex-shrink: 0;
+  color: var(--brand-gold);
+}
+
+@media (max-width: 640px) {
+  .frise-modules {
+    --frise-retrait: 1.7rem;
+  }
+
+  .frise-modules::before {
+    left: 0.45rem;
+  }
+
+  .etape-module::before {
+    left: calc(0.45rem + 1px - var(--frise-retrait) - 7px);
+  }
+
+  .etape-module-actif::before {
+    left: calc(0.45rem + 1px - var(--frise-retrait) - 9px);
+  }
+
+  .etape-module-entete,
+  .etape-module-actif .etape-module-entete {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.6rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .etape-module-image {
+    display: none;
+  }
+
+  /* Le module en cours garde sa grande illustration, en bandeau. */
+  .etape-module-actif .etape-module-image {
+    display: block;
+    grid-column: 1 / -1;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 900 / 340;
+  }
+
+  .etape-module-barre {
+    width: 70px;
+  }
+
+  .etape-module .module-carte-fiches {
+    margin: 0 0.75rem;
+  }
+
+  .synthese-courte {
+    grid-template-columns: 1fr;
+    padding: 1rem 1.1rem;
+  }
+
+  .idris-ligne {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 0.3rem;
+  }
+
+  .idris-ligne-action {
+    grid-column: 2;
   }
 }
