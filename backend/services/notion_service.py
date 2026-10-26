@@ -760,6 +760,50 @@ def _apply_acces(
         previous_terminee = etat == "Terminé"
 
 
+# Rythme du parcours (affichage du 26/10/2026) : nourrit le bandeau « Ton cap
+# 90 jours » du tableau de bord. Une fiche est en retard 7 jours apres son
+# jour d'ouverture si elle n'est pas terminee. Ne comptent pas : les fiches de
+# suivi (permanentes), la fiche 8 validee par le coach et tout ce qui attend
+# cette validation, puisque le client n'y peut rien.
+_DELAI_FICHE = 7
+_ETAPES_90J = [("Démarrage", 0), ("Clarifier", 4), ("Prospecter", 31), ("Convertir", 61), ("Stabiliser", 75)]
+_ETAPES_ATELIER = [("Session 1", 0), ("Session 2", 7), ("Session 3", 14), ("Session 4", 21)]
+
+
+def _rythme_parcours(fiches: list[dict], date_demarrage, atelier: bool = False, verrou_coach: bool = True) -> dict | None:
+    jour = _jour_parcours(date_demarrage)
+
+    if jour is None:
+        return None
+
+    jours = _ATELIER_JOUR if atelier else _FICHE_JOUR
+    permanentes = _ATELIER_PERMANENTES if atelier else _FICHES_PERMANENTES
+    jour_fiche8 = max(jours.get(master_id, 0) for master_id in _FICHES_DEBLOCAGE_COACH)
+    attente_coach = verrou_coach and any(
+        f.get("master_id") in _FICHES_DEBLOCAGE_COACH and f.get("etat") != "Terminé" for f in fiches
+    )
+    en_retard = 0
+
+    for fiche in fiches:
+        master_id = fiche.get("master_id")
+
+        if master_id not in jours or master_id in permanentes or fiche.get("etat") == "Terminé":
+            continue
+        if verrou_coach and master_id in _FICHES_DEBLOCAGE_COACH:
+            continue
+        if attente_coach and jours[master_id] > jour_fiche8:
+            continue
+        if jours[master_id] <= jour - _DELAI_FICHE:
+            en_retard += 1
+
+    return {
+        "jour": jour,
+        "duree": 28 if atelier else 90,
+        "etapes": [{"libelle": libelle, "debut": debut} for libelle, debut in (_ETAPES_ATELIER if atelier else _ETAPES_90J)],
+        "en_retard": en_retard,
+    }
+
+
 def _client_identite(props: dict) -> dict:
     return {
         "nom": _prop_value(_prop(props, "Nom")),
@@ -1085,8 +1129,9 @@ def _build_client_dashboard(client_page_id: str) -> dict:
 
     date_demarrage = _prop_value(_prop(props, "Date de demarrage")) or _prop_value(_prop(props, "Date de démarrage"))
     autonome = _est_parcours_autonome(_prop_value(_prop(props, "Parcours")))
+    atelier = _est_parcours_atelier(_prop_value(_prop(props, "Parcours")))
 
-    if _est_parcours_atelier(_prop_value(_prop(props, "Parcours"))):
+    if atelier:
         # Atelier : seules les fiches du parcours court sont visibles.
         fiches = [f for f in fiches if f.get("master_id") in _ATELIER_JOUR]
 
@@ -1126,6 +1171,7 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "syntheses": syntheses_du_client(client_page_id, fiches) if autonome else [],
         "personnalisation": _personnaliser_parcours(fiches),
         "regularite": _regularite_bilans(fiches),
+        "rythme": _rythme_parcours(fiches, date_demarrage, atelier=atelier, verrou_coach=not autonome),
         "lien_groupe": _lien_groupe(cohorte),
     }
 

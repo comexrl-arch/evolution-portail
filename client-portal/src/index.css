@@ -4572,3 +4572,522 @@ ul.idris-rdv-liste {
     font-size: 1.6rem;
   }
 }
+
+
+/* ==========================================================================
+   AFFICHAGE DU 26/10/2026 : bandeau « Ton cap 90 jours » et « Mes résultats »
+   Ordre du tableau de bord : où j'en suis, quoi faire, est-ce que ça marche.
+   Couleurs de statut identiques partout : vert atteint, ambre presque,
+   terracotta à pousser. L'or reste réservé aux actions.
+   ========================================================================== */
+
+.cap {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 1.75rem;
+  margin-bottom: 1.25rem;
+  padding: 1.5rem 1.75rem 1.4rem;
+  border: 1px solid rgba(201, 162, 101, 0.35);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--brand-ink) 0%, var(--brand-ink-2) 100%);
+  color: #F3EFE6;
+}
+
+.cap-surtitre {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-gold-champagne);
+}
+
+.cap-jour {
+  margin: 0.45rem 0 0.2rem;
+  font-family: var(--font-serif);
+  font-size: 2.75rem;
+  font-weight: 600;
+  line-height: 1;
+  color: #FFFFFF;
+}
+
+.cap-jour small {
+  margin-left: 0.35rem;
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: #B9B3A6;
+}
+
+.cap-statut {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin-top: 0.7rem;
+  font-size: 0.88rem;
+  color: #E6E1D6;
+}
+
+.cap-statut-puce {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.cap-statut-puce::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.cap-statut-ok {
+  background: rgba(110, 190, 150, 0.16);
+  color: #9ED8B8;
+}
+
+.cap-statut-retard {
+  background: rgba(232, 193, 127, 0.18);
+  color: var(--brand-gold-champagne);
+}
+
+.cap-frise {
+  margin-top: 1.1rem;
+}
+
+.cap-frise-barre {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cap-frise-fait {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-gold), var(--brand-gold-champagne));
+}
+
+.cap-frise-repere {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.cap-frise-moi {
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--brand-ink);
+  border-radius: 50%;
+  background: var(--brand-gold-champagne);
+  box-shadow: 0 0 0 2px var(--brand-gold-champagne);
+  transform: translate(-50%, -50%);
+}
+
+.cap-frise-etapes {
+  display: flex;
+  margin-top: 0.6rem;
+  font-size: 0.7rem;
+  color: #A9A396;
+}
+
+.cap-frise-etapes span {
+  overflow: hidden;
+  padding-left: 0.35rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cap-frise-etapes .cap-frise-etape-actuelle {
+  font-weight: 700;
+  color: var(--brand-gold-champagne);
+}
+
+.cap-objectif {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-left: 1.6rem;
+  border-left: 1px solid rgba(201, 162, 101, 0.3);
+}
+
+.cap-objectif-texte {
+  margin-top: 0.5rem;
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  line-height: 1.3;
+  color: #FFFFFF;
+}
+
+.cap-objectif-vide {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: #B9B3A6;
+}
+
+.cap-chiffres {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 0.6rem;
+}
+
+.cap-chiffres div {
+  padding: 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cap-chiffres strong {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  color: #FFFFFF;
+}
+
+.cap-chiffres span {
+  font-size: 0.72rem;
+  color: #B9B3A6;
+}
+
+/* Prochaine action : mise en avant juste sous le bandeau */
+.espace .prochaine-etape {
+  border-width: 1.5px;
+  background: linear-gradient(90deg, rgba(232, 193, 127, 0.1), var(--surface-2) 45%);
+}
+
+/* Mes résultats */
+.resultats {
+  margin-bottom: 1.75rem;
+}
+
+.resultats-entete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.resultats-titre {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.resultats-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.85rem;
+}
+
+.resultat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 1rem 1rem 0.9rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.resultat-nom {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.resultat-valeur {
+  font-family: var(--font-serif);
+  font-size: 2.1rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.resultat-valeur small {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.resultat-vide {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+.resultat-gain,
+.resultat-cible,
+.resultat-verdict {
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.resultat-gain-plus {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.resultat-gain-moins {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.resultat-courbe {
+  width: 100%;
+  height: auto;
+  max-height: 44px;
+}
+
+.resultat-courbe-realise {
+  fill: none;
+  stroke: var(--brand-gold);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.resultat-courbe-objectif {
+  stroke: var(--brand-gold-metal);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 4;
+}
+
+.resultat-courbe-cible {
+  fill: var(--surface-2);
+  stroke: var(--brand-gold-metal);
+  stroke-width: 1.5;
+}
+
+.resultat-courbe-point {
+  fill: var(--brand-gold);
+}
+
+.resultat-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  min-height: 1.4rem;
+}
+
+.verdict {
+  display: inline-flex;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.verdict-ok {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.verdict-presque {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.verdict-retard {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.verdict-vide {
+  background: var(--surface-3);
+  color: var(--text-tertiary);
+}
+
+.resultat-jauge {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #EFECE5;
+}
+
+.resultat-jauge span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand-gold);
+}
+
+.resultat-cible {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.resultat-score {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.75rem 1.4rem;
+  margin-top: 0.85rem;
+  padding: 0.9rem 1.25rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.resultat-score-total {
+  font-family: var(--font-serif);
+  font-size: 1.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.resultat-score-total small {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.resultat-zones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.resultat-zones li {
+  padding: 0.25rem 0.6rem;
+  border: var(--border-subtle);
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.resultat-zones strong {
+  color: var(--text-primary);
+}
+
+.resultat-zones em {
+  margin-left: 0.25rem;
+  font-style: normal;
+}
+
+.resultat-score .verdict {
+  justify-self: start;
+}
+
+.resultat-score-note {
+  grid-column: 1 / -1;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.resultats-maj {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+.resultats-bouton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.95rem;
+  border: 1.5px solid var(--brand-gold-metal);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.resultats-bouton:hover {
+  background: var(--accent-soft);
+}
+
+.resultats-chevron-ouvert {
+  transform: rotate(180deg);
+}
+
+.resultats-detail {
+  margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .cap {
+    grid-template-columns: 1fr;
+    gap: 1.1rem;
+    padding: 1.2rem;
+  }
+
+  .cap-jour {
+    font-size: 2.3rem;
+  }
+
+  .cap-objectif {
+    padding: 1rem 0 0;
+    border-top: 1px solid rgba(201, 162, 101, 0.3);
+    border-left: none;
+  }
+
+  .cap-objectif-texte {
+    font-size: 1.1rem;
+  }
+
+  .resultat-score {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Sur telephone, la prochaine action doit tenir dans le premier ecran. */
+  .espace .prochaine-etape-image {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .cap-frise-etapes {
+    font-size: 0.58rem;
+    letter-spacing: -0.01em;
+  }
+
+  .cap-frise-etapes span {
+    padding-left: 0.2rem;
+  }
+
+  .resultats-grille {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+  }
+
+  .resultat {
+    padding: 0.8rem;
+  }
+
+  .resultat-valeur {
+    font-size: 1.7rem;
+  }
+
+  .resultats-maj {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .resultats-bouton {
+    justify-content: center;
+  }
+}

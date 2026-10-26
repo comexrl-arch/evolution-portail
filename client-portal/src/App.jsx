@@ -917,6 +917,82 @@ function Jauge({ pct, titre, detail }) {
   )
 }
 
+// Bandeau « Ton cap 90 jours » (affichage du 26/10/2026) : ou en est le
+// client dans le temps, s'il suit le rythme, et son objectif. Le rythme
+// (jour, etapes de la frise, fiches en retard) vient du serveur, voir
+// notion_service._rythme_parcours.
+function CapParcours({ rythme, objectif, fichesFaites, fichesTotal, regularite }) {
+  const jour = rythme ? rythme.jour : null
+  const duree = rythme?.duree || 90
+  const etapes = rythme?.etapes || []
+  const enCours = jour !== null && jour >= 0 && jour <= duree
+  const position = jour === null ? 0 : Math.max(0, Math.min(jour / duree, 1))
+  const etapeActuelle = jour === null || jour < 0 ? null : [...etapes].reverse().find((e) => jour >= e.debut)
+  const retard = rythme?.en_retard || 0
+  const fini = fichesTotal > 0 && fichesFaites === fichesTotal
+
+  const statut = fini
+    ? { classe: 'cap-statut-ok', texte: 'Parcours terminé' }
+    : retard > 0
+      ? { classe: 'cap-statut-retard', texte: `${retard} fiche${retard > 1 ? 's' : ''} en retard` }
+      : rythme ? { classe: 'cap-statut-ok', texte: 'Dans les temps' } : null
+
+  return (
+    <section className="cap">
+      <div className="cap-temps">
+        <p className="cap-surtitre">{duree === 90 ? 'Ton cap 90 jours' : 'Ton atelier'}</p>
+        {jour === null ? (
+          <p className="cap-jour">{fichesFaites}<small> / {fichesTotal} fiches</small></p>
+        ) : jour < 0 ? (
+          <p className="cap-jour">Bientôt<small> ta session 1 dans {-jour} jour{jour < -1 ? 's' : ''}</small></p>
+        ) : (
+          <p className="cap-jour">Jour {jour}<small>{jour > duree ? ` · parcours de ${duree} jours bouclé` : ` sur ${duree}`}</small></p>
+        )}
+        <p className="cap-statut">
+          {statut && <span className={`cap-statut-puce ${statut.classe}`}>{statut.texte}</span>}
+          <span>{fichesFaites} fiche{fichesFaites > 1 ? 's' : ''} terminée{fichesFaites > 1 ? 's' : ''} sur {fichesTotal}</span>
+        </p>
+        {rythme && etapes.length > 0 && (
+          <div className="cap-frise" role="img" aria-label={jour >= 0 ? `Jour ${jour} sur ${duree}, étape ${etapeActuelle?.libelle || ''}` : 'Parcours pas encore commencé'}>
+            <div className="cap-frise-barre">
+              <span className="cap-frise-fait" style={{ width: `${position * 100}%` }} />
+              {etapes.slice(1).map((e) => (
+                <span key={e.libelle} className="cap-frise-repere" style={{ left: `${(e.debut / duree) * 100}%` }} />
+              ))}
+              {jour >= 0 && <span className="cap-frise-moi" style={{ left: `${position * 100}%` }} />}
+            </div>
+            <div className="cap-frise-etapes" aria-hidden="true">
+              {etapes.map((e, i) => {
+                const largeur = (((etapes[i + 1]?.debut ?? duree) - e.debut) / duree) * 100
+                return (
+                  <span key={e.libelle} title={e.libelle} style={{ width: `${largeur}%` }} className={e === etapeActuelle ? 'cap-frise-etape-actuelle' : undefined}>
+                    {largeur >= 10 ? e.libelle : ''}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="cap-objectif">
+        <div>
+          <p className="cap-surtitre">Ton objectif</p>
+          {objectif ? (
+            <p className="cap-objectif-texte">« {objectif} »</p>
+          ) : (
+            <p className="cap-objectif-vide">Ton objectif n'est pas encore écrit. C'est la phrase qui donne du sens à tout le reste.</p>
+          )}
+        </div>
+        <div className="cap-chiffres">
+          <div><strong>{fichesFaites}/{fichesTotal}</strong><span>fiches terminées</span></div>
+          {enCours && <div><strong>{duree - jour}</strong><span>jour{duree - jour > 1 ? 's' : ''} restant{duree - jour > 1 ? 's' : ''}</span></div>}
+          {regularite && <div><strong>{regularite.serie}</strong><span>semaine{regularite.serie > 1 ? 's' : ''} de bilan d'affilée</span></div>}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function ProchaineEtape({ module, fiche, onOpen, onParcours }) {
   if (!module) {
     return (
@@ -930,18 +1006,29 @@ function ProchaineEtape({ module, fiche, onOpen, onParcours }) {
   }
 
   const { surtitre, titre } = lireModule(module.label)
+  const { numero, titre: titreFiche } = fiche ? lireFiche(fiche.nom) : {}
+  const prioritaire = fiche?.priorite?.type === 'prioritaire'
+  const verbe = fiche?.etat === 'En cours' ? 'Reprendre' : 'Commencer'
+  // Pas de fiche ouverte : la suite attend son jour d'ouverture ou la fiche precedente.
+  const ouverture = fiche ? null : module.fiches.find((f) => f.etat !== 'Terminé')?.acces?.match(/ouvre à (J\d+)/)?.[1]
 
   return (
     <section className="prochaine-etape">
       <img src={illustrationDuModule(module.label)} alt="" className="prochaine-etape-image" />
       <div className="prochaine-etape-corps">
-        <p className="prochaine-etape-surtitre">Prochaine étape · {surtitre}</p>
-        <h3 className="prochaine-etape-titre">{titre}</h3>
-        {fiche && <p className="prochaine-etape-fiche">{lireFiche(fiche.nom).titre}</p>}
+        <p className="prochaine-etape-surtitre">Ta prochaine action{prioritaire ? ' · prioritaire' : ''}</p>
+        <h3 className="prochaine-etape-titre">
+          {fiche ? `${verbe} la fiche ${numero ? `${numero} : ` : ''}${titreFiche}` : titre}
+        </h3>
+        <p className="prochaine-etape-fiche">
+          {surtitre} · {titre}.
+          {prioritaire && ` C'est une fiche prioritaire pour ta zone ${fiche.priorite.zone}.`}
+          {!fiche && (ouverture ? ` La prochaine fiche s'ouvre à ${ouverture}.` : ' La suite s\'ouvre dès que la fiche précédente est validée.')}
+        </p>
         <div className="prochaine-etape-actions">
           {fiche && (
             <button type="button" className="fiche-bouton" onClick={() => onOpen(fiche.id)}>
-              Reprendre <ChevronRight size={15} aria-hidden="true" />
+              {verbe} la fiche <ChevronRight size={15} aria-hidden="true" />
             </button>
           )}
           <button type="button" className="prochaine-etape-lien" onClick={onParcours}>
@@ -2625,7 +2712,9 @@ function nombreOuNull(valeur) {
 }
 
 function formaterKpi(nombre) {
-  return nombre.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
+  // Espace insecable classique : l'espace fine du format francais disparait
+  // presque en petit corps ("3000 €" au lieu de "3 000 €").
+  return nombre.toLocaleString('fr-FR', { maximumFractionDigits: 1 }).replace(/\u202f/g, '\u00a0')
 }
 
 function KpiGraphique({ kpi }) {
@@ -2790,18 +2879,14 @@ function KpiCard({ kpi, onSave }) {
   )
 }
 
-function KpiTable({ kpis, onSave }) {
+function KpiTable({ kpis, onSave, integre = false }) {
   // Avec la saisie client, les cartes s'affichent meme vides : c'est
   // justement la que le client renseigne ses premiers chiffres.
   if (!Array.isArray(kpis) || kpis.length === 0) return null
   if (!onSave && !kpiRenseignes(kpis)) return null
 
-  return (
-    <section className="panel">
-      <h2 className="panel-title flex items-center gap-2" style={{ color: 'var(--text-pure)' }}>
-        <TrendingUp size={16} color="var(--gold)" />
-        Mes indicateurs (KPI)
-      </h2>
+  const contenu = (
+    <>
       {onSave && (
         <p className="text-sm mb-3" style={{ color: 'var(--text-secondary)' }}>
           {kpiRenseignes(kpis)
@@ -2815,6 +2900,206 @@ function KpiTable({ kpis, onSave }) {
           <KpiCard key={kpi.id} kpi={kpi} onSave={onSave} />
         ))}
       </div>
+    </>
+  )
+
+  if (integre) return <div className="resultats-detail">{contenu}</div>
+
+  return (
+    <section className="panel">
+      <h2 className="panel-title flex items-center gap-2" style={{ color: 'var(--text-pure)' }}>
+        <TrendingUp size={16} color="var(--gold)" />
+        Mes indicateurs (KPI)
+      </h2>
+      {contenu}
+    </section>
+  )
+}
+
+// « Mes résultats » (affichage du 26/10/2026, remplace les cartes KPI et le
+// bloc Avant / Maintenant sur le tableau de bord). Chaque tuile dit combien,
+// le gain depuis le depart, un verdict sur la derniere etape passee et la
+// progression vers l'objectif J90. Le detail J0 a J90 et la saisie restent
+// dans les cartes KpiCard, sous « Mettre à jour mes chiffres ».
+const ETAPES_KPI = [
+  { jour: 90, valeur: 'valeur_j90', objectif: 'objectif_j90', label: 'J90' },
+  { jour: 60, valeur: 'valeur_j60', objectif: 'objectif_j60', label: 'J60' },
+  { jour: 30, valeur: 'valeur_j30', objectif: 'objectif_j30', label: 'J30' },
+]
+const KPI_EN_EUROS = /chiffre d.affaires|\bca\b|€|euro|panier|montant|revenu|marge/i
+const SEUIL_PRESQUE = 0.8
+
+function verdictKpi(valeur, objectif) {
+  if (objectif === null) return null
+  if (valeur === null) return { classe: 'verdict-vide', texte: 'À renseigner' }
+  if (valeur >= objectif) return { classe: 'verdict-ok', texte: 'Atteint' }
+  if (objectif > 0 && valeur / objectif >= SEUIL_PRESQUE) return { classe: 'verdict-presque', texte: 'Presque' }
+  return { classe: 'verdict-retard', texte: 'À pousser' }
+}
+
+function MiniCourbe({ kpi, cible }) {
+  const points = KPI_POINTS.map((p, i) => ({ i, v: nombreOuNull(kpi[p.valeur]) })).filter((p) => p.v !== null)
+  if (!points.length) return null
+
+  const valeurs = [...points.map((p) => p.v), ...(cible !== null ? [cible] : [])]
+  const min = Math.min(...valeurs)
+  const ecart = Math.max(...valeurs) - min || 1
+  const x = (i) => 6 + i * 49.3
+  const y = (v) => 34 - ((v - min) / ecart) * 28
+  const dernier = points[points.length - 1]
+
+  return (
+    <svg viewBox="0 0 160 40" className="resultat-courbe" aria-hidden="true">
+      {points.length > 1 && <polyline points={points.map((p) => `${x(p.i)},${y(p.v)}`).join(' ')} className="resultat-courbe-realise" />}
+      {cible !== null && dernier.i < 3 && (
+        <>
+          <line x1={x(dernier.i)} y1={y(dernier.v)} x2={x(3)} y2={y(cible)} className="resultat-courbe-objectif" />
+          <circle cx={x(3)} cy={y(cible)} r="3.5" className="resultat-courbe-cible" />
+        </>
+      )}
+      <circle cx={x(dernier.i)} cy={y(dernier.v)} r="4" className="resultat-courbe-point" />
+    </svg>
+  )
+}
+
+function TuileResultat({ kpi, jour }) {
+  const unite = KPI_EN_EUROS.test(kpi.nom || '') ? ' €' : ''
+  const montant = (n) => `${formaterKpi(n)}${unite}`
+  const depart = nombreOuNull(kpi.valeur_j0)
+  const derniere = KPI_DERNIERES.map(([champ, periode]) => ({ periode, valeur: nombreOuNull(kpi[champ]) })).find((p) => p.valeur !== null)
+  const valeur = derniere ? derniere.valeur : depart
+  const gain = derniere && depart !== null ? derniere.valeur - depart : null
+  // Etape jugee : la derniere passee dans le calendrier, sinon (date de
+  // demarrage inconnue) la derniere ou un chiffre a ete saisi.
+  const etape = jour !== null
+    ? ETAPES_KPI.find((e) => jour >= e.jour)
+    : ETAPES_KPI.find((e) => nombreOuNull(kpi[e.valeur]) !== null)
+  const objectifEtape = etape ? nombreOuNull(kpi[etape.objectif]) : null
+  const verdict = etape ? verdictKpi(nombreOuNull(kpi[etape.valeur]), objectifEtape) : null
+  const objectifJ30 = nombreOuNull(kpi.objectif_j30)
+  const cible = nombreOuNull(kpi.objectif_j90)
+  const progression = cible !== null && depart !== null && valeur !== null && cible !== depart
+    ? Math.max(0, Math.min(1, (valeur - depart) / (cible - depart)))
+    : null
+
+  return (
+    <article className="resultat">
+      <p className="resultat-nom">{kpi.nom}</p>
+      {valeur === null ? (
+        <p className="resultat-vide">Pas encore de chiffre</p>
+      ) : (
+        <p className="resultat-valeur">{formaterKpi(valeur)}{unite && <small>{unite}</small>}</p>
+      )}
+      {gain !== null && (
+        <p className="resultat-gain">
+          <strong className={gain > 0 ? 'resultat-gain-plus' : gain < 0 ? 'resultat-gain-moins' : undefined}>
+            {gain > 0 ? '+' : gain < 0 ? '−' : ''}{montant(Math.abs(gain))}
+          </strong>{' '}depuis le départ
+        </p>
+      )}
+      <MiniCourbe kpi={kpi} cible={cible} />
+      <p className="resultat-verdict">
+        {verdict ? (
+          <>
+            <span className={`verdict ${verdict.classe}`}>{verdict.texte}</span>
+            <span>visé à {etape.label} : {montant(objectifEtape)}</span>
+          </>
+        ) : !etape && objectifJ30 !== null ? (
+          <span>Premier objectif à J30 : {montant(objectifJ30)}</span>
+        ) : null}
+      </p>
+      {progression !== null && (
+        <>
+          <div className="resultat-jauge"><span style={{ width: `${progression * 100}%` }} /></div>
+          <p className="resultat-cible">
+            <span>Vers {montant(cible)} à J90</span>
+            <span>{Math.round(progression * 100)} %</span>
+          </p>
+        </>
+      )}
+    </article>
+  )
+}
+
+function ScoreCommercial({ personnalisation }) {
+  const diagnostic = personnalisation?.scores_diagnostic
+  if (!diagnostic) return null
+
+  const depart = personnalisation.total
+  const actuel = personnalisation.total_actuel ?? depart
+  const ecart = actuel - depart
+
+  return (
+    <div className="resultat-score">
+      <div>
+        <p className="resultat-nom">Ton score commercial</p>
+        <p className="resultat-score-total">{actuel}<small> / 15 · {depart} au diagnostic</small></p>
+      </div>
+      <ul className="resultat-zones">
+        {Object.entries(diagnostic).map(([zone, avant]) => {
+          const maintenant = personnalisation.scores?.[zone] ?? avant
+          return (
+            <li key={zone}>
+              <strong>{zone}</strong> {maintenant}
+              {maintenant !== avant && (
+                <em className={maintenant > avant ? 'resultat-gain-plus' : 'resultat-gain-moins'}>
+                  {maintenant > avant ? '+' : '−'}{Math.abs(maintenant - avant)}
+                </em>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      {ecart !== 0 && (
+        <span className={`verdict ${ecart > 0 ? 'verdict-ok' : 'verdict-retard'}`}>
+          {ecart > 0 ? '+' : '−'}{Math.abs(ecart)} point{Math.abs(ecart) > 1 ? 's' : ''}
+        </span>
+      )}
+      {!personnalisation.chiffres && (
+        <p className="resultat-score-note">Remplis au moins 2 bilans hebdomadaires : ton score suivra alors tes vrais chiffres de prospection, de conversion et de suivi.</p>
+      )}
+    </div>
+  )
+}
+
+function MesResultats({ kpis, personnalisation, jour, onSave }) {
+  const [detail, setDetail] = useState(false)
+  const liste = Array.isArray(kpis) ? kpis : []
+  const avecChiffres = kpiRenseignes(liste)
+
+  if (!liste.length && !personnalisation?.scores_diagnostic) return null
+
+  const prochainReleve = jour === null ? null : [30, 60, 90].find((j) => j > jour)
+
+  return (
+    <section className="resultats">
+      <div className="resultats-entete">
+        <h2 className="resultats-titre">Mes résultats</h2>
+      </div>
+      {avecChiffres && (
+        <div className="resultats-grille">
+          {liste.map((kpi) => <TuileResultat key={kpi.id} kpi={kpi} jour={jour} />)}
+        </div>
+      )}
+      <ScoreCommercial personnalisation={personnalisation} />
+      {liste.length > 0 && (avecChiffres ? (
+        <>
+          <div className="resultats-maj">
+            <span>
+              {prochainReleve
+                ? `Prochain relevé à J${prochainReleve}, dans ${prochainReleve - jour} jour${prochainReleve - jour > 1 ? 's' : ''}.`
+                : jour !== null ? 'Ton relevé J90 clôt le parcours.' : 'Mets tes chiffres à jour à J30, J60 et J90.'}
+            </span>
+            <button type="button" className="resultats-bouton" aria-expanded={detail} onClick={() => setDetail((v) => !v)}>
+              {detail ? 'Masquer le détail' : onSave ? 'Mettre à jour mes chiffres' : 'Voir le détail'}
+              <ChevronDown size={15} aria-hidden="true" className={detail ? 'resultats-chevron-ouvert' : undefined} />
+            </button>
+          </div>
+          {detail && <KpiTable kpis={liste} onSave={onSave} integre />}
+        </>
+      ) : (
+        <KpiTable kpis={liste} onSave={onSave} integre />
+      ))}
     </section>
   )
 }
@@ -3460,7 +3745,6 @@ function Portail() {
   if (screen === 'dashboard' && dashboard) {
     const totalFiches = dashboard.fiches.length
     const ficheDoneCount = dashboard.fiches.filter((fiche) => fiche.etat === 'Terminé').length
-    const avancementPct = totalFiches ? (ficheDoneCount / totalFiches) * 100 : 0
 
     const modules = []
     for (const fiche of dashboard.fiches) {
@@ -3473,28 +3757,8 @@ function Portail() {
       group.fiches.push(fiche)
     }
 
-    const modulesDoneCount = modules.filter((m) => m.fiches.every((f) => f.etat === 'Terminé')).length
     // Seul le module en cours (le premier non termine) est deplie a l'ouverture.
     const moduleOuvertParDefaut = modules.find((m) => !m.fiches.every((f) => f.etat === 'Terminé'))?.label
-    const modulesPct = modules.length ? (modulesDoneCount / modules.length) * 100 : 0
-
-    // Les rollups Notion renvoient des tableaux (une valeur par ligne liee),
-    // et peuvent etre exprimes en fraction (0-1) ou deja en pourcentage -
-    // on normalise au mieux pour l'affichage de la jauge.
-    const toPct = (valeur) => {
-      const valeurs = (Array.isArray(valeur) ? valeur : [valeur]).filter((v) => typeof v === 'number')
-      if (!valeurs.length) return 0
-      const moyenne = valeurs.reduce((a, b) => a + b, 0) / valeurs.length
-      return moyenne <= 1 ? moyenne * 100 : moyenne
-    }
-
-    const livrablesTermines = (Array.isArray(dashboard.progression_livrables) ? dashboard.progression_livrables : [])
-      .filter((etat) => etat === 'Terminé').length
-    const livrablesTotal = Array.isArray(dashboard.progression_livrables) ? dashboard.progression_livrables.length : 0
-    const livrablesPct = livrablesTotal ? (livrablesTermines / livrablesTotal) * 100 : 0
-
-    const kpiPct = toPct(dashboard.progression_kpi_j90)
-    const avecKpi = kpiRenseignes(dashboard.kpi)
 
     const moduleEnCours = modules.find((m) => m.label === moduleOuvertParDefaut)
     const ficheAReprendre = moduleEnCours?.fiches.find((f) => f.etat !== 'Terminé' && !f.acces?.includes('Bloqué'))
@@ -3567,14 +3831,34 @@ function Portail() {
           {onglet === 'tableau' && (
             <>
               <h2 className="accueil-section-titre">Tableau de bord</h2>
-              <div className="jauges">
-                <Jauge pct={avancementPct} titre="Fiches" detail={`${ficheDoneCount} / ${totalFiches} fiches`} />
-                <Jauge pct={modulesPct} titre="Modules" detail={`${modulesDoneCount} / ${modules.length} modules`} />
-                {avecKpi && <Jauge pct={kpiPct} titre="KPI J90" detail="Progression vers tes objectifs" />}
-                {livrablesTotal > 0 && (
-                  <Jauge pct={livrablesPct} titre="Livrables" detail={`${livrablesTermines} / ${livrablesTotal} livrables`} />
-                )}
-              </div>
+
+              {/* Ordre (affichage du 26/10/2026) : ou j'en suis, quoi faire, est-ce que ca marche. */}
+              <CapParcours
+                rythme={dashboard.rythme}
+                objectif={dashboard.objectif_90j}
+                fichesFaites={ficheDoneCount}
+                fichesTotal={totalFiches}
+                regularite={dashboard.regularite}
+              />
+
+              <ProchaineEtape
+                module={moduleEnCours}
+                fiche={ficheAReprendre}
+                onOpen={openFiche}
+                onParcours={() => changerOnglet('parcours')}
+              />
+
+              {bilanFinalOuvert(dashboard) && <BilanFinal onAttestation={() => { setAttestationOuverte(true); window.scrollTo(0, 0) }} />}
+              {bilanFinalOuvert(dashboard) && <AvisJ90 />}
+
+              <MesResultats
+                kpis={dashboard.kpi}
+                personnalisation={dashboard.personnalisation}
+                jour={dashboard.rythme ? dashboard.rythme.jour : jourDuParcours(dashboard.date_demarrage)}
+                onSave={saveKpi}
+              />
+
+              <SynthesesSection syntheses={dashboard.syntheses} />
 
               {/* Relue apres l'accueil guide, qui presente deja Idris. */}
               <PresentationIdris key={accueilFerme ? 'apres-accueil' : 'avant-accueil'} nom={dashboard.nom} />
@@ -3588,31 +3872,9 @@ function Portail() {
                 <ChevronRight size={16} aria-hidden="true" />
               </button>
 
-              <ProchaineEtape
-                module={moduleEnCours}
-                fiche={ficheAReprendre}
-                onOpen={openFiche}
-                onParcours={() => changerOnglet('parcours')}
-              />
-
-              {bilanFinalOuvert(dashboard) && <BilanFinal onAttestation={() => { setAttestationOuverte(true); window.scrollTo(0, 0) }} />}
-              {bilanFinalOuvert(dashboard) && <AvisJ90 />}
-
-              <AvantMaintenant personnalisation={dashboard.personnalisation} kpis={dashboard.kpi} />
-
               <Jalons jalons={jalons} regularite={dashboard.regularite} />
 
               <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
-
-              {dashboard.objectif_90j && (
-                <section className="panel">
-                  <p className="panel-eyebrow">Objectif 90 jours</p>
-                  <p className="panel-lead">{dashboard.objectif_90j}</p>
-                </section>
-              )}
-
-              <SynthesesSection syntheses={dashboard.syntheses} />
-              <KpiTable kpis={dashboard.kpi} onSave={saveKpi} />
             </>
           )}
 
