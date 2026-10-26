@@ -145,7 +145,7 @@ function FieldInput({ champ, value, onChange }) {
     )
   }
 
-  const zone = (
+  return (
     <textarea
       className="field-input"
       rows={3}
@@ -154,14 +154,20 @@ function FieldInput({ champ, value, onChange }) {
       onChange={(event) => onChange(event.target.value)}
     />
   )
+}
 
-  if (!CHAMP_ORAL.test(champ.libelle || '')) return zone
+// Libelle de la question, avec le bouton de dictee juste a cote (demande de
+// Rony du 26/10/2026) pour les champs a dire a l'oral.
+function EnteteChamp({ champ, value, onChange, children, Balise = 'label' }) {
+  const dictee = !['choix', 'nombre', 'date'].includes(champ.type) && CHAMP_ORAL.test(champ.libelle || '')
+
+  if (!dictee) return <Balise className="fiche-champ-libelle">{children}</Balise>
 
   return (
-    <>
-      {zone}
+    <div className="fiche-champ-entete">
+      <Balise className="fiche-champ-libelle">{children}</Balise>
       <DicteeVocale value={value ?? ''} onChange={onChange} />
-    </>
+    </div>
   )
 }
 
@@ -697,7 +703,9 @@ function FicheSegments({ segments, formValues, onChange, surtitre }) {
 
     return (
       <div key={champ.cle} className="fiche-champ">
-        <p className="fiche-champ-libelle">{renderInline(champ.libelle_affiche || champ.libelle)}</p>
+        <EnteteChamp Balise="p" champ={champ} value={formValues[champ.cle]} onChange={(value) => onChange(champ.cle, value)}>
+          {renderInline(champ.libelle_affiche || champ.libelle)}
+        </EnteteChamp>
         <FieldInput
           champ={champ}
           value={formValues[champ.cle]}
@@ -767,9 +775,9 @@ function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error }
 
         {restants.map((champ) => (
           <div key={champ.cle} className="fiche-champ">
-            <label className="fiche-champ-libelle">
+            <EnteteChamp champ={champ} value={formValues[champ.cle]} onChange={(value) => onChange(champ.cle, value)}>
               {lisible(champ.libelle)}
-            </label>
+            </EnteteChamp>
             <FieldInput champ={champ} value={formValues[champ.cle]} onChange={(value) => onChange(champ.cle, value)} />
           </div>
         ))}
@@ -1939,7 +1947,7 @@ function Attestation({ dashboard, modules, onRetour }) {
         <p className="attestation-surtitre">Système eVolution 2.0</p>
         <h1>Attestation de parcours</h1>
         <p className="attestation-texte">
-          RL-Evolution atteste que <strong>{dashboard.nom}</strong> a suivi le parcours d'accompagnement commercial
+          RL-eVolution atteste que <strong>{dashboard.nom}</strong> a suivi le parcours d'accompagnement commercial
           eVolution 2.0, {libelleFormule(dashboard.parcours)}
           {dashboard.date_demarrage ? `, démarré le ${dateLongue(dashboard.date_demarrage)}` : ''}.
         </p>
@@ -1959,7 +1967,7 @@ function Attestation({ dashboard, modules, onRetour }) {
         <p className="attestation-note">Chiffres issus de l'espace eVolution 2.0 de {prenom || 'ce participant'}, tels qu'il les a saisis.</p>
         <div className="attestation-pied">
           <p>Délivrée le {dateLongue()}</p>
-          <p className="attestation-signature">Rony<br /><span>Coach, RL-Evolution</span></p>
+          <p className="attestation-signature">Rony<br /><span>Coach, RL-eVolution</span></p>
         </div>
       </article>
     </div>
@@ -2386,7 +2394,7 @@ function AvisJ90() {
         <textarea className="field-input" rows={4} maxLength={1500} value={avis} onChange={(e) => setAvis(e.target.value)} placeholder="Qu'est-ce qui a changé pour toi et pour ton activité ?" aria-label="Ton avis" />
         <label className="avis-accord">
           <input type="checkbox" checked={accord} onChange={(e) => setAccord(e.target.checked)} />
-          <span>J'accepte que RL-Evolution cite mon avis (site, réseaux, présentations).</span>
+          <span>J'accepte que RL-eVolution cite mon avis (site, réseaux, présentations).</span>
         </label>
         {accord && (
           <input className="field-input" maxLength={120} value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="Signé comment ? Ex. : Marie, coiffeuse à Baie-Mahault" aria-label="Signature de ton avis" />
@@ -3772,9 +3780,13 @@ function Portail() {
 
                   {ficheData.champs.map((champ) => (
                     <div key={champ.cle} className="fiche-champ">
-                      <label className="fiche-champ-libelle">
+                      <EnteteChamp
+                        champ={champ}
+                        value={formValues[champ.cle]}
+                        onChange={(value) => setFormValues((prev) => ({ ...prev, [champ.cle]: value }))}
+                      >
                         {champ.libelle}
-                      </label>
+                      </EnteteChamp>
                       <FieldInput
                         champ={champ}
                         value={formValues[champ.cle]}

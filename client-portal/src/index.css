@@ -940,8 +940,23 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
   border-top: 2px dashed var(--text-tertiary);
 }
 
+.fiche-champ-entete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+}
+
+.fiche-champ-entete .fiche-champ-libelle {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .dictee {
-  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
 }
 
 .dictee-bouton {
@@ -965,6 +980,8 @@ button[style*="border: var(--border-subtle)"]:not(:disabled):hover {
 
 .dictee-erreur {
   margin-top: 0.3rem;
+  max-width: 16rem;
+  text-align: right;
   font-size: 0.72rem;
   color: var(--danger);
 }

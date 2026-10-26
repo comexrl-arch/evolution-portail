@@ -108,21 +108,26 @@ def enregistrer_avis(client_page_id: str, dashboard: dict, note: int, avis: str,
 
 # --- Recap hebdomadaire --------------------------------------------------------
 
-_SYSTEME_RECAP = """Tu es Idris, l'assistant IA du programme eVolution 2.0 (RL-Evolution). Tu écris UNE phrase d'encouragement (25 mots au plus) pour le récap hebdomadaire d'un client, à partir de ses chiffres de la semaine. Tutoiement, chaleureux, concret, sans flatterie. Ne cite que les chiffres fournis, n'en invente aucun. Réponds uniquement avec la phrase."""
+_SYSTEME_RECAP = """Tu es Idris, l'assistant IA du programme eVolution 2.0 (RL-eVolution). Tu écris UNE ou DEUX phrases (35 mots au plus) que Rony glisse dans son e-mail du lundi à un client, à partir de ses chiffres de la semaine. Tutoiement, ton d'un coach qui connaît son client : chaleureux, concret, sans flatterie. Commente ce que les chiffres disent (un progrès, un déséquilibre entre contacts et rendez-vous...) et propose une petite action pour la semaine. Ne répète pas les chiffres un par un, n'en invente aucun. Ne commence pas par le prénom ni par « Bravo ». Réponds uniquement avec le texte."""
 
 
-def _phrase_idris(prenom: str, semaine: dict | None, serie: int) -> str:
-    if semaine is None:
-        return f"{prenom}, cette semaine on reprend le rythme : un bilan de 5 minutes vendredi, et tes chiffres reparlent pour toi."
+def _pluriel(nombre: float, mot: str) -> str:
+    return f"{nombre:g} {mot}{'s' if nombre >= 2 else ''}"
 
-    secours = f"Bravo {prenom} : {serie} semaine{'s' if serie > 1 else ''} de bilan d'affilée. Garde ce rythme, c'est lui qui fait les résultats."
+
+def _phrase_idris(semaine: dict, serie: int) -> str:
+    secours = (
+        f"Ça fait {serie} semaines que tu tiens ton bilan, c'est ce rythme qui finit par payer. Cette semaine, garde le même cap."
+        if serie > 1 else
+        "Ton premier bilan est fait, c'est la base. Refais-le vendredi et on pourra comparer."
+    )
 
     if not ia_service.enabled():
         return secours
 
     try:
-        donnees = f"Prénom : {prenom}. Semaine : {semaine['contacts']:g} contacts, {semaine['rdv']:g} rendez-vous, {semaine['ventes']:g} ventes. Semaines de bilan d'affilée : {serie}."
-        phrase = ia_service.generer(_SYSTEME_RECAP, [{"role": "user", "texte": donnees}], temperature=0.7, max_tokens=120).strip()
+        donnees = f"Semaine : {semaine['contacts']:g} contacts, {semaine['rdv']:g} rendez-vous, {semaine['ventes']:g} ventes. Semaines de bilan d'affilée : {serie}."
+        phrase = ia_service.generer(_SYSTEME_RECAP, [{"role": "user", "texte": donnees}], temperature=0.7, max_tokens=150).strip()
         return phrase or secours
     except Exception as error:
         notion_service.logger.warning("Phrase du recap indisponible (%s)", error)
@@ -131,10 +136,32 @@ def _phrase_idris(prenom: str, semaine: dict | None, serie: int) -> str:
 
 def _prochaine_fiche(dashboard: dict) -> str | None:
     for fiche in dashboard.get("fiches") or []:
+        if fiche.get("master_id") == notion_service._BILAN_HEBDO_MASTER_ID:
+            continue
+
         if fiche.get("etat") != "Terminé" and "Bloqué" not in str(fiche.get("acces") or ""):
             return (fiche.get("nom") or "").split(" - ", 1)[-1] or None
 
     return None
+
+
+def _fiche_lisible(nom: str) -> str:
+    """« 9. MON OFFRE ACTUELLE » devient « la fiche 9, « Mon offre actuelle » »."""
+    numero, _, titre = nom.partition(". ")
+
+    if not numero.isdigit() or not titre:
+        numero, titre = "", nom
+
+    titre = titre.strip().lower()
+    titre = titre[:1].upper() + titre[1:]
+    return f"la fiche {numero}, « {titre} »" if numero else f"« {titre} »"
+
+
+def _date_courte(jour: str) -> str:
+    try:
+        return datetime.strptime(str(jour)[:10], "%Y-%m-%d").strftime("%d/%m")
+    except ValueError:
+        return str(jour)
 
 
 def recap_du_client(client_page_id: str, email: str) -> dict | None:
@@ -153,24 +180,26 @@ def recap_du_client(client_page_id: str, email: str) -> dict | None:
     chiffres = None if semaine is None else {
         "semaine_du": semaine["semaine_du"], "contacts": semaine["contacts"], "rdv": semaine["rdv"], "ventes": semaine["ventes"],
     }
-    lignes = [f"Bonjour {prenom},", "", f"Voici ta semaine en 3 chiffres (J{jour} de ton parcours eVolution 2.0) :"]
+    lignes = [f"Bonjour {prenom},", ""]
 
     if chiffres:
         lignes += [
-            f"- Contacts : {chiffres['contacts']:g}",
-            f"- Rendez-vous : {chiffres['rdv']:g}",
-            f"- Ventes : {chiffres['ventes']:g}",
-            f"(bilan de la semaine du {chiffres['semaine_du']})",
+            f"Tu es à J{jour} de ton parcours. Ta semaine du {_date_courte(chiffres['semaine_du'])}, c'est "
+            f"{_pluriel(chiffres['contacts'], 'contact')}, {chiffres['rdv']:g} rendez-vous "
+            f"et {_pluriel(chiffres['ventes'], 'vente')}.",
+            "",
+            _phrase_idris(semaine, serie),
         ]
     else:
-        lignes.append("- Pas encore de bilan hebdomadaire rempli.")
-
-    lignes += ["", "Le mot d'Idris : " + _phrase_idris(prenom, semaine, serie)]
+        lignes += [
+            f"Tu es à J{jour} de ton parcours, et je n'ai pas encore vu passer ton bilan de la semaine.",
+            "Prends 5 minutes vendredi pour le remplir : lundi prochain, tu recevras ici tes chiffres et ce qu'ils disent de ta prospection.",
+        ]
 
     if prochaine:
-        lignes += ["", f"Ta prochaine étape : {prochaine}."]
+        lignes += ["", f"Ta prochaine étape : {_fiche_lisible(prochaine)}. C'est elle qui te fera avancer le plus vite maintenant."]
 
-    lignes += ["", f"Ouvre ton espace : {URL_PORTAIL}", "", "Rony, RL-Evolution"]
+    lignes += ["", f"Tout est dans ton espace : {URL_PORTAIL}", "", "Bonne semaine,", "Rony", "RL-eVolution"]
 
     return {
         "client_page_id": client_page_id,
@@ -180,7 +209,7 @@ def recap_du_client(client_page_id: str, email: str) -> dict | None:
         "chiffres": chiffres,
         "serie": serie,
         "prochaine_etape": prochaine,
-        "objet": f"{prenom}, ta semaine en 3 chiffres",
+        "objet": f"{prenom}, ta semaine en 3 chiffres" if chiffres else f"{prenom}, on fait le point sur ta semaine ?",
         "texte": "\n".join(lignes),
     }
 

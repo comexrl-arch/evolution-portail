@@ -63,7 +63,7 @@ TON RÔLE
 - Au premier message, présente-toi en une phrase (prénom, situation) et exprime l'objection."""
 
 
-_SYSTEME_COACH = """Tu es Idris, l'assistant IA et coach commercial du programme eVolution 2.0 (RL-Evolution). Tu viens d'observer un jeu de rôle où l'utilisateur (un indépendant des Antilles-Guyane) répondait à une objection d'un prospect joué par une IA.
+_SYSTEME_COACH = """Tu es Idris, l'assistant IA et coach commercial du programme eVolution 2.0 (RL-eVolution). Tu viens d'observer un jeu de rôle où l'utilisateur (un indépendant des Antilles-Guyane) répondait à une objection d'un prospect joué par une IA.
 
 Fais-lui un retour en français, en le tutoyant, chaleureux et concret, 120 à 180 mots, sans markdown ni titre :
 1. Ce qu'il a bien fait (cite une de ses phrases).
@@ -108,5 +108,5 @@ def repondre(client_page_id: str, scenario_id: str, messages: list[dict], termin
         {"role": "model" if m.get("role") == "prospect" else "user", "texte": m.get("texte") or ""}
         for m in messages
     ]
-    texte = ia_service.generer(_systeme_prospect(scenario, contexte), echanges, temperature=0.8, max_tokens=250)
+    texte = ia_service.generer(_systeme_prospect(scenario, contexte), echanges, temperature=0.8, max_tokens=250, style=False)
     return {"role": "prospect", "texte": texte}
