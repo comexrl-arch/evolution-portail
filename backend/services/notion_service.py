@@ -788,6 +788,7 @@ def _client_cohorte(props: dict) -> dict | None:
         "statut": _prop_value(_prop(cohorte_props, "Statut")),
         "date_debut": _prop_value(_prop(cohorte_props, "Date début")),
         "date_fin": _prop_value(_prop(cohorte_props, "Date fin")),
+        "lien_groupe": _prop_value(_prop(cohorte_props, "Lien groupe")),
     }
 
 
@@ -805,6 +806,9 @@ def _client_sessions(props: dict) -> list[dict]:
             "date_heure": _prop_value(_prop(session_props, "Date & heure")),
             "statut": _prop_value(_prop(session_props, "Statut")),
             "prochaine_echeance": _prop_value(_prop(session_props, "Prochaine échéance")),
+            # Proprietes facultatives (onglet Communaute, lot 4) : absentes = None.
+            "lien": _prop_value(_prop(session_props, "Lien")),
+            "replay": _prop_value(_prop(session_props, "Replay")),
         }
 
     # _POOL_BLOCS et non _POOL : _client_sessions tourne deja dans _POOL, et
@@ -1102,6 +1106,8 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         fiches.sort(key=_fiche_sort_key)
         _apply_acces(fiches, date_demarrage, verrou_coach=not autonome)
 
+    cohorte = cohorte_future.result()
+
     return {
         "nom": nom_client,
         "objectif_90j": _prop_value(_prop(props, "Objectif 90j")),
@@ -1113,14 +1119,22 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "progression_kpi_j90": _prop_value(_prop(props, "Progression KPI J90")),
         "progression_livrables": _prop_value(_prop(props, "Progression livrables")),
         "identite": _client_identite(props),
-        "cohorte": cohorte_future.result(),
+        "cohorte": cohorte,
         "sessions": sessions_future.result(),
         "fiches": fiches,
         "kpi": kpi_future.result(),
         "syntheses": syntheses_du_client(client_page_id, fiches) if autonome else [],
         "personnalisation": _personnaliser_parcours(fiches),
         "regularite": _regularite_bilans(fiches),
+        "lien_groupe": _lien_groupe(cohorte),
     }
+
+
+def _lien_groupe(cohorte: dict | None) -> str | None:
+    # Lien du groupe de la cohorte, sinon le groupe commun a tous les clients
+    # (variable COMMUNAUTE_LIEN_GROUPE sur Render). Seuls les liens https passent.
+    lien = (cohorte or {}).get("lien_groupe") or os.getenv("COMMUNAUTE_LIEN_GROUPE") or ""
+    return lien if lien.startswith("https://") else None
 
 
 def _resultat_sheets(future) -> str | None:
