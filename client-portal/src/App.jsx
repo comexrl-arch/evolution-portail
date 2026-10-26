@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, Printer, Quote, Smartphone, Rocket, Sparkles, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, TrendingUp, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -1457,7 +1457,11 @@ function Entrainement() {
 // Questions libres de strategie commerciale, messages prets a envoyer,
 // preparation de rendez-vous (Coaching) et entrainement aux objections.
 async function appelIdris(chemin, corps) {
-  const response = await fetch(`${API_BASE}/portal/idris${chemin}`, {
+  return appelPortail(`/idris${chemin}`, corps)
+}
+
+async function appelPortail(chemin, corps) {
+  const response = await fetch(`${API_BASE}/portal${chemin}`, {
     method: corps ? 'POST' : 'GET',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
     body: corps ? JSON.stringify(corps) : undefined,
@@ -2002,6 +2006,462 @@ function InstallerAppli() {
   )
 }
 
+// Bibliotheque de modeles (lot 4) : une base par metier, pre-remplie avec les
+// mots du client ; Idris peut reecrire un modele entier avec ses fiches.
+function ModeleBibliotheque({ modele, metier, iaDisponible }) {
+  const [texte, setTexte] = useState(null)
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const personnaliser = async () => {
+    setAttente(true)
+    setErreur('')
+
+    try {
+      setTexte((await appelPortail('/bibliotheque/personnaliser', { modele: modele.id, metier })).texte)
+    } catch (err) {
+      setErreur(err.status === 429 ? "Tu as beaucoup demandé à Idris aujourd'hui : reprends demain." : "Idris n'a pas pu adapter ce modèle. Réessaie dans quelques minutes.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  return (
+    <li className="biblio-modele">
+      <header className="biblio-modele-entete">
+        <strong>{modele.titre}</strong>
+        <span className="biblio-canal">{modele.canal}</span>
+      </header>
+      <p className="biblio-texte">{modele.texte}</p>
+      <div className="biblio-actions">
+        <BoutonCopier texte={modele.texte} />
+        {iaDisponible && (
+          <button type="button" className="idris-copier" onClick={personnaliser} disabled={attente}>
+            {attente ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} {attente ? 'Idris adapte…' : 'Adapter avec Idris'}
+          </button>
+        )}
+      </div>
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+      {texte && (
+        <IdrisMessage titre="Ta version">
+          <p className="idris-message-texte">{texte}</p>
+          <BoutonCopier texte={texte} />
+        </IdrisMessage>
+      )}
+    </li>
+  )
+}
+
+function Bibliotheque() {
+  const [contenu, setContenu] = useState(null)
+  const [metier, setMetier] = useState(null)
+  const [categorie, setCategorie] = useState(null)
+  const [erreur, setErreur] = useState(false)
+
+  useEffect(() => {
+    let actif = true
+    appelPortail(`/bibliotheque${metier ? `?metier=${metier}` : ''}`)
+      .then((data) => {
+        if (!actif) return
+        setContenu(data)
+        setCategorie((c) => c || data.categories[0])
+      })
+      .catch(() => actif && setErreur(true))
+    return () => { actif = false }
+  }, [metier])
+
+  if (erreur) return <section className="panel"><p className="espace-vide">Ta bibliothèque n'est pas disponible pour le moment. Réessaie dans quelques minutes.</p></section>
+  if (!contenu) return <section className="panel"><Loader2 className="animate-spin" color="var(--gold)" size={22} /></section>
+
+  const modeles = contenu.modeles.filter((m) => m.categorie === categorie)
+
+  return (
+    <section className="panel biblio">
+      <p className="panel-eyebrow"><Library size={14} /> Ma bibliothèque de modèles</p>
+      <p className="panel-lead">
+        Scripts, messages et trames prêts à copier, pour ton métier.
+        {contenu.personnalise_avec.length > 0
+          ? ' Ils sont déjà remplis avec les mots de tes fiches.'
+          : ' Remplis ta phrase de positionnement : tes modèles reprendront tes propres mots.'}
+      </p>
+      <label className="biblio-metier">
+        <span>Mon métier</span>
+        <select className="field-input" value={contenu.metier} onChange={(e) => setMetier(e.target.value)}>
+          {contenu.metiers.map((m) => <option key={m.id} value={m.id}>{m.libelle}</option>)}
+        </select>
+      </label>
+      <div className="idris-suggestions" role="tablist" aria-label="Catégories de modèles">
+        {contenu.categories.map((c) => (
+          <button key={c} type="button" role="tab" aria-selected={c === categorie} className={`idris-suggestion${c === categorie ? ' idris-suggestion-active' : ''}`} onClick={() => setCategorie(c)}>
+            {c}
+          </button>
+        ))}
+      </div>
+      <ul className="biblio-liste">
+        {modeles.map((m) => <ModeleBibliotheque key={`${contenu.metier}-${m.id}`} modele={m} metier={contenu.metier} iaDisponible={contenu.personnalisation_ia} />)}
+      </ul>
+    </section>
+  )
+}
+
+function dateSession(valeur) {
+  const date = valeur ? new Date(valeur) : null
+  if (!date || Number.isNaN(date.getTime())) return valeur || ''
+  const avecHeure = String(valeur).length > 10
+  return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', ...(avecHeure ? { hour: '2-digit', minute: '2-digit' } : {}) })
+}
+
+function lienSur(lien) {
+  return typeof lien === 'string' && lien.startsWith('https://') ? lien : null
+}
+
+// Onglet Communaute (lot 4) : lien du groupe, prochain point collectif, replays.
+function Communaute({ dashboard }) {
+  const maintenant = Date.now()
+  const sessions = dashboard.sessions || []
+  const prochaine = sessions.find((s) => s.date_heure && Date.parse(s.date_heure) + 2 * 3600000 >= maintenant)
+  const replays = sessions.filter((s) => lienSur(s.replay))
+
+  return (
+    <>
+      <section className="panel communaute-groupe">
+        <p className="panel-eyebrow"><Users size={14} /> Mon groupe</p>
+        {dashboard.cohorte && <p className="panel-lead">Cohorte {dashboard.cohorte.nom}{dashboard.cohorte.statut ? ` · ${dashboard.cohorte.statut}` : ''}</p>}
+        {dashboard.lien_groupe ? (
+          <>
+            <p className="communaute-texte">Échange avec les autres entrepreneurs du programme : questions, victoires de la semaine, entraide.</p>
+            <a className="fiche-bouton communaute-bouton" href={dashboard.lien_groupe} target="_blank" rel="noopener noreferrer">
+              <MessageCircle size={16} /> Rejoindre le groupe
+            </a>
+          </>
+        ) : (
+          <p className="espace-vide">Le lien de ton groupe apparaîtra ici dès qu'il sera ouvert.</p>
+        )}
+      </section>
+
+      <section className="panel">
+        <p className="panel-eyebrow"><CalendarDays size={14} /> Prochain point collectif</p>
+        {prochaine ? (
+          <div className="communaute-prochaine">
+            <p className="communaute-prochaine-date">{dateSession(prochaine.date_heure)}</p>
+            <p className="communaute-texte">{prochaine.nom}</p>
+            {lienSur(prochaine.lien) && (
+              <a className="fiche-bouton communaute-bouton" href={prochaine.lien} target="_blank" rel="noopener noreferrer">
+                <Rocket size={16} /> Rejoindre la session
+              </a>
+            )}
+          </div>
+        ) : (
+          <p className="espace-vide">La date de ton prochain point collectif apparaîtra ici dès qu'elle sera planifiée.</p>
+        )}
+      </section>
+
+      <section className="panel">
+        <p className="panel-eyebrow"><PlayCircle size={14} /> Replays</p>
+        {replays.length ? (
+          <ul className="communaute-replays">
+            {replays.map((s) => (
+              <li key={s.id}>
+                <a href={s.replay} target="_blank" rel="noopener noreferrer"><PlayCircle size={15} /> {s.nom}</a>
+                {s.date_heure && <span>{dateSession(s.date_heure)}</span>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="espace-vide">Les replays des sessions passées seront rangés ici.</p>
+        )}
+      </section>
+
+      {sessions.length > 0 && (
+        <section className="panel">
+          <p className="panel-eyebrow">Toutes mes sessions</p>
+          {sessions.map((session) => (
+            <p key={session.id} className="flex items-center gap-2 text-sm mb-1.5" style={{ color: 'var(--text-dimmed)' }}>
+              <CalendarDays size={14} color="var(--text-soft)" />
+              {session.nom} {session.date_heure && `· ${dateSession(session.date_heure)}`} {session.statut && `(${session.statut})`}
+            </p>
+          ))}
+        </section>
+      )}
+    </>
+  )
+}
+
+// Accueil guide (lot 4) : 3 ecrans a la premiere connexion, tant qu'aucune
+// fiche n'est terminee. Memorise sur l'appareil.
+const ACCUEIL_VU_KEY = 'accueil_vu'
+
+function accueilAMontrer(dashboard) {
+  try {
+    if (localStorage.getItem(ACCUEIL_VU_KEY) === '1') return false
+  } catch {
+    return false
+  }
+  return !dashboard.fiches.some((f) => f.etat === 'Terminé')
+}
+
+function AccueilGuide({ dashboard, fiche, onObjectif, onFini, onOuvrir }) {
+  const [etape, setEtape] = useState(0)
+  const [objectif, setObjectif] = useState(dashboard.objectif_90j || '')
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const prenom = (dashboard.nom || '').split(' ')[0]
+
+  const terminer = (ouvrir) => {
+    try {
+      localStorage.setItem(ACCUEIL_VU_KEY, '1')
+      localStorage.setItem(IDRIS_PRESENTE_KEY, '1')
+    } catch {
+      // Navigation privee : l'accueil reviendra a la prochaine visite.
+    }
+    onFini()
+    if (ouvrir && fiche) onOuvrir(fiche.id)
+  }
+
+  const garderObjectif = async (event) => {
+    event.preventDefault()
+    setErreur('')
+
+    if (objectif.trim() && objectif.trim() !== (dashboard.objectif_90j || '')) {
+      setAttente(true)
+      try {
+        onObjectif((await appelPortail('/objectif', { objectif })).objectif_90j)
+      } catch {
+        setErreur("Ton objectif n'a pas pu être enregistré. Tu pourras le reprendre dans ta fiche « Mon point de départ ».")
+        setAttente(false)
+        return
+      }
+      setAttente(false)
+    }
+    setEtape(1)
+  }
+
+  return (
+    <div className="accueil-guide-voile" role="dialog" aria-modal="true" aria-labelledby="accueil-guide-titre">
+      <div className="accueil-guide">
+        <p className="accueil-guide-etapes" aria-label={`Étape ${etape + 1} sur 3`}>
+          {[0, 1, 2].map((i) => <span key={i} className={i <= etape ? 'accueil-guide-point-actif' : ''} />)}
+        </p>
+        {etape === 0 && (
+          <form onSubmit={garderObjectif}>
+            <p className="panel-eyebrow"><Target size={14} /> Bienvenue{prenom ? ` ${prenom}` : ''}</p>
+            <h2 id="accueil-guide-titre" className="accueil-guide-titre">Quel est ton objectif pour les 90 prochains jours ?</h2>
+            <p className="communaute-texte">Un objectif simple et chiffré si tu peux : il guidera tes fiches, tes chiffres et les conseils d'Idris.</p>
+            <textarea className="field-input" rows={3} maxLength={300} value={objectif} onChange={(e) => setObjectif(e.target.value)} placeholder="Ex. : signer 5 nouveaux clients et remplir mon planning de mars" aria-label="Mon objectif 90 jours" />
+            {erreur && <p className="idris-erreur">{erreur}</p>}
+            <div className="accueil-guide-actions">
+              <button type="button" className="prochaine-etape-lien" onClick={() => setEtape(1)}>Plus tard</button>
+              <button type="submit" className="fiche-bouton" disabled={attente}>
+                {attente ? <Loader2 size={16} className="animate-spin" /> : null} Continuer
+              </button>
+            </div>
+          </form>
+        )}
+        {etape === 1 && (
+          <>
+            <h2 id="accueil-guide-titre" className="accueil-guide-titre">Voici Idris, ton assistant</h2>
+            <IdrisMessage titre="Enchanté !">
+              <p>Je suis l'assistant IA de ton parcours, aux côtés de Rony. Je connais ton diagnostic, tes fiches et tes chiffres.</p>
+              <p>Après chaque fiche, je te fais un retour. Dans l'onglet Idris, pose-moi tes questions de stratégie commerciale ou demande-moi un message prêt à envoyer.</p>
+            </IdrisMessage>
+            <div className="accueil-guide-actions">
+              <button type="button" className="prochaine-etape-lien" onClick={() => setEtape(0)}>Retour</button>
+              <button type="button" className="fiche-bouton" onClick={() => setEtape(2)}>Continuer</button>
+            </div>
+          </>
+        )}
+        {etape === 2 && (
+          <>
+            <p className="panel-eyebrow"><Rocket size={14} /> Ta première action</p>
+            <h2 id="accueil-guide-titre" className="accueil-guide-titre">{fiche ? lireFiche(fiche.nom).titre : 'Ton parcours commence'}</h2>
+            <p className="communaute-texte">
+              Une fiche à la fois, quelques minutes chacune. Tu peux t'arrêter quand tu veux : tes réponses sont gardées.
+            </p>
+            <div className="accueil-guide-actions">
+              <button type="button" className="prochaine-etape-lien" onClick={() => terminer(false)}>Voir mon tableau de bord</button>
+              {fiche && <button type="button" className="fiche-bouton" onClick={() => terminer(true)}>Commencer</button>}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Lien de partage (lot 4) : la progression en lecture seule, sans les
+// reponses aux fiches. Valable 30 jours.
+function PartageProgression() {
+  const [lien, setLien] = useState(null)
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const creer = async () => {
+    setAttente(true)
+    setErreur('')
+    try {
+      setLien(await appelPortail('/partage', {}))
+    } catch {
+      setErreur("Le lien n'a pas pu être créé. Réessaie dans quelques minutes.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  return (
+    <section className="panel partage">
+      <p className="panel-eyebrow"><Share2 size={14} /> Partager ma progression</p>
+      <p className="panel-lead">Montre ton avancement à ton banquier, ton associé ou un proche : ton score, tes chiffres et tes fiches validées, en lecture seule.</p>
+      <p className="communaute-texte">Tes réponses aux fiches et tes coordonnées ne sont jamais montrées. Le lien reste valable 30 jours.</p>
+      {lien ? (
+        <div className="partage-lien">
+          <input className="field-input" readOnly value={lien.url} aria-label="Lien de partage" onFocus={(e) => e.target.select()} />
+          <BoutonCopier texte={lien.url} />
+        </div>
+      ) : (
+        <button type="button" className="fiche-bouton" onClick={creer} disabled={attente}>
+          {attente ? <Loader2 size={16} className="animate-spin" /> : <Link2 size={16} />} Créer mon lien de partage
+        </button>
+      )}
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+    </section>
+  )
+}
+
+// Avis a J90 (lot 4) : cite seulement si le client l'accepte.
+const AVIS_ENVOYE_KEY = 'avis_j90_envoye'
+
+function AvisJ90() {
+  const [envoye, setEnvoye] = useState(() => {
+    try {
+      return localStorage.getItem(AVIS_ENVOYE_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const [note, setNote] = useState(null)
+  const [avis, setAvis] = useState('')
+  const [accord, setAccord] = useState(false)
+  const [signature, setSignature] = useState('')
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const envoyer = async (event) => {
+    event.preventDefault()
+    setAttente(true)
+    setErreur('')
+    try {
+      await appelPortail('/avis-j90', { note, avis, accord_publication: accord, signature })
+      try {
+        localStorage.setItem(AVIS_ENVOYE_KEY, '1')
+      } catch {
+        // Navigation privee : sans consequence.
+      }
+      setEnvoye(true)
+    } catch {
+      setErreur("Ton avis n'a pas pu être envoyé. Réessaie dans quelques minutes.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  if (envoye) {
+    return (
+      <section className="panel avis-j90">
+        <p className="panel-eyebrow"><Star size={14} /> Ton avis</p>
+        <p className="panel-lead">Merci pour ton avis ! Rony le lira personnellement.</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="panel avis-j90">
+      <p className="panel-eyebrow"><Star size={14} /> Ton avis sur ces 90 jours</p>
+      <form onSubmit={envoyer}>
+        <p className="communaute-texte">Sur 10, recommanderais-tu ce parcours à un autre entrepreneur ?</p>
+        <div className="avis-notes" role="radiogroup" aria-label="Ta note sur 10">
+          {Array.from({ length: 11 }, (_, i) => (
+            <button key={i} type="button" role="radio" aria-checked={note === i} className={`avis-note${note === i ? ' avis-note-active' : ''}`} onClick={() => setNote(i)}>{i}</button>
+          ))}
+        </div>
+        <textarea className="field-input" rows={4} maxLength={1500} value={avis} onChange={(e) => setAvis(e.target.value)} placeholder="Qu'est-ce qui a changé pour toi et pour ton activité ?" aria-label="Ton avis" />
+        <label className="avis-accord">
+          <input type="checkbox" checked={accord} onChange={(e) => setAccord(e.target.checked)} />
+          <span>J'accepte que RL-Evolution cite mon avis (site, réseaux, présentations).</span>
+        </label>
+        {accord && (
+          <input className="field-input" maxLength={120} value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="Signé comment ? Ex. : Marie, coiffeuse à Baie-Mahault" aria-label="Signature de ton avis" />
+        )}
+        {erreur && <p className="idris-erreur">{erreur}</p>}
+        <button type="submit" className="fiche-bouton" disabled={attente || note === null || !avis.trim()}>
+          {attente ? <Loader2 size={16} className="animate-spin" /> : null} Envoyer mon avis
+        </button>
+      </form>
+    </section>
+  )
+}
+
+// Page publique du lien de partage : aucune donnee de session.
+function PagePartage({ jeton }) {
+  const [donnees, setDonnees] = useState(null)
+  const [erreur, setErreur] = useState('')
+
+  useEffect(() => {
+    document.body.dataset.ecran = 'partage'
+    fetch(`${API_BASE}/public/partage?jeton=${encodeURIComponent(jeton)}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(response.status === 404 ? "Ce lien de partage n'est plus valable. Demande un nouveau lien à la personne qui te l'a envoyé." : 'Cette page est indisponible pour le moment.')
+        setDonnees(await response.json())
+      })
+      .catch((err) => setErreur(err.message))
+  }, [jeton])
+
+  if (erreur) return <div className="partage-page"><article className="panel"><p className="panel-lead">{erreur}</p></article></div>
+  if (!donnees) return <div className="partage-page"><Loader2 className="animate-spin" color="var(--gold)" size={28} /></div>
+
+  const modules = []
+  for (const fiche of donnees.fiches) {
+    const label = fiche.module || 'Autres'
+    let groupe = modules.find((m) => m.label === label)
+    if (!groupe) {
+      groupe = { label, fiches: [] }
+      modules.push(groupe)
+    }
+    groupe.fiches.push(fiche)
+  }
+  const fichesFaites = donnees.fiches.filter((f) => f.etat === 'Terminé').length
+  const modulesFaits = modules.filter((m) => m.fiches.every((f) => f.etat === 'Terminé')).length
+  const jour = jourDuParcours(donnees.date_demarrage)
+  const jalons = calculerJalons({ ...donnees, kpi: donnees.kpi }, modules).filter((j) => j.fait)
+
+  return (
+    <div className="partage-page">
+      <header className="partage-entete">
+        <img src={logo} alt="RL-eVolution" className="attestation-logo" />
+        <p className="attestation-surtitre">Système eVolution 2.0 · {libelleFormule(donnees.parcours)}</p>
+        <h1>La progression de {donnees.prenom || 'ce participant'}</h1>
+        {jour !== null && jour >= 0 && <p className="communaute-texte">Jour {jour} du parcours{donnees.date_demarrage ? `, démarré le ${dateLongue(donnees.date_demarrage)}` : ''}</p>}
+      </header>
+      <div className="jauges">
+        <Jauge pct={donnees.fiches.length ? (fichesFaites / donnees.fiches.length) * 100 : 0} titre="Fiches" detail={`${fichesFaites} / ${donnees.fiches.length} fiches`} />
+        <Jauge pct={modules.length ? (modulesFaits / modules.length) * 100 : 0} titre="Modules" detail={`${modulesFaits} / ${modules.length} modules`} />
+      </div>
+      <AvantMaintenant personnalisation={donnees.personnalisation} kpis={donnees.kpi} />
+      {(jalons.length > 0 || donnees.regularite) && (
+        <section className="panel jalons">
+          <p className="panel-eyebrow">Jalons atteints</p>
+          {donnees.regularite && (
+            <p className="jalons-serie"><strong>{donnees.regularite.serie}</strong> semaine{donnees.regularite.serie > 1 ? 's' : ''} de bilan d'affilée<span> · {donnees.regularite.semaines} au total</span></p>
+          )}
+          <ul className="jalons-liste">
+            {jalons.map((j) => <li key={j.id} className="jalon jalon-fait"><Award size={15} aria-hidden="true" /><span>{j.titre}</span></li>)}
+          </ul>
+        </section>
+      )}
+      <p className="attestation-note">Page en lecture seule, partagée par {donnees.prenom || 'le participant'}. Chiffres tels qu'il les a saisis dans son espace.</p>
+    </div>
+  )
+}
+
 function ModuleCarte({ module, onOpen, ouvertParDefaut }) {
   const { surtitre, titre } = lireModule(module.label)
   const illustration = illustrationDuModule(module.label)
@@ -2441,12 +2901,14 @@ function LivrablesSection({ livrables, onOpen }) {
 }
 
 export default function App() {
+  const [jetonPartage] = useState(() => new URLSearchParams(window.location.search).get('partage'))
+
   // Monogramme RL au meme endroit (en haut a droite) sur tous les ecrans,
   // sauf l'accueil qui porte deja le logo de marque (voir index.css).
   return (
     <>
       <img src={monogramme} alt="RL-eVolution" className="portal-monogramme" />
-      <Portail />
+      {jetonPartage ? <PagePartage jeton={jetonPartage} /> : <Portail />}
     </>
   )
 }
@@ -2507,6 +2969,7 @@ function Portail() {
   const [validating, setValidating] = useState(false)
   const [onglet, setOnglet] = useState('tableau')
   const [attestationOuverte, setAttestationOuverte] = useState(false)
+  const [accueilFerme, setAccueilFerme] = useState(false)
   const [menuOuvert, setMenuOuvert] = useState(false)
 
   const loadDashboard = useCallback(async () => {
@@ -3062,6 +3525,15 @@ function Portail() {
         </aside>
         {menuOuvert && <div className="espace-voile" onClick={() => setMenuOuvert(false)} />}
 
+        {!accueilFerme && accueilAMontrer(dashboard) && (
+          <AccueilGuide
+            dashboard={dashboard}
+            fiche={ficheAReprendre}
+            onObjectif={(objectif) => setDashboard((d) => ({ ...d, objectif_90j: objectif }))}
+            onFini={() => setAccueilFerme(true)}
+            onOuvrir={openFiche}
+          />
+        )}
         <main className="espace-contenu">
           <header className="accueil-entete">
             <button
@@ -3096,7 +3568,8 @@ function Portail() {
                 )}
               </div>
 
-              <PresentationIdris nom={dashboard.nom} />
+              {/* Relue apres l'accueil guide, qui presente deja Idris. */}
+              <PresentationIdris key={accueilFerme ? 'apres-accueil' : 'avant-accueil'} nom={dashboard.nom} />
 
               <button type="button" className="idris-raccourci" onClick={() => changerOnglet('idris')}>
                 <IdrisAvatar taille={36} />
@@ -3115,6 +3588,7 @@ function Portail() {
               />
 
               {bilanFinalOuvert(dashboard) && <BilanFinal onAttestation={() => { setAttestationOuverte(true); window.scrollTo(0, 0) }} />}
+              {bilanFinalOuvert(dashboard) && <AvisJ90 />}
 
               <AvantMaintenant personnalisation={dashboard.personnalisation} kpis={dashboard.kpi} />
 
@@ -3160,6 +3634,7 @@ function Portail() {
           {onglet === 'ressources' && (
             <>
               <h2 className="accueil-section-titre">Ressources</h2>
+              <Bibliotheque />
               <section className="panel">
                 <p className="panel-eyebrow">Mes fiches terminées</p>
                 {fichesTerminees.length ? (
@@ -3188,25 +3663,7 @@ function Portail() {
           {onglet === 'communaute' && (
             <>
               <h2 className="accueil-section-titre">Communauté</h2>
-              <section className="panel">
-                <p className="panel-eyebrow">Ma cohorte et mes sessions</p>
-                {dashboard.cohorte && (
-                  <p className="flex items-center gap-2 text-sm mb-3" style={{ color: 'var(--text-dimmed)' }}>
-                    <Users size={14} color="var(--gold)" />
-                    Cohorte {dashboard.cohorte.nom} {dashboard.cohorte.statut && `· ${dashboard.cohorte.statut}`}
-                  </p>
-                )}
-                {dashboard.sessions.length > 0 ? (
-                  dashboard.sessions.map((session) => (
-                    <p key={session.id} className="flex items-center gap-2 text-sm mb-1.5" style={{ color: 'var(--text-dimmed)' }}>
-                      <CalendarDays size={14} color="var(--text-soft)" />
-                      {session.nom} {session.date_heure && `— ${session.date_heure}`} {session.statut && `(${session.statut})`}
-                    </p>
-                  ))
-                ) : (
-                  <p className="espace-vide">Les dates de tes prochains points collectifs apparaîtront ici dès qu'elles seront planifiées.</p>
-                )}
-              </section>
+              <Communaute dashboard={dashboard} />
             </>
           )}
 
@@ -3214,6 +3671,7 @@ function Portail() {
             <>
               <h2 className="accueil-section-titre">Profil</h2>
               <InstallerAppli />
+              <PartageProgression />
               <div className="portal-secondary-row">
                 <IdentiteCard identite={dashboard.identite} cohorte={null} sessions={[]} />
                 {dashboard.objectif_90j && (

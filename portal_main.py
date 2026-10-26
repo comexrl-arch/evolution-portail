@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from backend.services import cockpit_service
 from backend.services import docuseal_service
-from backend.services import brouillon_service, entrainement_service, idris_service
+from backend.services import bibliotheque_service, brouillon_service, entrainement_service, fidelite_service, idris_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -980,6 +980,113 @@ def portal_bilan_j90(authorization: str = Header(default="")):
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_bilan_j90", error)
+
+
+# --- Lot 4 : bibliotheque, accueil guide, partage, avis J90, recap hebdo ---
+
+class PersonnaliserModeleRequest(BaseModel):
+    modele: str
+    metier: str | None = None
+
+
+class ObjectifRequest(BaseModel):
+    objectif: str
+
+
+class AvisJ90Request(BaseModel):
+    note: int
+    avis: str
+    accord_publication: bool = False
+    signature: str = ""
+
+
+@app.get("/portal/bibliotheque")
+def portal_bibliotheque(metier: str | None = None, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+    return bibliotheque_service.bibliotheque(session["client_page_id"], dashboard, metier)
+
+
+@app.post("/portal/bibliotheque/personnaliser")
+def portal_bibliotheque_personnaliser(request: PersonnaliserModeleRequest, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+    return _appel_idris(
+        "portal_bibliotheque_personnaliser", bibliotheque_service.personnaliser, session["client_page_id"], dashboard, request.modele, request.metier
+    )
+
+
+@app.post("/portal/objectif")
+def portal_objectif(request: ObjectifRequest, authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    try:
+        return {"objectif_90j": fidelite_service.enregistrer_objectif(session["client_page_id"], request.objectif)}
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Écris ton objectif en une ou deux phrases.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_objectif", error)
+
+
+@app.post("/portal/partage")
+def portal_creer_partage(authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    try:
+        return fidelite_service.creer_lien_partage(session["client_page_id"])
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_partage", error)
+
+
+@app.get("/public/partage")
+def public_partage(jeton: str):
+    try:
+        client_page_id = fidelite_service.client_du_partage(jeton)
+
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Ce lien de partage n'est plus valable.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("public_partage", error)
+
+    try:
+        return fidelite_service.progression_publique(notion_service.get_client_dashboard(client_page_id))
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("public_partage", error)
+
+
+@app.post("/portal/avis-j90")
+def portal_avis_j90(request: AvisJ90Request, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    try:
+        fidelite_service.enregistrer_avis(
+            session["client_page_id"], dashboard, request.note, request.avis, request.accord_publication, request.signature
+        )
+
+    except LookupError:
+        raise HTTPException(status_code=403, detail="Ton avis s'ouvre avec ton bilan J90.")
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Avis invalide.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_avis_j90", error)
+
+    return {"status": "merci"}
+
+
+@app.get("/automation/recap-hebdo")
+def automation_recap_hebdo(authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        return {"recaps": fidelite_service.recaps_hebdo()}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_recap_hebdo", error)
 
 
 # --- Retours IA sur les fiches (workflow n8n + Gemini), meme cle technique. ---
