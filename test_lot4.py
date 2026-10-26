@@ -212,8 +212,11 @@ recaps = resultat["recaps"] if code == 200 else []
 check("seulement les clients en cours, avec email, non desactives, apres J7", [r["client_page_id"] for r in recaps] == ["c1"])
 recap = recaps[0] if recaps else {}
 check("3 chiffres de la derniere semaine", recap.get("chiffres") == {"semaine_du": J(7), "contacts": 12.0, "rdv": 3.0, "ventes": 1.0})
-check("texte pret a envoyer", "Contacts : 12" in recap.get("texte", "") and "Rendez-vous : 3" in recap.get("texte", "") and "Ventes : 1" in recap.get("texte", ""))
-check("phrase de secours sans Gemini", "2 semaines de bilan d'affilée" in recap.get("texte", ""))
+texte_recap = recap.get("texte", "")
+check("texte pret a envoyer, en phrases", "12 contacts, 3 rendez-vous et 1 vente." in texte_recap and "Contacts :" not in texte_recap)
+check("phrase de secours sans Gemini", "Ça fait 2 semaines que tu tiens ton bilan" in texte_recap)
+check("prochaine fiche lisible", "la fiche 10, « Ma phrase »" in texte_recap and "MA PHRASE" not in texte_recap)
+check("signe RL-eVolution, sans tiret long", texte_recap.endswith("Rony\nRL-eVolution") and "—" not in texte_recap and "RL-Evolution" not in texte_recap)
 check("prochaine etape = premiere fiche non terminee", recap.get("prochaine_etape") == "10. MA PHRASE")
 check("objet", recap.get("objet") == "Marie, ta semaine en 3 chiffres")
 check("mauvaise cle -> 401", code_sans_cle == 401)
@@ -223,7 +226,8 @@ with patch.dict("os.environ", {"GEMINI_API_KEY": "test"}), \
      patch.object(ns, "_historique_bilans", return_value=[]), \
      patch.object(ia_service, "generer") as generer:
     recap = fidelite.recap_du_client("c1", "a@test.com")
-check("sans bilan : invitation a en remplir un, sans IA", recap["chiffres"] is None and "Pas encore de bilan" in recap["texte"] and not generer.called)
+check("sans bilan : invitation a en remplir un, sans IA", recap["chiffres"] is None and "pas encore vu passer ton bilan" in recap["texte"] and not generer.called)
+check("sans bilan : pas de phrase d'Idris en double", "on reprend le rythme" not in recap["texte"] and recap["objet"] == "Marie, on fait le point sur ta semaine ?")
 
 with patch.dict("os.environ", {"GEMINI_API_KEY": "test"}), \
      patch.object(ns, "get_client_dashboard", return_value=DASH_RECAP), \

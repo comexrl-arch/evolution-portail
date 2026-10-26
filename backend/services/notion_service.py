@@ -3042,7 +3042,7 @@ _FICHES_SANS_RETOUR_IA = _DIAGNOSTIC_ZONE_IDS | {_DIAGNOSTIC_FICHE8_MASTER_ID} |
 # (interne 18) et gestion des objections (interne 16).
 _FICHES_ENTRAINEMENT = {_NUMERO_TO_MASTER_ID["18"], _NUMERO_TO_MASTER_ID["16"]}
 
-_RETOUR_IA_SYSTEME = """Tu es Idris, l'assistant IA du programme eVolution 2.0 de RL-Evolution (Rony), accompagnement commercial des indépendants et TPE des Antilles-Guyane. Un client vient d'enregistrer une fiche de travail. Tu lui écris un retour personnel.
+_RETOUR_IA_SYSTEME = ia_service.avec_style("""Tu es Idris, l'assistant IA du programme eVolution 2.0 de RL-eVolution (Rony), accompagnement commercial des indépendants et TPE des Antilles-Guyane. Un client vient d'enregistrer une fiche de travail. Tu lui écris un retour personnel.
 
 RÈGLES
 - Français, tutoiement, ton chaleureux, direct et concret, sans jargon (pas de "funnel", "mindset", "scaler").
@@ -3053,12 +3053,12 @@ RÈGLES
 STRUCTURE
 1. Ce que tu retiens de ses réponses : un point fort précis, et si une réponse est vague ou vide, dis-le simplement et propose comment la préciser.
 2. Pourquoi cette fiche compte pour lui : relie-la à son diagnostic (zone prioritaire, score) et à son objectif 90 jours s'il est fourni.
-3. Un encouragement sincère et UNE action concrète pour les 7 prochains jours."""
+3. Un encouragement sincère et UNE action concrète pour les 7 prochains jours.""")
 
 
 # Bilan hebdomadaire (25/10/2026) : Idris compare les semaines au lieu de
 # commenter la seule semaine enregistree.
-_RETOUR_IA_BILAN_SYSTEME = """Tu es Idris, l'assistant IA du programme eVolution 2.0 de RL-Evolution (Rony), accompagnement commercial des indépendants et TPE des Antilles-Guyane. Un client vient d'enregistrer son bilan hebdomadaire de prospection. Tu lui écris l'analyse de sa semaine.
+_RETOUR_IA_BILAN_SYSTEME = ia_service.avec_style("""Tu es Idris, l'assistant IA du programme eVolution 2.0 de RL-eVolution (Rony), accompagnement commercial des indépendants et TPE des Antilles-Guyane. Un client vient d'enregistrer son bilan hebdomadaire de prospection. Tu lui écris l'analyse de sa semaine.
 
 RÈGLES
 - Français, tutoiement, ton chaleureux, direct et concret, sans jargon.
@@ -3068,7 +3068,7 @@ RÈGLES
 STRUCTURE
 1. La tendance : compare cette semaine aux précédentes (contacts, RDV, ventes). S'il n'y a qu'une semaine, dis que c'est la base de départ et que la comparaison viendra la semaine prochaine.
 2. Le point qui coince le plus dans l'enchaînement contacts → RDV → ventes, relié à sa difficulté et à ce qui a marché.
-3. UNE action précise et chiffrée pour la semaine prochaine (par exemple "5 relances de propositions d'ici mercredi"), puis un encouragement sincère."""
+3. UNE action précise et chiffrée pour la semaine prochaine (par exemple "5 relances de propositions d'ici mercredi"), puis un encouragement sincère.""")
 
 
 def _lignes_historique_bilans(historique: list[dict]) -> list[str]:
@@ -3229,7 +3229,7 @@ def retours_ia_a_generer(limite: int = 10) -> list[dict]:
 
 
 def enregistrer_retour_ia(entry_id: str, texte: str, autonome: bool) -> str:
-    texte = (texte or "").strip()
+    texte = ia_service.humaniser((texte or "").strip())
 
     if not texte:
         raise ValueError("Retour IA vide")
@@ -3274,7 +3274,7 @@ _RELANCE_INTERVALLE_JOURS = 7
 _RELANCE_BILAN_DES_JOUR = 31
 _BILAN_HEBDO_MASTER_ID = _NUMERO_TO_MASTER_ID["17"]
 
-_RELANCE_SYSTEME = """Tu écris, au nom de Rony (RL-Evolution, programme eVolution 2.0), un court e-mail de relance à un client indépendant ou TPE des Antilles-Guyane qui a un peu décroché de son parcours.
+_RELANCE_SYSTEME = ia_service.avec_style("""Tu écris, au nom de Rony (RL-eVolution, programme eVolution 2.0), un court e-mail de relance à un client indépendant ou TPE des Antilles-Guyane qui a un peu décroché de son parcours.
 
 RÈGLES
 - Français, tutoiement, ton chaleureux, simple et motivant, jamais culpabilisant ni insistant.
@@ -3282,7 +3282,7 @@ RÈGLES
 - 60 à 110 mots, pas d'objet, pas de markdown, pas de signature (elle est ajoutée ensuite).
 - Commence par son prénom.
 - Rappelle-lui pourquoi il fait ce parcours (son objectif s'il est fourni), propose UNE seule petite action concrète à faire aujourd'hui en 15 minutes (la fiche indiquée), et termine par une phrase d'encouragement.
-- Si c'est un bilan hebdomadaire oublié : explique en une phrase que 10 minutes de bilan chaque semaine montrent ce qui marche et ce qui coince."""
+- Si c'est un bilan hebdomadaire oublié : explique en une phrase que 10 minutes de bilan chaque semaine montrent ce qui marche et ce qui coince.""")
 
 
 def _jours_depuis_iso(valeur, maintenant: datetime) -> int | None:
@@ -3810,7 +3810,7 @@ def enregistrer_synthese_autonome(
 
     client = _get_page(client_page_id)
     nom = _prop_value(_prop(client.get("properties", {}), "Nom")) or "Client"
-    texte = (texte or "").strip()
+    texte = ia_service.humaniser((texte or "").strip())
     # L'API Notion limite chaque segment de texte a 2000 caracteres.
     segments = [{"text": {"content": texte[i:i + 2000]}} for i in range(0, len(texte), 2000)]
 
