@@ -114,6 +114,15 @@ cles = ns._donnees_vers_cles({"Votre activité / Votre métier :": "Plombier", "
 check("ancienne reponse 'vous' retrouvee", cles.get("a") == "Plombier" and cles.get("b") == "TPE")
 check("etat des cases intact", "__checklist__" in cles)
 
+CH = [{"cle": "p", "libelle": "Nom du prospect"}, {"cle": "m", "libelle": "Montant de l'offre"}, {"cle": "d", "libelle": "Date d'envoi"}]
+cles = ns._donnees_vers_cles({"Nom du Prospect": "Alice", "Montant Offre": 900, "Date Envoi": "2026-10-20"}, CH)
+check("anciens libelles du closing retrouves", cles == {"p": "Alice", "m": 900, "d": "2026-10-20"})
+check(
+    "guillemets francais : meme debut de libelle",
+    ns._debut_libelle("Objection : « C'est trop cher »").startswith("objection : c'est trop cher")
+    and ns._debut_libelle('Objection : "C\'est trop cher"').startswith("objection : c'est trop cher"),
+)
+
 print("Horodatage de mise a jour")
 blocs = [{"last_edited_time": "2026-10-20T10:00:00.000Z"}, {"last_edited_time": "2026-10-22T11:31:00.000Z"}]
 with patch.object(ns, "_list_children", return_value=blocs):

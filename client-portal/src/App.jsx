@@ -112,7 +112,7 @@ function FieldInput({ champ, value, onChange }) {
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="" disabled>
-          Choisir...
+          Choisir…
         </option>
         {(champ.options || []).map((option) => (
           <option key={option} value={option}>
@@ -149,7 +149,7 @@ function FieldInput({ champ, value, onChange }) {
     <textarea
       className="field-input"
       rows={3}
-      placeholder="Écris ici..."
+      placeholder="Écris ici…"
       value={value ?? ''}
       onChange={(event) => onChange(event.target.value)}
     />
@@ -831,7 +831,7 @@ function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error }
         {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
 
         <button type="submit" disabled={saving} className="fiche-bouton disabled:opacity-60">
-          {saving ? 'Enregistrement...' : 'Enregistrer ma semaine'}
+          {saving ? 'Enregistrement…' : 'Enregistrer ma semaine'}
         </button>
       </form>
 
@@ -1438,7 +1438,7 @@ function BrouillonIA({ ficheId, champs, formValues, onRemplir }) {
 
       <button type="button" className="brouillon-ia-bouton" onClick={proposer} disabled={attente}>
         {attente ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-        {attente ? 'Idris rédige...' : 'Demander un brouillon à Idris'}
+        {attente ? 'Idris rédige…' : 'Demander un brouillon à Idris'}
       </button>
 
       {message && <p className="brouillon-ia-message">{message}</p>}
@@ -2302,8 +2302,8 @@ function InstallerAppli() {
         </button>
       ) : (
         <ul className="installer-etapes">
-          <li><strong>iPhone (Safari) :</strong> touche le bouton Partager, puis « Sur l'écran d'accueil ».</li>
-          <li><strong>Android (Chrome) :</strong> touche le menu ⋮, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».</li>
+          <li><strong>iPhone (Safari) :</strong> touche le bouton Partager, puis « Sur l'écran d'accueil ».</li>
+          <li><strong>Android (Chrome) :</strong> touche le menu ⋮, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».</li>
         </ul>
       )}
     </section>
@@ -2613,7 +2613,7 @@ function PartageProgression() {
   return (
     <section className="panel partage">
       <p className="panel-eyebrow"><Share2 size={14} /> Partager ma progression</p>
-      <p className="panel-lead">Montre ton avancement à ton banquier, ton associé ou un proche : ton score, tes chiffres et tes fiches validées, en lecture seule.</p>
+      <p className="panel-lead">Voici un lien de partage pour montrer ton avancement à ton banquier, ton associé ou un proche : ton score, tes chiffres et tes fiches validées, en lecture seule.</p>
       <p className="communaute-texte">Tes réponses aux fiches et tes coordonnées ne sont jamais montrées. Le lien reste valable 30 jours.</p>
       {lien ? (
         <div className="partage-lien">
@@ -2910,7 +2910,7 @@ function IdentiteCard({ identite, cohorte, sessions }) {
   const infos = [
     { icon: Mail, valeur: identite.email },
     { icon: Phone, valeur: identite.telephone || identite.contact },
-    { icon: MapPin, valeur: [identite.secteur, identite.territoire].filter(Boolean).join(' — ') },
+    { icon: MapPin, valeur: [identite.secteur, identite.territoire].filter(Boolean).join(' · ') },
   ].filter((info) => info.valeur)
 
   return (
@@ -2942,7 +2942,7 @@ function IdentiteCard({ identite, cohorte, sessions }) {
           </p>
           {sessions.map((session) => (
             <p key={session.id} className="text-sm" style={{ color: 'var(--text-dimmed)' }}>
-              {session.nom} {session.date_heure && `— ${session.date_heure}`} {session.statut && `(${session.statut})`}
+              {session.nom} {session.date_heure && `· ${session.date_heure}`} {session.statut && `(${session.statut})`}
             </p>
           ))}
         </div>
@@ -3633,7 +3633,7 @@ function Portail() {
 
       const data = await response.json().catch(() => ({}))
 
-      if (!response.ok) throw new Error(data.detail || 'Une erreur est survenue, réessayez.')
+      if (!response.ok) throw new Error(data.detail || 'Une erreur est survenue, réessaie.')
 
       openSession(data.session_token)
     } catch (err) {
@@ -3663,7 +3663,7 @@ function Portail() {
 
       const data = await response.json().catch(() => ({}))
 
-      if (!response.ok) throw new Error(data.detail || 'Une erreur est survenue, réessayez.')
+      if (!response.ok) throw new Error(data.detail || 'Une erreur est survenue, réessaie.')
 
       openSession(data.session_token)
     } catch (err) {
@@ -3687,7 +3687,7 @@ function Portail() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
-        throw new Error(data.detail || "Une erreur est survenue, réessayez.")
+        throw new Error(data.detail || "Une erreur est survenue, réessaie.")
       }
 
       setScreen('check-email')
@@ -4302,7 +4302,7 @@ function Portail() {
                   <header className="fiche-section-entete">
                     <Rocket size={18} className="fiche-section-icone" />
                     <h2 className="fiche-section-titre">
-                      {ficheData.mode === 'recurrent' ? 'Ajouter une entrée' : 'Vos réponses'}
+                      {ficheData.mode === 'recurrent' ? 'Ajouter une entrée' : 'Tes réponses'}
                     </h2>
                   </header>
 
@@ -4330,7 +4330,7 @@ function Portail() {
                     disabled={saving}
                     className="fiche-bouton disabled:opacity-60"
                   >
-                    {saving ? 'Enregistrement...' : 'Enregistrer'}
+                    {saving ? 'Enregistrement…' : 'Enregistrer'}
                   </button>
                 </form>
                 )}
@@ -4358,7 +4358,7 @@ function Portail() {
                 style={{ background: 'var(--green)', color: 'var(--bg-dark)' }}
               >
                 <CheckCircle2 size={18} />
-                {validating ? 'Validation...' : 'Valider et continuer'}
+                {validating ? 'Validation…' : 'Valider et continuer'}
               </button>
             </div>
           </>

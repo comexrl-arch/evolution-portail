@@ -63,7 +63,7 @@ CLE_COACH = "cle-coach-factice"
 SECRET_DOCUSEAL = "secret-docuseal-factice"
 PAGE_EXISTANTE = "99999999-8888-7777-6666-555555555555"
 REF = portal_main._reference_docuseal(EMAIL)
-GENERIQUE_503 = "Le service est momentanément indisponible. Réessayez dans quelques minutes."
+GENERIQUE_503 = "Le service est momentanément indisponible. Réessaie dans quelques minutes."
 DETAIL_409 = "Un client existe déjà avec cet email."
 TEMPLATE_COACHING = next(k for k, v in portal_main._DOCUSEAL_PARCOURS.items() if v == "Coaching 90 jours")
 
@@ -365,7 +365,7 @@ faux = FauxNotion(existant=True)
 with environnement(faux, routeur()) as faux_post:
     statut, corps, inattendue = onboarder(cle="mauvaise-cle-factice")
 
-check("[4] 401 et message fixe", (statut, corps, inattendue) == (401, {"detail": "Code d'acces invalide."}, None))
+check("[4] 401 et message fixe", (statut, corps, inattendue) == (401, {"detail": "Code d'accès invalide."}, None))
 check("[4] aucune recherche Notion ni appel reseau", faux.requetes == 0 and faux_post.call_count == 0)
 
 
