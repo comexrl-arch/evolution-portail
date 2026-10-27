@@ -58,7 +58,7 @@ URL_NOTION = f"https://api.notion.com/v1/pages/{CLIENT_ID}"
 URL_SYSTEME = f"https://api.systeme.io/api/contacts?limit=50&email={EMAIL}"
 JETON = "jeton-factice-xyz789"
 PAYLOAD = '{"cle": "valeur-secrete-payload", "email": "' + EMAIL + '"}'
-GENERIQUE_503 = "Le service est momentanément indisponible. Réessayez dans quelques minutes."
+GENERIQUE_503 = "Le service est momentanément indisponible. Réessaie dans quelques minutes."
 GENERIQUE_404 = "Client introuvable."
 
 MSG_NOTION = (
@@ -494,9 +494,9 @@ print("=" * 80)
 
 with environnement():
     code, detail, sortie = appeler(portal_main.coach_diagnostics, x_coach_key="mauvaise-cle")
-    check("[H1] mauvaise cle coach : 401 « Code d'acces invalide. »", (code, detail) == (401, "Code d'acces invalide."))
+    check("[H1] mauvaise cle coach : 401 « Code d'accès invalide. »", (code, detail) == (401, "Code d'accès invalide."))
     code, detail, sortie = appeler(portal_main.coach_diagnostic_bundle, ID_SAISI, authorization="Bearer mauvaise-cle")
-    check("[H2] mauvaise cle diagnostic : 401 « Cle API invalide. »", (code, detail) == (401, "Cle API invalide."))
+    check("[H2] mauvaise cle diagnostic : 401 « Clé API invalide. »", (code, detail) == (401, "Clé API invalide."))
 
 with environnement(), patch.dict(os.environ, {"DOCUSEAL_WEBHOOK_SECRET": "secret-docuseal-factice"}):
     code, detail, sortie = appeler(portal_main.webhook_docuseal, {}, BackgroundTasks(), "mauvais-secret")

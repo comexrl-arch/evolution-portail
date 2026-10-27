@@ -127,7 +127,7 @@ class PortalLoginRequest(BaseModel):
     email: str
 
 
-_MESSAGE_LIEN_INDISPONIBLE = "Le service est momentanément indisponible. Réessayez dans quelques minutes."
+_MESSAGE_LIEN_INDISPONIBLE = "Le service est momentanément indisponible. Réessaie dans quelques minutes."
 
 
 def _journaliser_echec_lien(contexte: str, error: Exception, email: str, nom: str = "") -> None:
@@ -237,7 +237,7 @@ def _envoyer_lien_en_arriere_plan(email: str, client_page_id: str, client_nom: s
 def portal_request_link(request: PortalLoginRequest, background_tasks: BackgroundTasks):
     generic_response = {
         "status": "sent",
-        "message": "Si cet email est enregistre, un lien d'acces a ete envoye.",
+        "message": "Si cet email est enregistré, un lien d'accès a été envoyé.",
     }
 
     # Garde evaluee AVANT la recherche : meme decision pour tout email, connu ou
@@ -625,7 +625,7 @@ def portal_update_kpi(kpi_id: str, request: PortalKpiRequest, authorization: str
             continue
 
         if isinstance(valeur, bool) or not isinstance(valeur, (int, float)) or not math.isfinite(valeur) or valeur < 0:
-            raise HTTPException(status_code=400, detail="Les KPI doivent etre des nombres positifs.")
+            raise HTTPException(status_code=400, detail="Tes chiffres doivent être des nombres positifs.")
 
     try:
         dashboard = notion_service.get_client_dashboard(session["client_page_id"])
@@ -658,7 +658,7 @@ def _require_coach_key(x_coach_key: str) -> None:
 
     # Comparaison a temps constant : meme resultat qu'une egalite simple.
     if not hmac.compare_digest(x_coach_key.encode("utf-8"), expected.encode("utf-8")):
-        raise HTTPException(status_code=401, detail="Code d'acces invalide.")
+        raise HTTPException(status_code=401, detail="Code d'accès invalide.")
 
 
 def _require_diagnostic_api_key(authorization: str) -> None:
@@ -674,7 +674,7 @@ def _require_diagnostic_api_key(authorization: str) -> None:
     token = authorization.removeprefix("Bearer ").strip() if authorization else ""
 
     if not token or token != expected:
-        raise HTTPException(status_code=401, detail="Cle API invalide.")
+        raise HTTPException(status_code=401, detail="Clé API invalide.")
 
 
 @app.get("/coach/diagnostics")
@@ -831,7 +831,7 @@ def automation_enregistrer_synthese(request: SyntheseAutonomeRequest, authorizat
         )
 
     except ValueError:
-        raise HTTPException(status_code=422, detail="Axe ou statut de synthese invalide.")
+        raise HTTPException(status_code=422, detail="Axe ou statut de synthèse invalide.")
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("automation_enregistrer_synthese", error)

@@ -393,7 +393,7 @@ with environnement(secret=None), patch.object(requests, "post", side_effect=gard
     t = texte(nouveaux)
     check("503 renvoye", code == 503)
     check("detail = message generique, sans nom de variable",
-          detail == "Le service est momentanément indisponible. Réessayez dans quelques minutes."
+          detail == "Le service est momentanément indisponible. Réessaie dans quelques minutes."
           and "DOCUSEAL" not in str(detail))
     check("un log error 'secret serveur non configure'",
           any(r.levelname == "ERROR" and "non configure" in r.getMessage() for r in nouveaux))

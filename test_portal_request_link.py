@@ -56,8 +56,8 @@ HOTE = "n8n.exemple.test"
 URL_N8N = f"https://{HOTE}/webhook/chemin-prive"
 URL_NOTION = "https://api.notion.com/v1/data_sources/xyz/query"
 CLIENT_ID = "11111111-2222-3333-4444-555555555555"
-GENERIQUE = {"status": "sent", "message": "Si cet email est enregistre, un lien d'acces a ete envoye."}
-MESSAGE_503 = "Le service est momentanément indisponible. Réessayez dans quelques minutes."
+GENERIQUE = {"status": "sent", "message": "Si cet email est enregistré, un lien d'accès a été envoyé."}
+MESSAGE_503 = "Le service est momentanément indisponible. Réessaie dans quelques minutes."
 PAGE_CLIENT = {"id": CLIENT_ID, "properties": {"Nom": {"type": "title", "title": [{"plain_text": NOM}]}}}
 
 

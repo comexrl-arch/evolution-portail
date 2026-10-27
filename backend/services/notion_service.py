@@ -476,9 +476,9 @@ _ATELIER_FICHE0_TEXTE = [
     "Bonjour et bienvenue dans ton espace de travail personnel pour les 4 semaines de l'atelier.",
     "Cet espace te sert à préparer chaque session et à garder ce que tu produis : tes réponses, ton script, tes prospects, ton plan de la semaine.",
     "### 📖 COMMENT ÇA MARCHE ?",
-    "- **Avance pas à pas :** Tu avances fiche par fiche, dans l'ordre proposé.",
-    "- **Déblocage progressif :** Chaque fiche validée débloque la suivante, et les fiches de chaque session s'ouvrent le jour de la session.",
-    "- **Ton diagnostic d'abord :** Avant la session 1, tu remplis ton diagnostic commercial. Ton coach le valide : c'est ce qui ouvre la suite de ton parcours.",
+    "- **Avance pas à pas :** tu avances fiche par fiche, dans l'ordre proposé.",
+    "- **Déblocage progressif :** chaque fiche validée débloque la suivante, et les fiches de chaque session s'ouvrent le jour de la session.",
+    "- **Ton diagnostic d'abord :** avant la session 1, tu remplis ton diagnostic commercial. Ton coach le valide : c'est ce qui ouvre la suite de ton parcours.",
     "### 🗺️ TON PARCOURS",
     "- **Avant la session 1 :** ton point de départ et ton diagnostic commercial.",
     "- **Session 1 · Clarifier :** ton offre, ta cible, ta phrase de positionnement.",
@@ -487,7 +487,7 @@ _ATELIER_FICHE0_TEXTE = [
     "- **Session 4 · Planifier :** ton plan de la semaine type.",
     "- **En fin d'atelier :** un entretien individuel de 20 minutes avec ton coach.",
     "### ⚡ LE SEUL GESTE À RETENIR",
-    "Une fois que tu as lu ou complété une fiche, va tout en bas de la page et clique sur le bouton : 👉 **\"Valider et continuer\"**.",
+    "Une fois que tu as lu ou complété une fiche, va tout en bas de la page et clique sur le bouton : 👉 **« Valider et continuer »**.",
     "La fiche suivante se débloque alors dans ton parcours.",
 ]
 _ATELIER_PERMANENTES = {_NUMERO_TO_MASTER_ID["14"], _NUMERO_TO_MASTER_ID["13"]}
@@ -522,9 +522,9 @@ _AUTONOME_FICHE0_TEXTE = [
     "# 👋 BIENVENUE DANS TON ESPACE eVOLUTION AUTONOME",
     "Bonjour et bienvenue dans ton espace de travail personnel. Tu suis ici la méthode complète du programme 90 jours, à ton rythme.",
     "### 📖 COMMENT ÇA MARCHE ?",
-    "- **Avance pas à pas :** Tu avances fiche par fiche, dans l'ordre proposé.",
-    "- **Déblocage progressif :** Chaque fiche validée débloque la suivante, et les étapes s'ouvrent au fil des jours (de J0 à J90).",
-    "- **Ton diagnostic d'abord :** Tu commences par ton diagnostic commercial. Ton résultat est calculé automatiquement et t'indique ta priorité des 30 prochains jours.",
+    "- **Avance pas à pas :** tu avances fiche par fiche, dans l'ordre proposé.",
+    "- **Déblocage progressif :** chaque fiche validée débloque la suivante, et les étapes s'ouvrent au fil des jours (de J0 à J90).",
+    "- **Ton diagnostic d'abord :** tu commences par ton diagnostic commercial. Ton résultat est calculé automatiquement et t'indique ta priorité des 30 prochains jours.",
     "### 🗺️ TON PARCOURS",
     "- **Démarrage :** ton point de départ et ton diagnostic.",
     "- **Clarifier :** ton offre, ta phrase de positionnement, ta cible, ton script d'approche.",
@@ -534,7 +534,7 @@ _AUTONOME_FICHE0_TEXTE = [
     "- **Une synthèse tous les 30 jours :** un point écrit sur ce que tu as fait, avec tes 3 actions pour le mois suivant.",
     "- **Un point collectif chaque mois avec Rony :** garde tes questions pour ce moment-là.",
     "### ⚡ LE SEUL GESTE À RETENIR",
-    "Une fois que tu as lu ou complété une fiche, va tout en bas de la page et clique sur le bouton : 👉 **\"Valider et continuer\"**.",
+    "Une fois que tu as lu ou complété une fiche, va tout en bas de la page et clique sur le bouton : 👉 **« Valider et continuer »**.",
     "La fiche suivante se débloque alors dans ton parcours.",
 ]
 
@@ -1670,12 +1670,17 @@ def _prefill_from_client(master_id: str, client_page_id: str, champs: list[dict]
 
 # Pre-remplissage entre fiches : (master source, debut du libelle source,
 # master destination, debut du libelle destination). Les libelles sont compares
-# en minuscules sur leur debut : robuste a de petites retouches dans Notion.
+# en minuscules sur leur debut, sans guillemets : robuste a de petites
+# retouches dans Notion ("C'est trop cher" -> « C'est trop cher »).
 _PREFILL_ENTRE_FICHES = [
     ("9", "quel est le problème urgent", "10", "quelle est sa plus grande frustration"),
     ("11", "ma phrase officielle", "15", "mon script personnalisé"),
-    ("11", "ma phrase officielle", "16", "objection : \"c'est trop cher\""),
+    ("11", "ma phrase officielle", "16", "objection : c'est trop cher"),
 ]
+
+
+def _debut_libelle(libelle: str) -> str:
+    return " ".join(re.sub(r"[\"«»“”]", " ", libelle).lower().split())
 
 
 def _prefill_entre_fiches(master_id: str, client_page_id: str, champs: list[dict]) -> dict:
@@ -1699,7 +1704,7 @@ def _prefill_entre_fiches(master_id: str, client_page_id: str, champs: list[dict
 
     for src_master, lsrc, dlib in regles:
         champ_dst = next(
-            (c for c in champs if c["libelle"].strip().lower().startswith(dlib)), None
+            (c for c in champs if _debut_libelle(c["libelle"]).startswith(dlib)), None
         )
         fiche_src = client_fiche_par_master.get(src_master)
 
@@ -1724,7 +1729,7 @@ def _prefill_entre_fiches(master_id: str, client_page_id: str, champs: list[dict
 
             src_champs, entrees = sources[src_master]
             champ_src = next(
-                (c for c in src_champs if c["libelle"].strip().lower().startswith(lsrc)), None
+                (c for c in src_champs if _debut_libelle(c["libelle"]).startswith(lsrc)), None
             )
 
             if champ_src and entrees:

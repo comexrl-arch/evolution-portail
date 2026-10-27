@@ -61,7 +61,7 @@ FICHE_SCHEMAS = {
         "nom": "2. CHECKLIST DE DÉMARRAGE",
         "mode": "unique",
         "champs": [
-            {"cle": "fiche_point_depart_complete", "libelle": "J'ai complété la fiche \"Mon point de départ\"", "type": "choix", "options": ["Oui", "Non"], "ordre": 1},
+            {"cle": "fiche_point_depart_complete", "libelle": "J'ai complété la fiche « Mon point de départ »", "type": "choix", "options": ["Oui", "Non"], "ordre": 1},
             {"cle": "rdv_coaching_planifie", "libelle": "Notre premier rendez-vous de coaching est planifié et confirmé dans mon agenda", "type": "choix", "options": ["Oui", "Non"], "ordre": 2},
             {"cle": "documents_deposes", "libelle": "J'ai déposé mes documents existants (plaquette, tarifs, ancienne page de vente, etc.)", "type": "choix", "options": ["Oui", "Non"], "ordre": 3},
         ],
@@ -84,7 +84,7 @@ FICHE_SCHEMAS = {
         "nom": "4. DIAGNOSTIC : ZONE 2 — LA VISIBILITÉ",
         "mode": "unique",
         "champs": [
-            {"cle": "offre_comprehensible_immediatement", "libelle": "Mes prospects comprennent immédiatement ce que je vends dès qu'ils voient mes profils (LinkedIn, WhatsApp Business, Site)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 1},
+            {"cle": "offre_comprehensible_immediatement", "libelle": "Mes prospects comprennent immédiatement ce que je vends dès qu'ils voient mes profils (LinkedIn, WhatsApp Business, site)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 1},
             {"cle": "publie_contenu_regulier", "libelle": "Je publie ou je communique régulièrement du contenu qui démontre mon expertise", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 2},
             {"cle": "recoit_demandes_spontanees", "libelle": "Je reçois régulièrement des demandes de contact de manière spontanée (bouche-à-oreille ou réseau)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 3},
             {"cle": "ou_clients_vous_trouvent", "libelle": "Où vos clients actuels vous trouvent-ils le plus souvent aujourd'hui ?", "type": "texte", "ordre": 4},
@@ -96,10 +96,10 @@ FICHE_SCHEMAS = {
         "nom": "5. DIAGNOSTIC : ZONE 3 — LA PROSPECTION",
         "mode": "unique",
         "champs": [
-            {"cle": "routine_prospection_reguliere", "libelle": "J'ai une routine de prospection régulière (ex: tous les jours ou toutes les semaines)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 1},
+            {"cle": "routine_prospection_reguliere", "libelle": "J'ai une routine de prospection régulière (ex. : tous les jours ou toutes les semaines)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 1},
             {"cle": "liste_prospects_a_jour", "libelle": "Je sais exactement qui contacter et j'ai une liste de prospects à jour", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 2},
-            {"cle": "aise_contact_inconnu", "libelle": "Je me sens à l'aise au moment de contacter un inconnu (WhatsApp, LinkedIn, Téléphone)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 3},
-            {"cle": "blocage_principal_prospection", "libelle": "Quel est votre plus grand blocage au moment de prospecter ? (Peur du rejet, manque de temps, ne pas savoir quoi dire...)", "type": "texte", "ordre": 4},
+            {"cle": "aise_contact_inconnu", "libelle": "Je me sens à l'aise au moment de contacter un inconnu (WhatsApp, LinkedIn, téléphone)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 3},
+            {"cle": "blocage_principal_prospection", "libelle": "Quel est votre plus grand blocage au moment de prospecter ? (peur du rejet, manque de temps, ne pas savoir quoi dire…)", "type": "texte", "ordre": 4},
         ],
     },
 
@@ -109,7 +109,7 @@ FICHE_SCHEMAS = {
         "mode": "unique",
         "champs": [
             {"cle": "trame_claire_rdv_commerciaux", "libelle": "J'ai une trame claire et structurée que je suis durant mes rendez-vous commerciaux", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 1},
-            {"cle": "sait_repondre_objections", "libelle": "Je sais comment répondre aux objections courantes (ex: \"C'est trop cher\")", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 2},
+            {"cle": "sait_repondre_objections", "libelle": "Je sais comment répondre aux objections courantes (ex. : « C'est trop cher »)", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 2},
             {"cle": "propose_offre_claire_ferme", "libelle": "Je formule une proposition claire et ferme à la fin de chaque rendez-vous", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 3},
             {"cle": "taux_signature_sur_10_rdv", "libelle": "Sur 10 rendez-vous commerciaux réalisés, combien de clients signez-vous en moyenne aujourd'hui ?", "type": "nombre", "ordre": 4},
         ],
@@ -124,7 +124,7 @@ FICHE_SCHEMAS = {
         "nom": "7. DIAGNOSTIC : ZONE 5 — LE SUIVI COMMERCIAL",
         "mode": "unique",
         "champs": [
-            {"cle": "relance_prospects_en_reflexion", "libelle": "Je relance systématiquement les prospects qui m'ont dit \"Je vais réfléchir\"", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 1},
+            {"cle": "relance_prospects_en_reflexion", "libelle": "Je relance systématiquement les prospects qui m'ont dit « Je vais réfléchir »", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 1},
             {"cle": "suit_chiffres_vente_chaque_semaine", "libelle": "Je note et je suis mes chiffres de vente chaque semaine", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 2},
             {"cle": "connait_ca_previsionnel_30j", "libelle": "Je connais mon chiffre d'affaires prévisionnel pour les 30 prochains jours", "type": "choix", "options": ["Oui", "Plutôt", "Non"], "ordre": 3},
         ],
@@ -153,7 +153,7 @@ FICHE_SCHEMAS = {
         "mode": "unique",
         "champs": [
             {"cle": "nom_offre", "libelle": "Quel est le nom de votre offre ou service principal ?", "type": "texte", "ordre": 1},
-            {"cle": "tarif_format_offre", "libelle": "Quel est son tarif et son format ? (ex: accompagnement de 3 mois, forfait, taux horaire...)", "type": "texte", "ordre": 2},
+            {"cle": "tarif_format_offre", "libelle": "Quel est son tarif et son format ? (ex. : accompagnement de 3 mois, forfait, taux horaire…)", "type": "texte", "ordre": 2},
             {"cle": "probleme_resolu", "libelle": "Quel est le problème urgent et douloureux que vous résolvez pour votre client ?", "type": "texte", "ordre": 3},
             {"cle": "resultat_concret_client", "libelle": "Quel est le résultat concret et mesurable que votre client obtient grâce à vous ?", "type": "texte", "ordre": 4},
         ],
@@ -164,7 +164,7 @@ FICHE_SCHEMAS = {
         "nom": "12. MA CIBLE PRIORITAIRE",
         "mode": "unique",
         "champs": [
-            {"cle": "portrait_client_ideal", "libelle": "Qui est-il précisément ? (Secteur d'activité, taille d'entreprise, rôle de votre interlocuteur...)", "type": "texte", "ordre": 1},
+            {"cle": "portrait_client_ideal", "libelle": "Qui est-il précisément ? (secteur d'activité, taille d'entreprise, rôle de votre interlocuteur…)", "type": "texte", "ordre": 1},
             {"cle": "frustration_principale_client", "libelle": "Quelle est sa plus grande frustration au quotidien ?", "type": "texte", "ordre": 2},
             {"cle": "urgence_probleme_maintenant", "libelle": "Pourquoi a-t-il besoin de résoudre ce problème maintenant (urgence) ?", "type": "texte", "ordre": 3},
             {"cle": "budget_disponible", "libelle": "Dispose-t-il du budget nécessaire pour s'offrir vos services ?", "type": "choix", "options": ["Oui", "Probablement", "Non (À retravailler avec le coach)"], "ordre": 4},
@@ -177,8 +177,8 @@ FICHE_SCHEMAS = {
         "mode": "unique",
         "champs": [
             {"cle": "phrase_positionnement_officielle", "libelle": "Ma phrase officielle (J'aide [cible] à obtenir [résultat] sans [frustration] grâce à [méthode])", "type": "texte", "ordre": 1},
-            {"cle": "presentation_flash_orale", "libelle": "Ma présentation flash (orale - 10 secondes)", "type": "texte", "ordre": 2},
-            {"cle": "bio_profil_ecrite", "libelle": "Ma bio de profil (écrite - LinkedIn, WhatsApp, Site)", "type": "texte", "ordre": 3},
+            {"cle": "presentation_flash_orale", "libelle": "Ma présentation flash (à l'oral, 10 secondes)", "type": "texte", "ordre": 2},
+            {"cle": "bio_profil_ecrite", "libelle": "Ma bio de profil (à l'écrit : LinkedIn, WhatsApp, site)", "type": "texte", "ordre": 3},
         ],
     },
 
@@ -187,8 +187,8 @@ FICHE_SCHEMAS = {
         "nom": "13. VALIDATION TERRAIN DE MON POSITIONNEMENT",
         "mode": "unique",
         "champs": [
-            {"cle": "retour_personne_1", "libelle": "Retour Personne 1 : est-ce clair pour elle ? Qu'a-t-elle compris ?", "type": "texte", "ordre": 1},
-            {"cle": "retour_personne_2", "libelle": "Retour Personne 2", "type": "texte", "ordre": 2},
+            {"cle": "retour_personne_1", "libelle": "Retour personne 1 : est-ce clair pour elle ? Qu'a-t-elle compris ?", "type": "texte", "ordre": 1},
+            {"cle": "retour_personne_2", "libelle": "Retour personne 2", "type": "texte", "ordre": 2},
             {"cle": "decision_validation", "libelle": "Décision de validation de la phrase de positionnement", "type": "choix", "options": ["Ma phrase est claire, les gens comprennent immédiatement ce que je vends", "Des ajustements sont nécessaires (à voir lors de la prochaine séance de coaching)"], "ordre": 3},
         ],
     },
@@ -204,10 +204,10 @@ FICHE_SCHEMAS = {
         "mode": "recurrent",
         "champs": [
             {"cle": "semaine_du", "libelle": "Semaine du (identifiant de l'entrée)", "type": "date", "court": "Semaine du", "ordre": 1},
-            {"cle": "nb_prospects_a_contacter", "libelle": "Cette semaine, je vais contacter ... nouveaux prospects", "type": "nombre", "court": "Prospects visés", "ordre": 2},
+            {"cle": "nb_prospects_a_contacter", "libelle": "Cette semaine, je vais contacter … nouveaux prospects", "type": "nombre", "court": "Prospects visés", "ordre": 2},
             {"cle": "canal_principal", "libelle": "Le canal de contact principal", "type": "choix", "options": ["Téléphone", "WhatsApp", "LinkedIn", "Email", "Physique (terrain)"], "court": "Canal", "ordre": 3},
             {"cle": "segment_cible_priorite", "libelle": "Le segment ciblé en priorité", "type": "texte", "court": "Segment", "ordre": 4},
-            {"cle": "creneau_prospection", "libelle": "Créneau bloqué dans mon agenda pour prospecter (ex: Mardi et Jeudi de 9h à 11h)", "type": "texte", "court": "Créneau", "ordre": 5},
+            {"cle": "creneau_prospection", "libelle": "Créneau bloqué dans mon agenda pour prospecter (ex. : mardi et jeudi de 9 h à 11 h)", "type": "texte", "court": "Créneau", "ordre": 5},
         ],
     },
 
@@ -217,10 +217,10 @@ FICHE_SCHEMAS = {
         "mode": "recurrent",
         "champs": [
             {"cle": "date_contact", "libelle": "Date", "type": "date", "ordre": 1},
-            {"cle": "nom_prospect", "libelle": "Nom du Prospect", "type": "texte", "ordre": 2},
+            {"cle": "nom_prospect", "libelle": "Nom du prospect", "type": "texte", "ordre": 2},
             {"cle": "canal", "libelle": "Canal", "type": "texte", "ordre": 3},
             {"cle": "statut", "libelle": "Statut", "type": "choix", "options": ["Relance", "RdV", "Non"], "ordre": 4},
-            {"cle": "prochaine_action", "libelle": "Prochaine Action", "type": "texte", "ordre": 5},
+            {"cle": "prochaine_action", "libelle": "Prochaine action", "type": "texte", "ordre": 5},
         ],
     },
 
@@ -238,9 +238,9 @@ FICHE_SCHEMAS = {
         "nom": "18. GESTION DES OBJECTIONS",
         "mode": "unique",
         "champs": [
-            {"cle": "reponse_objection_trop_cher", "libelle": "Objection \"C'est trop cher\" : ma réponse", "type": "texte", "ordre": 1},
-            {"cle": "reponse_objection_pas_le_temps", "libelle": "Objection \"Je n'ai pas le temps en ce moment\" : ma réponse", "type": "texte", "ordre": 2},
-            {"cle": "reponse_objection_je_vais_reflechir", "libelle": "Objection \"Je vais réfléchir\" : ma réponse", "type": "texte", "ordre": 3},
+            {"cle": "reponse_objection_trop_cher", "libelle": "Objection « C'est trop cher » : ma réponse", "type": "texte", "ordre": 1},
+            {"cle": "reponse_objection_pas_le_temps", "libelle": "Objection « Je n'ai pas le temps en ce moment » : ma réponse", "type": "texte", "ordre": 2},
+            {"cle": "reponse_objection_je_vais_reflechir", "libelle": "Objection « Je vais réfléchir » : ma réponse", "type": "texte", "ordre": 3},
         ],
     },
 
@@ -282,10 +282,10 @@ FICHE_SCHEMAS = {
         "nom": "19. TABLEAU DE SUIVI DE CLOSING",
         "mode": "recurrent",
         "champs": [
-            {"cle": "nom_prospect", "libelle": "Nom du Prospect", "type": "texte", "ordre": 1},
-            {"cle": "montant_offre", "libelle": "Montant Offre", "type": "nombre", "ordre": 2},
-            {"cle": "date_envoi", "libelle": "Date Envoi", "type": "date", "ordre": 3},
-            {"cle": "relance_prevue", "libelle": "Relance Prévue", "type": "date", "ordre": 4},
+            {"cle": "nom_prospect", "libelle": "Nom du prospect", "type": "texte", "ordre": 1},
+            {"cle": "montant_offre", "libelle": "Montant de l'offre", "type": "nombre", "ordre": 2},
+            {"cle": "date_envoi", "libelle": "Date d'envoi", "type": "date", "ordre": 3},
+            {"cle": "relance_prevue", "libelle": "Relance prévue", "type": "date", "ordre": 4},
             {"cle": "statut", "libelle": "Statut", "type": "choix", "options": ["Gagné", "Perdu", "En cours"], "ordre": 5},
         ],
     },
@@ -295,8 +295,8 @@ FICHE_SCHEMAS = {
         "nom": "20. AUTOMATISATION & OUTILS : Gagner en impact",
         "mode": "unique",
         "champs": [
-            {"cle": "outils_captation_prospects", "libelle": "Quels outils utilisez-vous pour capter vos prospects ? (Formulaire, réseaux sociaux, site web, téléphone…)", "type": "texte", "ordre": 1},
-            {"cle": "actions_deja_automatisees", "libelle": "Quelles actions sont déjà automatisées ? (Accusés de réception, relances, transferts d'informations…)", "type": "texte", "ordre": 2},
+            {"cle": "outils_captation_prospects", "libelle": "Quels outils utilisez-vous pour capter vos prospects ? (formulaire, réseaux sociaux, site web, téléphone…)", "type": "texte", "ordre": 1},
+            {"cle": "actions_deja_automatisees", "libelle": "Quelles actions sont déjà automatisées ? (accusés de réception, relances, transferts d'informations…)", "type": "texte", "ordre": 2},
             {"cle": "temps_saisie_manuelle_semaine", "libelle": "Saisie manuelle des contacts : temps estimé / semaine", "type": "nombre", "ordre": 3},
             {"cle": "penibilite_saisie_manuelle", "libelle": "Saisie manuelle des contacts : pénibilité (/5)", "type": "nombre", "ordre": 4},
             {"cle": "temps_relances_semaine", "libelle": "Relances prospects / rendez-vous : temps estimé / semaine", "type": "nombre", "ordre": 5},
@@ -322,7 +322,7 @@ FICHE_SCHEMAS = {
         "nom": "23. MA VISION LONG TERME : eVolution 2.0",
         "mode": "unique",
         "champs": [
-            {"cle": "objectif_ca_1an", "libelle": "Objectif financier (Chiffre d'affaires) à horizon 1 an", "type": "texte", "ordre": 1},
+            {"cle": "objectif_ca_1an", "libelle": "Objectif financier (chiffre d'affaires) à horizon 1 an", "type": "texte", "ordre": 1},
             {"cle": "nb_clients_actifs_cible", "libelle": "Nombre de clients actifs visé (eVolution 2.0)", "type": "nombre", "ordre": 2},
             {"cle": "niveau_liberte_operationnelle", "libelle": "Niveau de liberté opérationnelle visé", "type": "texte", "ordre": 3},
             {"cle": "evolution_offre", "libelle": "Comment mon offre va-t-elle évoluer pour mieux servir mes clients ?", "type": "texte", "ordre": 4},
