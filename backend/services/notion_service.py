@@ -99,6 +99,9 @@ def _prop_value(prop: dict):
     if prop_type == "email":
         return prop.get("email")
 
+    if prop_type == "phone_number":
+        return prop.get("phone_number")
+
     if prop_type == "select":
         select = prop.get("select")
         return select.get("name") if select else None
@@ -1152,6 +1155,8 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         _apply_acces(fiches, date_demarrage, verrou_coach=not autonome)
 
     cohorte = cohorte_future.result()
+    rythme = _rythme_parcours(fiches, date_demarrage, atelier=atelier, verrou_coach=not autonome)
+    syntheses = syntheses_du_client(client_page_id, fiches) if autonome else []
 
     return {
         "nom": nom_client,
@@ -1168,12 +1173,79 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "sessions": sessions_future.result(),
         "fiches": fiches,
         "kpi": kpi_future.result(),
-        "syntheses": syntheses_du_client(client_page_id, fiches) if autonome else [],
+        "syntheses": syntheses,
         "personnalisation": _personnaliser_parcours(fiches),
         "regularite": _regularite_bilans(fiches),
-        "rythme": _rythme_parcours(fiches, date_demarrage, atelier=atelier, verrou_coach=not autonome),
+        "rythme": rythme,
         "lien_groupe": _lien_groupe(cohorte),
+        "passerelle_coaching": _passerelle_coaching(rythme, syntheses) if autonome else None,
     }
+
+
+# Passerelle Autonome vers Coaching (decision de Rony du 27/10/2026) : a
+# partir de J30, quand le membre Autonome bloque (3 fiches de retard ou plus,
+# ou derniere synthese mensuelle « reprise » : aucune fiche terminee dans le
+# mois), Idris lui propose un appel diagnostic avec Rony. Le portail ne la
+# montre qu'une fois par periode de 30 jours.
+PASSERELLE_JOUR_MIN = 30
+PASSERELLE_RETARD_MIN = 3
+PASSERELLE_COACHING_URL = os.getenv("PASSERELLE_COACHING_URL", "https://calendly.com/rl-evolution/20min")
+
+
+def _passerelle_coaching(rythme: dict | None, syntheses: list[dict]) -> dict | None:
+    jour = (rythme or {}).get("jour")
+
+    if jour is None or jour < PASSERELLE_JOUR_MIN:
+        return None
+
+    en_retard = (rythme or {}).get("en_retard") or 0
+    reprise = bool(syntheses) and syntheses[0].get("axe") == "reprise"
+
+    if en_retard < PASSERELLE_RETARD_MIN and not reprise:
+        return None
+
+    return {
+        "periode": jour // 30,
+        "raison": "retard" if en_retard >= PASSERELLE_RETARD_MIN else "reprise",
+        "en_retard": en_retard,
+        "url": PASSERELLE_COACHING_URL,
+    }
+
+
+def alerter_coach_passerelle(client_nom: str, client_email: str | None, telephone: str | None, details: dict) -> None:
+    # Best-effort, meme canal que l'alerte diagnostic (n8n -> Telegram/email).
+    webhook_url = os.getenv("N8N_WEBHOOK_COACH_ALERT")
+
+    if not webhook_url:
+        logger.warning("N8N_WEBHOOK_COACH_ALERT manquant : alerte passerelle non envoyee.")
+        return
+
+    lignes = [
+        f"{client_nom} (Autonome, J{details.get('jour')}) a cliqué sur « Réserver mon appel » depuis son portail.",
+        "",
+        f"Fiches terminées : {details.get('fiches_terminees')} sur {details.get('fiches_total')}, dont {details.get('en_retard')} en retard.",
+    ]
+
+    if details.get("semaine"):
+        s = details["semaine"]
+        lignes.append(f"Dernier bilan (semaine du {s['semaine_du']}) : {s['contacts']:g} contacts, {s['rdv']:g} RDV, {s['ventes']:g} ventes.")
+
+    if details.get("objectif"):
+        lignes.append(f"Son objectif 90 jours : {details['objectif']}")
+
+    lignes += ["", f"Email : {client_email or 'inconnu'} · Téléphone : {telephone or 'inconnu'}"]
+    payload = {
+        "event": "passerelle_coaching",
+        "client_nom": client_nom,
+        "client_email": client_email,
+        "subject": f"Passerelle Coaching : {client_nom} veut un appel",
+        "message": "\n".join(lignes),
+    }
+
+    try:
+        requests.post(webhook_url, json=payload, timeout=15).raise_for_status()
+    except requests.RequestException as error:
+        logger.warning("Alerte passerelle non envoyee : %s", _resume_erreur(error))
 
 
 def _lien_groupe(cohorte: dict | None) -> str | None:

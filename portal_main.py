@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from backend.services import cockpit_service
 from backend.services import docuseal_service
 from backend.services import bibliotheque_service, brouillon_service, entrainement_service, fidelite_service, idris_service
+from backend.services import prospects_service, push_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -508,15 +509,20 @@ def portal_create_entry(
     if background_tasks is not None:
         background_tasks.add_task(_recalculer_fiche8, session["client_page_id"], fiche_id)
         background_tasks.add_task(_reporter_bilans_kpi, session["client_page_id"], fiche_id)
-        background_tasks.add_task(_demander_retour_ia, fiche_id, (entry or {}).get("id"))
+        background_tasks.add_task(_demander_retour_ia, fiche_id, (entry or {}).get("id"), session["client_page_id"])
     return {"status": "saved", "entry": entry}
 
 
-def _demander_retour_ia(fiche_id: str, entry_id: str | None) -> None:
+def _demander_retour_ia(fiche_id: str, entry_id: str | None, client_page_id: str | None = None) -> None:
     # Tache de fond, best-effort : met la saisie en file pour le retour IA.
     try:
         if notion_service.demander_retour_ia(fiche_id, entry_id):
-            notion_service.generer_retour_ia_immediat(entry_id)
+            if notion_service.generer_retour_ia_immediat(entry_id) and client_page_id:
+                # Autonome : retour visible tout de suite, on previent le telephone.
+                try:
+                    push_service.retour_idris_pret(client_page_id, fiche_id)
+                except Exception as error:
+                    _journaliser_alerte_impossible("push_retour_ia", error)
     except Exception as error:
         # L'entree reste "À générer" : le workflow n8n prendra le relais.
         _journaliser_alerte_impossible("retour_ia", error)
@@ -1076,6 +1082,139 @@ def portal_avis_j90(request: AvisJ90Request, authorization: str = Header(default
         raise _erreur_service_indisponible("portal_avis_j90", error)
 
     return {"status": "merci"}
+
+
+# --- Carnet de prospects (27/10/2026) ---------------------------------------
+
+class ProspectRequest(BaseModel):
+    action: str
+    id: str | None = None
+    prospect: dict | None = None
+
+
+@app.get("/portal/prospects")
+def portal_prospects(authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    try:
+        return prospects_service.vue_client(prospects_service.lire(session["client_page_id"], dashboard))
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_prospects", error)
+
+
+@app.post("/portal/prospects")
+def portal_prospects_action(request: ProspectRequest, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    try:
+        carnet = prospects_service.appliquer(
+            session["client_page_id"], dashboard.get("nom"), dashboard, request.action, request.id, request.prospect
+        )
+
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Ce prospect n'est plus dans ton carnet.")
+
+    except prospects_service.CarnetInvalide as error:
+        raise HTTPException(status_code=422, detail=error.message_client)
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Cette modification n'a pas pu être enregistrée.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_prospects_action", error)
+
+    return prospects_service.vue_client(carnet)
+
+
+# --- Passerelle Autonome vers Coaching (27/10/2026) ---------------------------
+
+@app.post("/portal/passerelle-coaching")
+def portal_passerelle_coaching(background_tasks: BackgroundTasks, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+    passerelle = dashboard.get("passerelle_coaching")
+
+    if not passerelle:
+        raise HTTPException(status_code=403, detail="Proposition non disponible.")
+
+    bilan = next((f for f in dashboard.get("fiches") or [] if f.get("master_id") == notion_service._BILAN_HEBDO_MASTER_ID), None)
+    identite = dashboard.get("identite") or {}
+
+    def alerter():
+        try:
+            historique = notion_service._historique_bilans(bilan["id"]) if bilan else []
+            notion_service.alerter_coach_passerelle(dashboard.get("nom"), identite.get("email"), identite.get("telephone"), {
+                "jour": (dashboard.get("rythme") or {}).get("jour"),
+                "fiches_terminees": sum(1 for f in dashboard.get("fiches") or [] if f.get("etat") == "Terminé"),
+                "fiches_total": len(dashboard.get("fiches") or []),
+                "en_retard": passerelle.get("en_retard"),
+                "semaine": historique[-1] if historique else None,
+                "objectif": dashboard.get("objectif_90j"),
+            })
+        except Exception as error:
+            _journaliser_alerte_impossible("passerelle_coaching", error)
+
+    background_tasks.add_task(alerter)
+    return {"url": passerelle["url"]}
+
+
+# --- Notifications sur le telephone (27/10/2026) -------------------------------
+
+class PushAbonnementRequest(BaseModel):
+    abonnement: dict
+
+
+class PushDesabonnementRequest(BaseModel):
+    endpoint: str
+
+
+@app.get("/portal/push/cle")
+def portal_push_cle(authorization: str = Header(default="")):
+    _session_from_header(authorization)
+    return {"cle": push_service.cle_publique() if push_service.enabled() else None}
+
+
+@app.post("/portal/push/abonnement")
+def portal_push_abonner(request: PushAbonnementRequest, authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    if not push_service.enabled():
+        raise HTTPException(status_code=404, detail="Notifications indisponibles.")
+
+    try:
+        push_service.abonner(session["client_page_id"], request.abonnement)
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Abonnement invalide.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_push_abonner", error)
+
+    return {"status": "abonne"}
+
+
+@app.post("/portal/push/desabonnement")
+def portal_push_desabonner(request: PushDesabonnementRequest, authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    try:
+        push_service.desabonner(session["client_page_id"], request.endpoint)
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_push_desabonner", error)
+
+    return {"status": "desabonne"}
+
+
+@app.post("/automation/notifications-du-jour")
+def automation_notifications_du_jour(authorization: str = Header(default="")):
+    _require_diagnostic_api_key(authorization)
+
+    try:
+        return push_service.notifications_du_jour()
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("automation_notifications_du_jour", error)
 
 
 @app.get("/automation/recap-hebdo")

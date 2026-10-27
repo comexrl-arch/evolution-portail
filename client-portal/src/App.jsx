@@ -24,6 +24,7 @@ import illustrationSemaine from './assets/modules/module-semaine.jpg'
 // changement. /health expose "started_at" pour reperer un futur fantome.
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 const SESSION_KEY = 'portal_session_token'
+const OUVRIR_KEY = 'portail_ouvrir'
 
 // Les titres de fiche stockes en base suivent "{Client} - {Titre master}"
 // (voir onboard_client cote backend) : le client le sait deja qu'il s'agit
@@ -771,7 +772,7 @@ function FicheSegments({ segments, formValues, onChange, surtitre }) {
   )
 }
 
-function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error }) {
+function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error, estBilan }) {
   // Fiche de suivi (plan de la semaine, bilan hebdo) : les reponses se
   // saisissent sous chaque question ; le bloc du bas date l'entree et
   // l'ajoute a l'historique. Chaque enregistrement cree une nouvelle ligne.
@@ -801,6 +802,17 @@ function FicheSuivi({ ficheData, formValues, onChange, onSubmit, saving, error }
 
   return (
     <>
+      {estBilan && champSemaine && (
+        <SuggestionCarnet
+          semaineDu={formValues[champSemaine.cle]}
+          onReprendre={(totaux) => {
+            onChange('nb_contacts_tentes', totaux.contacts)
+            onChange('nb_rdv_obtenus', totaux.rdv)
+            onChange('nb_ventes_conclues', totaux.ventes)
+          }}
+        />
+      )}
+
       <FicheSegments
         surtitre={surtitreFiche(ficheData.nom)}
         segments={ficheData.segments}
@@ -929,6 +941,7 @@ function lireFiche(nom) {
 const ONGLETS = [
   { cle: 'tableau', libelle: 'Tableau de bord', icone: LayoutDashboard },
   { cle: 'parcours', libelle: 'Mon parcours', icone: IconeCarte },
+  { cle: 'prospects', libelle: 'Mes prospects', icone: ListChecks },
   { cle: 'idris', libelle: 'Idris, ton assistant', icone: MessageCircle },
   { cle: 'ressources', libelle: 'Ressources', icone: BookOpen },
   { cle: 'communaute', libelle: 'Communauté', icone: Users },
@@ -1610,6 +1623,7 @@ async function appelPortail(chemin, corps) {
   if (!response.ok) {
     const erreur = new Error('idris')
     erreur.status = response.status
+    if (response.status === 422) erreur.detail = (await response.json().catch(() => ({}))).detail
     throw erreur
   }
   return response.json()
@@ -2404,6 +2418,479 @@ function Bibliotheque() {
       <ul className="biblio-liste">
         {modeles.map((m) => <ModeleBibliotheque key={`${contenu.metier}-${m.id}`} modele={m} metier={contenu.metier} iaDisponible={contenu.personnalisation_ia} />)}
       </ul>
+    </section>
+  )
+}
+
+// --- Carnet de prospects vivant (27/10/2026) ---------------------------------
+// Un prospect par ligne, 4 statuts, une date de relance. Chaque changement de
+// statut est date : le bilan hebdo peut reprendre les chiffres de la semaine.
+const BILAN_HEBDO_MASTER_ID = '39ffaffd875880708581d60c234aab45'
+const CLASSE_STATUT = { 'À contacter': 'a-contacter', 'Contacté': 'contacte', RDV: 'rdv', Client: 'client' }
+
+function isoDuJour(decalage = 0) {
+  const d = new Date()
+  d.setDate(d.getDate() + decalage)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function dateRelance(iso) {
+  if (!iso) return ''
+  if (iso === isoDuJour()) return "aujourd'hui"
+  if (iso === isoDuJour(1)) return 'demain'
+  const date = new Date(`${iso}T12:00:00`)
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+// Meme regle que le serveur (fidelite_service.numero_whatsapp).
+const INDICATIFS = [[['0690', '0691', '0590'], '590'], [['0696', '0697', '0596'], '596'], [['0694', '0594'], '594'], [['0692', '0693', '0262', '0639', '0269'], '262']]
+
+function numeroWhatsApp(contact) {
+  const brut = String(contact || '').trim()
+  if (!/^[+0-9][0-9 .()-]{7,}$/.test(brut)) return null
+  let chiffres = brut.replace(/\D/g, '')
+  if (brut.startsWith('00')) chiffres = chiffres.slice(2)
+  else if (!brut.startsWith('+')) {
+    if (chiffres.length !== 10 || !chiffres.startsWith('0')) return null
+    const indicatif = INDICATIFS.find(([prefixes]) => prefixes.some((p) => chiffres.startsWith(p)))?.[1] || '33'
+    chiffres = indicatif + chiffres.slice(1)
+  }
+  return chiffres.length >= 10 && chiffres.length <= 15 ? chiffres : null
+}
+
+// Totaux d'une semaine (lundi au dimanche) d'apres les dates du carnet.
+function totauxCarnet(prospects, lundiIso) {
+  const totaux = { contacts: 0, rdv: 0, ventes: 0 }
+  if (!lundiIso) return totaux
+  const fin = new Date(`${lundiIso}T12:00:00`)
+  fin.setDate(fin.getDate() + 6)
+  const finIso = `${fin.getFullYear()}-${String(fin.getMonth() + 1).padStart(2, '0')}-${String(fin.getDate()).padStart(2, '0')}`
+  const cle = { 'Contacté': 'contacts', RDV: 'rdv', Client: 'ventes' }
+  for (const prospect of prospects || []) {
+    for (const ev of prospect.evenements || []) {
+      if (ev.date >= lundiIso && ev.date <= finIso && cle[ev.statut]) totaux[cle[ev.statut]] += 1
+    }
+  }
+  return totaux
+}
+
+async function actionCarnet(action, id, prospect) {
+  return appelPortail('/prospects', { action, id, prospect })
+}
+
+function MessagePretProspect({ prospect, categorie, modeles }) {
+  const choix = (modeles || []).filter((m) => m.categorie === categorie).slice(0, 2)
+  const numero = numeroWhatsApp(prospect.contact)
+
+  if (!modeles) return <p className="carnet-aide"><Loader2 size={14} className="animate-spin" /> Je prépare tes modèles…</p>
+  if (!choix.length) return <p className="carnet-aide">Pas encore de modèle pour cette étape dans ta bibliothèque.</p>
+
+  return (
+    <ul className="carnet-modeles">
+      {choix.map((m) => (
+        <li key={m.id}>
+          <p className="carnet-modele-titre">{m.titre} <span className="biblio-canal">{m.canal}</span></p>
+          <p className="biblio-texte">{m.texte}</p>
+          <div className="biblio-actions">
+            <BoutonCopier texte={m.texte} />
+            {numero && (
+              <a className="idris-copier" href={`https://wa.me/${numero}?text=${encodeURIComponent(m.texte)}`} target="_blank" rel="noreferrer">
+                <MessageCircle size={14} /> Ouvrir dans WhatsApp
+              </a>
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function LigneProspect({ prospect, statuts, categories, aRelancer, modeles, onModeles, onAction }) {
+  const [edition, setEdition] = useState(false)
+  const [message, setMessage] = useState(false)
+  const [suppression, setSuppression] = useState(false)
+  const [brouillon, setBrouillon] = useState({ nom: prospect.nom, contact: prospect.contact || '', note: prospect.note || '' })
+
+  const enregistrer = async (event) => {
+    event.preventDefault()
+    if (await onAction('modifier', prospect.id, brouillon)) setEdition(false)
+  }
+
+  return (
+    <li className={`carnet-ligne${aRelancer ? ' carnet-ligne-relance' : ''}`}>
+      {edition ? (
+        <form className="carnet-edition" onSubmit={enregistrer}>
+          <input className="field-input" value={brouillon.nom} maxLength={80} required aria-label="Nom" onChange={(e) => setBrouillon((b) => ({ ...b, nom: e.target.value }))} />
+          <input className="field-input" value={brouillon.contact} maxLength={80} placeholder="Téléphone ou e-mail" aria-label="Contact" onChange={(e) => setBrouillon((b) => ({ ...b, contact: e.target.value }))} />
+          <textarea className="field-input" value={brouillon.note} maxLength={300} rows={2} placeholder="Note (ce qu'il t'a dit, ce que tu dois lui envoyer…)" aria-label="Note" onChange={(e) => setBrouillon((b) => ({ ...b, note: e.target.value }))} />
+          <div className="biblio-actions">
+            <button type="submit" className="fiche-bouton">Enregistrer</button>
+            <button type="button" className="idris-copier" onClick={() => setEdition(false)}>Annuler</button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <header className="carnet-ligne-entete">
+            <div>
+              <strong className="carnet-nom">{prospect.nom}</strong>
+              {prospect.contact && <span className="carnet-contact">{prospect.contact}</span>}
+            </div>
+            <select
+              className={`carnet-statut carnet-statut-${CLASSE_STATUT[prospect.statut] || 'a-contacter'}`}
+              value={prospect.statut}
+              aria-label={`Statut de ${prospect.nom}`}
+              onChange={(e) => onAction('modifier', prospect.id, { statut: e.target.value })}
+            >
+              {statuts.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </header>
+          {prospect.note && <p className="carnet-note">{prospect.note}</p>}
+          <div className="carnet-relance">
+            <label>
+              <CalendarDays size={14} aria-hidden="true" />
+              <span>{prospect.statut === 'Client' ? 'Prochain contact' : 'Relance'}</span>
+              <input
+                type="date"
+                className="field-input"
+                value={prospect.relance || ''}
+                onChange={(e) => onAction('modifier', prospect.id, { relance: e.target.value || null })}
+              />
+            </label>
+            {prospect.relance && <span className={aRelancer ? 'carnet-echeance carnet-echeance-due' : 'carnet-echeance'}>{aRelancer ? `À faire (${dateRelance(prospect.relance)})` : dateRelance(prospect.relance)}</span>}
+          </div>
+          <div className="biblio-actions">
+            {prospect.statut !== 'Client' && (
+              <button type="button" className="idris-copier" onClick={() => onAction('relance', prospect.id, { relance: isoDuJour(3) })}>
+                <CheckCircle2 size={14} /> J'ai relancé
+              </button>
+            )}
+            <button type="button" className="idris-copier" onClick={() => { setMessage((v) => !v); onModeles() }}>
+              <Sparkles size={14} /> Message prêt
+            </button>
+            <button type="button" className="idris-copier" onClick={() => setEdition(true)}>Modifier</button>
+            {suppression ? (
+              <button type="button" className="idris-copier carnet-supprimer" onClick={() => onAction('supprimer', prospect.id)}>Confirmer la suppression</button>
+            ) : (
+              <button type="button" className="idris-copier" onClick={() => setSuppression(true)}>Supprimer</button>
+            )}
+          </div>
+          {message && <MessagePretProspect prospect={prospect} categorie={categories[prospect.statut]} modeles={modeles} />}
+        </>
+      )}
+    </li>
+  )
+}
+
+function CarnetProspects() {
+  const [carnet, setCarnet] = useState(null)
+  const [erreur, setErreur] = useState('')
+  const [chargement, setChargement] = useState(true)
+  const [filtre, setFiltre] = useState('tous')
+  const [nouveau, setNouveau] = useState({ nom: '', contact: '', relance: '' })
+  const [modeles, setModeles] = useState(null)
+  const [enCours, setEnCours] = useState(false)
+
+  useEffect(() => {
+    let actif = true
+    appelPortail('/prospects')
+      .then((data) => {
+        if (!actif) return
+        setCarnet(data)
+        if (data.a_relancer.length) setFiltre('relancer')
+      })
+      .catch(() => actif && setErreur("Ton carnet n'est pas disponible pour le moment. Réessaie dans quelques minutes."))
+      .finally(() => actif && setChargement(false))
+    return () => { actif = false }
+  }, [])
+
+  const chargerModeles = () => {
+    if (modeles) return
+    appelPortail('/bibliotheque').then((data) => setModeles(data.modeles)).catch(() => setModeles([]))
+  }
+
+  const agir = async (action, id, prospect) => {
+    setErreur('')
+    setEnCours(true)
+    try {
+      setCarnet(await actionCarnet(action, id, prospect))
+      return true
+    } catch (err) {
+      setErreur(err.detail || "L'enregistrement n'a pas marché. Réessaie dans un instant.")
+      return false
+    } finally {
+      setEnCours(false)
+    }
+  }
+
+  const ajouter = async (event) => {
+    event.preventDefault()
+    if (await agir('ajouter', null, { nom: nouveau.nom, contact: nouveau.contact, relance: nouveau.relance || null, statut: 'À contacter' })) {
+      setNouveau({ nom: '', contact: '', relance: '' })
+      setFiltre('tous')
+    }
+  }
+
+  if (chargement) return <section className="panel"><Loader2 className="animate-spin" color="var(--gold)" size={22} /></section>
+  if (!carnet) return <section className="panel"><p className="espace-vide">{erreur}</p></section>
+
+  const aRelancer = new Set(carnet.a_relancer)
+  const visibles = carnet.prospects.filter((p) => (filtre === 'tous' ? true : filtre === 'relancer' ? aRelancer.has(p.id) : p.statut === filtre))
+  const semaine = carnet.semaine
+
+  return (
+    <section className="panel carnet">
+      <p className="panel-eyebrow"><ListChecks size={14} /> Mon carnet de prospects</p>
+      <p className="panel-lead">Un prospect par ligne et une date de relance. Ton espace te rappelle qui relancer, et ton bilan de la semaine reprend tes chiffres.</p>
+
+      {carnet.importe && (
+        <p className="carnet-aide">J'ai repris les prospects de ta fiche « Mon tableau de prospection ». Ils seront enregistrés dans ton carnet dès ta première modification.</p>
+      )}
+
+      <p className="carnet-semaine">
+        Cette semaine : <strong>{semaine.contacts}</strong> contact{semaine.contacts > 1 ? 's' : ''}, <strong>{semaine.rdv}</strong> RDV, <strong>{semaine.ventes}</strong> client{semaine.ventes > 1 ? 's' : ''} gagné{semaine.ventes > 1 ? 's' : ''}.
+      </p>
+
+      <form className="carnet-ajout" onSubmit={ajouter}>
+        <input className="field-input" placeholder="Nom du prospect" value={nouveau.nom} maxLength={80} required aria-label="Nom du prospect" onChange={(e) => setNouveau((n) => ({ ...n, nom: e.target.value }))} />
+        <input className="field-input" placeholder="Téléphone ou e-mail" value={nouveau.contact} maxLength={80} aria-label="Téléphone ou e-mail" onChange={(e) => setNouveau((n) => ({ ...n, contact: e.target.value }))} />
+        <label className="carnet-ajout-date">
+          <span>À contacter le</span>
+          <input type="date" className="field-input" value={nouveau.relance} onChange={(e) => setNouveau((n) => ({ ...n, relance: e.target.value }))} />
+        </label>
+        <button type="submit" className="fiche-bouton" disabled={enCours}>Ajouter</button>
+      </form>
+
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+
+      <div className="idris-suggestions" role="tablist" aria-label="Filtrer mon carnet">
+        {[
+          ['relancer', `À relancer (${carnet.a_relancer.length})`],
+          ...carnet.statuts.map((s) => [s, `${s} (${carnet.par_statut[s] || 0})`]),
+          ['tous', `Tous (${carnet.prospects.length})`],
+        ].map(([cle, libelle]) => (
+          <button key={cle} type="button" role="tab" aria-selected={filtre === cle} className={`idris-suggestion${filtre === cle ? ' idris-suggestion-active' : ''}`} onClick={() => setFiltre(cle)}>
+            {libelle}
+          </button>
+        ))}
+      </div>
+
+      {visibles.length ? (
+        <ul className="carnet-liste">
+          {visibles.map((p) => (
+            <LigneProspect
+              key={`${p.id}-${p.statut}-${p.relance}-${p.nom}-${p.contact}-${p.note}`}
+              prospect={p}
+              statuts={carnet.statuts}
+              categories={carnet.categories}
+              aRelancer={aRelancer.has(p.id)}
+              modeles={modeles}
+              onModeles={chargerModeles}
+              onAction={agir}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="espace-vide">
+          {carnet.prospects.length ? 'Personne dans cette liste pour le moment.' : 'Ton carnet est vide. Commence par les 5 personnes de ton réseau que tu veux contacter cette semaine.'}
+        </p>
+      )}
+    </section>
+  )
+}
+
+// Tableau de bord : les relances du jour, seulement s'il y en a.
+function RelancesDuJour({ onOuvrir }) {
+  const [carnet, setCarnet] = useState(null)
+
+  useEffect(() => {
+    let actif = true
+    appelPortail('/prospects').then((data) => actif && setCarnet(data)).catch(() => {})
+    return () => { actif = false }
+  }, [])
+
+  if (!carnet?.a_relancer?.length) return null
+
+  const noms = carnet.prospects.filter((p) => carnet.a_relancer.includes(p.id)).map((p) => p.nom)
+  const n = noms.length
+
+  return (
+    <section className="panel carnet-rappel">
+      <p className="panel-eyebrow"><Phone size={14} /> Tes relances du jour</p>
+      <p className="panel-lead">
+        {n === 1 ? `1 relance prévue : ${noms[0]}.` : `${n} relances prévues : ${noms.slice(0, 3).join(', ')}${n > 3 ? '…' : '.'}`}
+      </p>
+      <button type="button" className="fiche-bouton" onClick={onOuvrir}>Ouvrir mon carnet</button>
+    </section>
+  )
+}
+
+// Bilan hebdo : propose les chiffres du carnet pour la semaine choisie.
+function SuggestionCarnet({ semaineDu, onReprendre }) {
+  const [prospects, setProspects] = useState(null)
+
+  useEffect(() => {
+    let actif = true
+    appelPortail('/prospects').then((data) => actif && setProspects(data.prospects)).catch(() => {})
+    return () => { actif = false }
+  }, [])
+
+  const totaux = totauxCarnet(prospects, semaineDu)
+  if (!prospects || !(totaux.contacts || totaux.rdv || totaux.ventes)) return null
+
+  return (
+    <div className="carnet-suggestion">
+      <p>
+        <ListChecks size={15} aria-hidden="true" /> D'après ton carnet, semaine du {dateRelance(semaineDu)} : <strong>{totaux.contacts}</strong> contact{totaux.contacts > 1 ? 's' : ''}, <strong>{totaux.rdv}</strong> RDV, <strong>{totaux.ventes}</strong> vente{totaux.ventes > 1 ? 's' : ''}.
+      </p>
+      <button type="button" className="idris-copier" onClick={() => onReprendre(totaux)}>Reprendre ces chiffres</button>
+    </div>
+  )
+}
+
+// --- Passerelle Autonome vers Coaching (27/10/2026) ---------------------------
+// A partir de J30, quand le membre bloque : une proposition par periode de 30 jours.
+const PASSERELLE_VUE_KEY = 'passerelle_coaching_vue'
+
+function PasserelleCoaching({ passerelle }) {
+  const [vue, setVue] = useState(() => {
+    try {
+      return passerelle && localStorage.getItem(PASSERELLE_VUE_KEY) === String(passerelle.periode)
+    } catch {
+      return false
+    }
+  })
+  const [attente, setAttente] = useState(false)
+
+  if (!passerelle || vue) return null
+
+  const fermer = () => {
+    try {
+      localStorage.setItem(PASSERELLE_VUE_KEY, String(passerelle.periode))
+    } catch {
+      // Sans stockage, la carte reviendra a la prochaine visite.
+    }
+    setVue(true)
+  }
+
+  const reserver = async () => {
+    setAttente(true)
+    // Fenetre ouverte tout de suite (sinon bloquee sur iPhone), adresse ensuite.
+    const fenetre = window.open('', '_blank')
+    let url = passerelle.url
+    try {
+      url = (await appelPortail('/passerelle-coaching', {})).url || url
+    } catch {
+      // Rony n'est pas prevenu, mais le client peut quand meme reserver.
+    }
+    if (fenetre) fenetre.location.href = url
+    else window.location.href = url
+    setAttente(false)
+    fermer()
+  }
+
+  return (
+    <section className="panel passerelle">
+      <IdrisMessage titre="Et si on en parlait ?">
+        <p className="idris-message-texte">
+          {passerelle.raison === 'retard'
+            ? `Tu as ${passerelle.en_retard} fiches en retard. Ça arrive souvent quand on avance seul, surtout quand l'activité prend toute la place.`
+            : "Ce mois-ci, aucune fiche n'a avancé. Ce n'est pas grave, mais c'est le bon moment pour ne pas laisser filer."}
+          {' '}Rony peut faire le point avec toi au téléphone : où tu en es, ce qui bloque, et si un accompagnement Coaching t'aiderait à passer le cap.
+        </p>
+        <div className="biblio-actions">
+          <button type="button" className="fiche-bouton" onClick={reserver} disabled={attente}>
+            {attente ? 'Ouverture…' : 'Réserver mon appel avec Rony'}
+          </button>
+          <button type="button" className="idris-copier" onClick={fermer}>Plus tard</button>
+        </div>
+      </IdrisMessage>
+    </section>
+  )
+}
+
+// --- Notifications sur le telephone (27/10/2026) -------------------------------
+function cleVapid(base64) {
+  const remplissage = '='.repeat((4 - (base64.length % 4)) % 4)
+  const brut = window.atob((base64 + remplissage).replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from([...brut].map((c) => c.charCodeAt(0)))
+}
+
+function NotificationsTelephone() {
+  const compatible = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  const iphone = /iphone|ipad|ipod/i.test(navigator.userAgent || '')
+  const installee = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+  const [cle, setCle] = useState(undefined)
+  const [abonne, setAbonne] = useState(false)
+  const [attente, setAttente] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    let actif = true
+    appelPortail('/push/cle').then((data) => actif && setCle(data.cle)).catch(() => actif && setCle(null))
+    if (compatible) {
+      navigator.serviceWorker.getRegistration('/sw.js')
+        .then((reg) => reg?.pushManager.getSubscription())
+        .then((sub) => actif && setAbonne(Boolean(sub)))
+        .catch(() => {})
+    }
+    return () => { actif = false }
+  }, [compatible])
+
+  if (!cle) return null
+
+  const activer = async () => {
+    setMessage('')
+    setAttente(true)
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        setMessage("Les notifications sont bloquées pour ce site. Tu peux les autoriser dans les réglages de ton téléphone ou de ton navigateur.")
+        return
+      }
+      const reg = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+      const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cleVapid(cle) }))
+      await appelPortail('/push/abonnement', { abonnement: sub.toJSON() })
+      setAbonne(true)
+      setMessage("C'est activé. Tu recevras ta première notification le matin où une fiche s'ouvre ou qu'une relance t'attend.")
+    } catch {
+      setMessage("L'activation n'a pas marché. Réessaie dans un instant.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  const desactiver = async () => {
+    setMessage('')
+    setAttente(true)
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/sw.js')
+      const sub = await reg?.pushManager.getSubscription()
+      if (sub) {
+        await appelPortail('/push/desabonnement', { endpoint: sub.endpoint }).catch(() => {})
+        await sub.unsubscribe()
+      }
+      setAbonne(false)
+      setMessage('Notifications désactivées sur cet appareil.')
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  return (
+    <section className="panel notifications">
+      <p className="panel-eyebrow"><Smartphone size={14} /> Notifications sur ton téléphone</p>
+      <p className="panel-lead">Un petit rappel quand une fiche s'ouvre, quand Idris t'a répondu et le matin où tu as des relances prévues.</p>
+      {!compatible || (iphone && !installee) ? (
+        <p className="carnet-aide">
+          {iphone ? "Sur iPhone, installe d'abord ton espace sur l'écran d'accueil (voir ci-dessus), puis ouvre-le depuis l'icône pour activer les notifications." : "Ton navigateur ne gère pas les notifications. Essaie avec Chrome, Edge ou Safari."}
+        </p>
+      ) : abonne ? (
+        <button type="button" className="idris-copier" onClick={desactiver} disabled={attente}>Désactiver sur cet appareil</button>
+      ) : (
+        <button type="button" className="fiche-bouton" onClick={activer} disabled={attente}>{attente ? 'Activation…' : 'Activer les notifications'}</button>
+      )}
+      {message && <p className="carnet-aide">{message}</p>}
     </section>
   )
 }
@@ -3540,6 +4027,21 @@ function Portail() {
   const [attestationOuverte, setAttestationOuverte] = useState(false)
   const [accueilFerme, setAccueilFerme] = useState(false)
   const [menuOuvert, setMenuOuvert] = useState(false)
+  // Lien direct (WhatsApp du lundi, notification) : ?ouvrir=bilan, prospects,
+  // parcours ou fiche:<id>. Garde en memoire le temps de se connecter.
+  const [ouvrirEnAttente, setOuvrirEnAttente] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    const valeur = params.get('ouvrir')
+    try {
+      if (valeur && !params.get('token')) {
+        sessionStorage.setItem(OUVRIR_KEY, valeur)
+        window.history.replaceState({}, '', window.location.pathname)
+      }
+      return valeur || sessionStorage.getItem(OUVRIR_KEY)
+    } catch {
+      return valeur
+    }
+  })
 
   const loadDashboard = useCallback(async () => {
     const token = localStorage.getItem(SESSION_KEY)
@@ -3878,6 +4380,29 @@ function Portail() {
     setScreen('login')
   }
 
+  useEffect(() => {
+    if (screen !== 'dashboard' || !dashboard || !ouvrirEnAttente) return
+    const cible = ouvrirEnAttente
+    setOuvrirEnAttente(null)
+    try {
+      sessionStorage.removeItem(OUVRIR_KEY)
+    } catch {
+      // Rien a nettoyer.
+    }
+    const ouverte = (fiche) => fiche && !String(fiche.acces || '').includes('Bloqué')
+
+    if (cible === 'bilan') {
+      const bilan = dashboard.fiches.find((f) => f.master_id === BILAN_HEBDO_MASTER_ID)
+      if (ouverte(bilan)) openFiche(bilan.id)
+    } else if (cible.startsWith('fiche:')) {
+      const fiche = dashboard.fiches.find((f) => f.id === cible.slice(6))
+      if (ouverte(fiche)) openFiche(fiche.id)
+    } else if (ONGLETS.some((o) => o.cle === cible)) {
+      setOnglet(cible)
+    }
+    // openFiche change a chaque rendu : on ne reagit qu'au lien en attente.
+  }, [screen, dashboard, ouvrirEnAttente])
+
   if (screen === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -4122,6 +4647,8 @@ function Portail() {
                 onParcours={() => changerOnglet('parcours')}
               />
 
+              <RelancesDuJour onOuvrir={() => changerOnglet('prospects')} />
+
               {bilanFinalOuvert(dashboard) && <BilanFinal onAttestation={() => { setAttestationOuverte(true); window.scrollTo(0, 0) }} />}
               {bilanFinalOuvert(dashboard) && <AvisJ90 />}
 
@@ -4133,6 +4660,7 @@ function Portail() {
               />
 
               <SyntheseCourte syntheses={dashboard.syntheses} />
+              <PasserelleCoaching passerelle={dashboard.passerelle_coaching} />
 
               <OuMettreTonEnergie
                 personnalisation={dashboard.personnalisation}
@@ -4157,6 +4685,13 @@ function Portail() {
               <FriseParcours modules={modules} moduleEnCours={moduleEnCours} rythme={dashboard.rythme} onOpen={openFiche} />
               <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
               <Jalons jalons={jalons} regularite={dashboard.regularite} />
+            </>
+          )}
+
+          {onglet === 'prospects' && (
+            <>
+              <h2 className="accueil-section-titre">Mes prospects</h2>
+              <CarnetProspects />
             </>
           )}
 
@@ -4207,6 +4742,7 @@ function Portail() {
             <>
               <h2 className="accueil-section-titre">Profil</h2>
               <InstallerAppli />
+              <NotificationsTelephone />
               <PartageProgression />
               <div className="portal-secondary-row">
                 <IdentiteCard identite={dashboard.identite} cohorte={null} sessions={[]} />
@@ -4251,6 +4787,7 @@ function Portail() {
                 onSubmit={submitEntry}
                 saving={saving}
                 error={error}
+                estBilan={dashboard?.fiches?.find((f) => f.id === activeFicheId)?.master_id === BILAN_HEBDO_MASTER_ID}
               />
             ) : ficheData.mode === 'unique' && ficheData.segments ? (
               <>
