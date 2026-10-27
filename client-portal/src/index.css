@@ -5419,3 +5419,227 @@ ul.idris-rdv-liste {
     grid-column: 2;
   }
 }
+
+/* ---------- Carnet de prospects, passerelle Coaching, notifications (27/10/2026) ---------- */
+
+.carnet .panel-eyebrow,
+.carnet-rappel .panel-eyebrow,
+.notifications .panel-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.carnet-aide {
+  margin: 0.75rem 0 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.carnet-semaine {
+  margin: 0.9rem 0;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.carnet-semaine strong {
+  color: var(--text-primary);
+}
+
+.carnet-ajout {
+  display: grid;
+  grid-template-columns: 1.4fr 1.2fr auto auto;
+  gap: 0.5rem;
+  align-items: end;
+  margin: 0 0 1rem;
+}
+
+.carnet-ajout-date {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.carnet-liste {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.carnet-ligne {
+  padding: 0.9rem 1rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.carnet-ligne-relance {
+  border-left: 3px solid var(--warning);
+}
+
+.carnet-ligne-entete {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.carnet-nom {
+  display: block;
+  font-size: 1rem;
+}
+
+.carnet-contact {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.carnet-statut {
+  flex-shrink: 0;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: var(--border-subtle);
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--surface-3);
+  color: var(--text-secondary);
+}
+
+.carnet-statut-contacte {
+  background: var(--accent-soft);
+  color: var(--brand-gold);
+}
+
+.carnet-statut-rdv {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.carnet-statut-client {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.carnet-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.carnet-relance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.7rem 0;
+}
+
+.carnet-relance label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+}
+
+.carnet-relance input {
+  width: auto;
+  padding: 0.3rem 0.5rem;
+}
+
+.carnet-echeance {
+  font-size: 0.82rem;
+  color: var(--text-tertiary);
+}
+
+.carnet-echeance-due {
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.carnet-supprimer {
+  color: var(--danger) !important;
+}
+
+.carnet-edition {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.carnet-modeles {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.8rem 0 0;
+  padding: 0.8rem 0 0;
+  border-top: var(--border-subtle);
+  list-style: none;
+}
+
+.carnet-modele-titre {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.carnet-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0 0 1.25rem;
+  padding: 0.8rem 1rem;
+  border: var(--border-accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 0.9rem;
+}
+
+.carnet-suggestion p {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+.carnet-suggestion p svg {
+  display: inline;
+  margin-right: 0.3rem;
+  vertical-align: -2px;
+}
+
+.carnet-suggestion .idris-copier {
+  color: var(--text-primary);
+}
+
+.passerelle .biblio-actions {
+  margin-top: 0.8rem;
+  align-items: center;
+}
+
+.passerelle .idris-copier {
+  color: inherit;
+}
+
+@media (max-width: 640px) {
+  .carnet-ajout {
+    grid-template-columns: 1fr;
+  }
+
+  .carnet-ajout .fiche-bouton {
+    width: 100%;
+  }
+}
+
+.notifications .fiche-bouton,
+.notifications .idris-copier,
+.carnet-rappel .fiche-bouton {
+  margin-top: 0.9rem;
+}

@@ -2,11 +2,15 @@
 # - objectif 90 jours saisi par le client a l'accueil guide ;
 # - lien de partage en lecture seule de sa progression (banquier, associe...) ;
 # - avis du client a J90, cite seulement avec son accord ;
-# - recap hebdomadaire par email « ta semaine en 3 chiffres », envoye par n8n.
+# - recap hebdomadaire « ta semaine en 3 chiffres », envoye par n8n le lundi.
+#   Depuis le 27/10/2026 (decision de Rony), il part par WhatsApp quand le
+#   client a un numero, avec le lien direct vers son bilan hebdo ; l'email
+#   reste pour les clients sans numero ou qui ont refuse WhatsApp.
 
 import json
 import os
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -164,7 +168,58 @@ def _date_courte(jour: str) -> str:
         return str(jour)
 
 
-def recap_du_client(client_page_id: str, email: str) -> dict | None:
+# Indicatifs des numeros a 10 chiffres commencant par 0 : Antilles-Guyane,
+# Reunion, Mayotte, sinon France metropolitaine.
+_INDICATIFS = [
+    (("0690", "0691", "0590"), "590"),
+    (("0696", "0697", "0596"), "596"),
+    (("0694", "0594"), "594"),
+    (("0692", "0693", "0262"), "262"),
+    (("0639", "0269"), "262"),
+]
+LIEN_BILAN = f"{URL_PORTAIL}/?ouvrir=bilan"
+
+
+def numero_whatsapp(telephone) -> str | None:
+    """Numero au format attendu par l'API WhatsApp (indicatif sans « + »),
+    ou None s'il n'est pas exploitable."""
+    brut = str(telephone or "").strip()
+
+    if not brut:
+        return None
+
+    international = brut.startswith("+") or brut.startswith("00")
+    chiffres = re.sub(r"\D", "", brut)
+
+    if brut.startswith("00"):
+        chiffres = chiffres[2:]
+
+    if not international:
+        if len(chiffres) != 10 or not chiffres.startswith("0"):
+            return None
+
+        indicatif = next((code for prefixes, code in _INDICATIFS if chiffres.startswith(prefixes)), "33")
+        chiffres = indicatif + chiffres[1:]
+
+    return chiffres if 10 <= len(chiffres) <= 15 else None
+
+
+def _ligne_whatsapp(texte: str) -> str:
+    # Parametre de modele WhatsApp : une seule ligne, sans tabulation ni
+    # suite de plus de 4 espaces (regle Meta).
+    return re.sub(r"\s+", " ", texte or "").strip()
+
+
+def _bilan_semaine_derniere_fait(semaine: dict | None, aujourd_hui=None) -> bool:
+    if not semaine:
+        return False
+
+    aujourd_hui = aujourd_hui or datetime.now(timezone.utc).date()
+    lundi_precedent = aujourd_hui - timedelta(days=aujourd_hui.weekday() + 7)
+    return str(semaine.get("semaine_du") or "") >= lundi_precedent.isoformat()
+
+
+def recap_du_client(client_page_id: str, email: str, telephone=None, whatsapp_refuse: bool = False) -> dict | None:
     dashboard = notion_service.get_client_dashboard(client_page_id)
     jour = notion_service._jour_parcours(dashboard.get("date_demarrage"))
 
@@ -181,6 +236,7 @@ def recap_du_client(client_page_id: str, email: str) -> dict | None:
         "semaine_du": semaine["semaine_du"], "contacts": semaine["contacts"], "rdv": semaine["rdv"], "ventes": semaine["ventes"],
     }
     lignes = [f"Bonjour {prenom},", ""]
+    phrase_idris = _phrase_idris(semaine, serie) if chiffres else ""
 
     if chiffres:
         lignes += [
@@ -188,7 +244,7 @@ def recap_du_client(client_page_id: str, email: str) -> dict | None:
             f"{_pluriel(chiffres['contacts'], 'contact')}, {chiffres['rdv']:g} rendez-vous "
             f"et {_pluriel(chiffres['ventes'], 'vente')}.",
             "",
-            _phrase_idris(semaine, serie),
+            phrase_idris,
         ]
     else:
         lignes += [
@@ -201,6 +257,22 @@ def recap_du_client(client_page_id: str, email: str) -> dict | None:
 
     lignes += ["", f"Tout est dans ton espace : {URL_PORTAIL}", "", "Bonne semaine,", "Rony", "RL-eVolution"]
 
+    numero = None if whatsapp_refuse else numero_whatsapp(telephone)
+
+    if chiffres and _bilan_semaine_derniere_fait(semaine):
+        phrase = (
+            f"Ta semaine du {_date_courte(chiffres['semaine_du'])} : {_pluriel(chiffres['contacts'], 'contact')}, "
+            f"{chiffres['rdv']:g} rendez-vous et {_pluriel(chiffres['ventes'], 'vente')}. {phrase_idris}"
+        )
+    else:
+        phrase = "Ton bilan de la semaine dernière n'est pas encore fait : 2 minutes suffisent pour garder ton rythme."
+
+    whatsapp = None if not numero else {
+        "numero": numero,
+        "parametres": [_ligne_whatsapp(prenom), _ligne_whatsapp(phrase), LIEN_BILAN],
+        "texte": f"Bonjour {prenom}, c'est lundi. {_ligne_whatsapp(phrase)}\n\nTon bilan de la semaine t'attend ici : {LIEN_BILAN}\n\nBonne semaine,\nRony, RL-eVolution",
+    }
+
     return {
         "client_page_id": client_page_id,
         "email": email,
@@ -211,6 +283,9 @@ def recap_du_client(client_page_id: str, email: str) -> dict | None:
         "prochaine_etape": prochaine,
         "objet": f"{prenom}, ta semaine en 3 chiffres" if chiffres else f"{prenom}, on fait le point sur ta semaine ?",
         "texte": "\n".join(lignes),
+        "canal": "whatsapp" if whatsapp else "email",
+        "lien_bilan": LIEN_BILAN,
+        "whatsapp": whatsapp,
     }
 
 
@@ -229,8 +304,11 @@ def recaps_hebdo() -> list[dict]:
         if notion_service._prop_value(notion_service._prop(props, "Récap hebdo désactivé")):
             continue
 
+        telephone = notion_service._prop_value(notion_service._prop(props, "Téléphone"))
+        refuse = bool(notion_service._prop_value(notion_service._prop(props, "Récap WhatsApp désactivé")))
+
         try:
-            recap = recap_du_client(row["id"], email)
+            recap = recap_du_client(row["id"], email, telephone, refuse)
         except Exception as error:
             notion_service.logger.warning("Recap %s impossible (%s)", row.get("id"), error)
             recap = None
