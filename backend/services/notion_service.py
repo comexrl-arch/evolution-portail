@@ -204,8 +204,11 @@ _TTL_DASHBOARD = 300  # secondes (5 min : navigation instantanee, invalide a cha
 _TTL_MASTER = 600    # contenu des fiches master (quasi jamais modifie)
 
 
-def _query_data_source(data_source_id: str, filter_: dict | None = None) -> list[dict]:
+def _query_data_source(data_source_id: str, filter_: dict | None = None, sorts: list | None = None) -> list[dict]:
     payload = {"filter": filter_} if filter_ else {}
+
+    if sorts:
+        payload["sorts"] = sorts
 
     try:
         response = _http.post(

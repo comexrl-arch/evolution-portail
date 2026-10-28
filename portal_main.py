@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from backend.services import cockpit_service
+from backend.services import eleves_service
 from backend.services import docuseal_service
 from backend.services import bibliotheque_service, brouillon_service, entrainement_service, fidelite_service, idris_service
 from backend.services import prospects_service, push_service
@@ -1303,6 +1304,30 @@ def coach_suivi_clients(x_coach_key: str = Header(default="")):
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("coach_suivi_clients", error)
+
+
+@app.get("/coach/eleves")
+def coach_eleves(x_coach_key: str = Header(default="")):
+    # Onglet "Eleves" : ce que chaque eleve fait dans son espace client, lu
+    # dans Notion comme le portail (voir eleves_service). Lecture seule.
+    _require_coach_key(x_coach_key)
+
+    try:
+        return {"eleves": eleves_service.liste()}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_eleves", error)
+
+
+@app.get("/coach/eleves/{client_page_id}")
+def coach_eleve_detail(client_page_id: str, frais: bool = False, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return eleves_service.detail(client_page_id, frais=frais)
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_eleve_detail", error)
 
 
 @app.get("/coach/leads/systeme-io")
