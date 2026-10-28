@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
 import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
+import { installer, useInstallation } from './installation.js'
+import BoutonInstaller from './BoutonInstaller.jsx'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
 import illustrationModule1 from './assets/modules/module-1.jpg'
@@ -865,7 +867,7 @@ const FORMULES = [
   { motif: /autonome/i, libelle: 'Formule Autonome' },
 ]
 
-function libelleFormule(parcours) {
+export function libelleFormule(parcours) {
   // Parcours vide = coaching (valeur historique des premiers clients).
   const formule = FORMULES.find((f) => f.motif.test(parcours || ''))
   return formule ? formule.libelle : 'Formule Coaching 90 jours'
@@ -897,7 +899,7 @@ function casseDePhrase(texte) {
 // "Démarrage · J0", "Clarifier · Module 1 · Mon offre (J4)",
 // "Session 1 · Clarifier ton offre (J0)", "Bonus · Aides publiques"...
 // On en tire un surtitre (etape, jalon) et un titre court.
-function lireModule(label) {
+export function lireModule(label) {
   // "\u2060" (separateur invisible) parasite certains noms Notion.
   const propre = (label || '').replace(/\u2060/g, '').trim()
   const parties = propre.split(' · ').map((p) => p.trim()).filter(Boolean)
@@ -932,7 +934,7 @@ function illustrationDuModule(label) {
   return ILLUSTRATIONS_MODULES[0]
 }
 
-function lireFiche(nom) {
+export function lireFiche(nom) {
   const propre = sansNomClient(nom || '').trim()
   const numero = propre.match(/^(\d+)\s*[.)]\s*(.*)$/)
   return numero ? { numero: numero[1], titre: casseDePhrase(numero[2]) } : { numero: null, titre: casseDePhrase(propre) }
@@ -980,7 +982,8 @@ function Jauge({ pct, titre, detail }) {
 // client dans le temps, s'il suit le rythme, et son objectif. Le rythme
 // (jour, etapes de la frise, fiches en retard) vient du serveur, voir
 // notion_service._rythme_parcours.
-function CapParcours({ rythme, objectif, fichesFaites, fichesTotal, regularite }) {
+// coach : meme bandeau dans l'Espace Coach, a la troisieme personne.
+export function CapParcours({ rythme, objectif, fichesFaites, fichesTotal, regularite, coach = false }) {
   const jour = rythme ? rythme.jour : null
   const duree = rythme?.duree || 90
   const etapes = rythme?.etapes || []
@@ -999,11 +1002,11 @@ function CapParcours({ rythme, objectif, fichesFaites, fichesTotal, regularite }
   return (
     <section className="cap">
       <div className="cap-temps">
-        <p className="cap-surtitre">{duree === 90 ? 'Ton cap 90 jours' : 'Ton atelier'}</p>
+        <p className="cap-surtitre">{duree === 90 ? (coach ? 'Son cap 90 jours' : 'Ton cap 90 jours') : (coach ? 'Son atelier' : 'Ton atelier')}</p>
         {jour === null ? (
           <p className="cap-jour">{fichesFaites}<small> / {fichesTotal} fiches</small></p>
         ) : jour < 0 ? (
-          <p className="cap-jour">Bientôt<small> ta session 1 dans {-jour} jour{jour < -1 ? 's' : ''}</small></p>
+          <p className="cap-jour">Bientôt<small> {coach ? 'sa' : 'ta'} session 1 dans {-jour} jour{jour < -1 ? 's' : ''}</small></p>
         ) : (
           <p className="cap-jour">Jour {jour}<small>{jour > duree ? ` · parcours de ${duree} jours bouclé` : ` sur ${duree}`}</small></p>
         )}
@@ -1035,11 +1038,11 @@ function CapParcours({ rythme, objectif, fichesFaites, fichesTotal, regularite }
       </div>
       <div className="cap-objectif">
         <div>
-          <p className="cap-surtitre">Ton objectif</p>
+          <p className="cap-surtitre">{coach ? 'Son objectif' : 'Ton objectif'}</p>
           {objectif ? (
             <p className="cap-objectif-texte">« {objectif} »</p>
           ) : (
-            <p className="cap-objectif-vide">Ton objectif n'est pas encore écrit. C'est la phrase qui donne du sens à tout le reste.</p>
+            <p className="cap-objectif-vide">{coach ? "Pas encore d'objectif écrit dans la fiche 1." : "Ton objectif n'est pas encore écrit. C'est la phrase qui donne du sens à tout le reste."}</p>
           )}
         </div>
         <div className="cap-chiffres">
@@ -2287,22 +2290,7 @@ function Attestation({ dashboard, modules, onRetour }) {
 // Installation sur le telephone : bouton natif quand le navigateur le
 // propose (Android, Chrome), sinon la marche a suivre (iPhone, Safari).
 function InstallerAppli() {
-  const [invite, setInvite] = useState(null)
-  const [installee, setInstallee] = useState(() => window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
-
-  useEffect(() => {
-    const garder = (event) => {
-      event.preventDefault()
-      setInvite(event)
-    }
-    const fini = () => setInstallee(true)
-    window.addEventListener('beforeinstallprompt', garder)
-    window.addEventListener('appinstalled', fini)
-    return () => {
-      window.removeEventListener('beforeinstallprompt', garder)
-      window.removeEventListener('appinstalled', fini)
-    }
-  }, [])
+  const { invite, installee } = useInstallation()
 
   if (installee) return null
 
@@ -2311,7 +2299,7 @@ function InstallerAppli() {
       <p className="panel-eyebrow"><Smartphone size={14} /> Ton espace sur ton téléphone</p>
       <p className="panel-lead">Ajoute eVolution 2.0 sur ton écran d'accueil : tu l'ouvres en un geste, comme une application.</p>
       {invite ? (
-        <button type="button" className="fiche-bouton" onClick={async () => { invite.prompt(); await invite.userChoice; setInvite(null) }}>
+        <button type="button" className="fiche-bouton" onClick={installer}>
           Installer l'application
         </button>
       ) : (
@@ -3454,7 +3442,7 @@ function KpiPeriod({ label, valeur, objectif }) {
 // est renseigne (les parcours sans KPI n'affichent alors rien du tout).
 const KPI_CHAMPS = ['valeur_j0', 'valeur_j30', 'valeur_j60', 'valeur_j90', 'objectif_j30', 'objectif_j60', 'objectif_j90']
 
-function kpiRenseignes(kpis) {
+export function kpiRenseignes(kpis) {
   return Array.isArray(kpis) && kpis.some((kpi) => KPI_CHAMPS.some((champ) => kpi[champ] !== null && kpi[champ] !== undefined && kpi[champ] !== ''))
 }
 
@@ -3725,7 +3713,7 @@ function MiniCourbe({ kpi, cible }) {
   )
 }
 
-function TuileResultat({ kpi, jour }) {
+export function TuileResultat({ kpi, jour }) {
   const unite = KPI_EN_EUROS.test(kpi.nom || '') ? ' €' : ''
   const montant = (n) => `${formaterKpi(n)}${unite}`
   const depart = nombreOuNull(kpi.valeur_j0)
@@ -3784,7 +3772,7 @@ function TuileResultat({ kpi, jour }) {
   )
 }
 
-function ScoreCommercial({ personnalisation }) {
+export function ScoreCommercial({ personnalisation, coach = false }) {
   const diagnostic = personnalisation?.scores_diagnostic
   if (!diagnostic) return null
 
@@ -3795,7 +3783,7 @@ function ScoreCommercial({ personnalisation }) {
   return (
     <div className="resultat-score">
       <div>
-        <p className="resultat-nom">Ton score commercial</p>
+        <p className="resultat-nom">{coach ? 'Score commercial' : 'Ton score commercial'}</p>
         <p className="resultat-score-total">{actuel}<small> / 15 · {depart} au diagnostic</small></p>
       </div>
       <ul className="resultat-zones">
@@ -3818,7 +3806,7 @@ function ScoreCommercial({ personnalisation }) {
           {ecart > 0 ? '+' : '−'}{Math.abs(ecart)} point{Math.abs(ecart) > 1 ? 's' : ''}
         </span>
       )}
-      {!personnalisation.chiffres && (
+      {!personnalisation.chiffres && !coach && (
         <p className="resultat-score-note">Remplis au moins 2 bilans hebdomadaires : ton score suivra alors tes vrais chiffres de prospection, de conversion et de suivi.</p>
       )}
     </div>
@@ -4593,6 +4581,7 @@ function Portail() {
               </button>
             ))}
           </nav>
+          <BoutonInstaller />
         </aside>
         {menuOuvert && <div className="espace-voile" onClick={() => setMenuOuvert(false)} />}
 

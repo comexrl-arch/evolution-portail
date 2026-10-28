@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronLeft, RefreshCw, Search } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react'
+import { CapParcours, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 
@@ -39,7 +40,8 @@ function depuis(jours) {
 
 function nombre(valeur) {
   if (valeur === null || valeur === undefined || valeur === '') return '—'
-  return typeof valeur === 'number' ? valeur.toLocaleString('fr-FR') : String(valeur)
+  // Espace insecable classique : l'espace fine du format francais disparait en petit corps.
+  return typeof valeur === 'number' ? valeur.toLocaleString('fr-FR').replace(/\u202f/g, '\u00a0') : String(valeur)
 }
 
 function valeurLisible(valeur) {
@@ -69,82 +71,116 @@ async function lireCoach(chemin, coachKey, onAuthFailure) {
   }
 }
 
-function Titre({ children }) {
+function Section({ titre, action, children }) {
   return (
-    <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-secondary)' }}>
+    <section className="coach-section">
+      <div className="resultats-entete">
+        <h3 className="resultats-titre">{titre}</h3>
+        {action}
+      </div>
       {children}
-    </p>
-  )
-}
-
-function Bloc({ titre, children }) {
-  return (
-    <div className="card-glass p-4" style={{ borderRadius: 'var(--radius-md)' }}>
-      <Titre>{titre}</Titre>
-      {children}
-    </div>
+    </section>
   )
 }
 
 function Vide({ children }) {
-  return <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{children}</p>
+  return <p className="espace-vide">{children}</p>
 }
 
-function Pastilles({ eleve }) {
-  const pastilles = []
-  if (eleve.jours_sans_saisie === null || eleve.jours_sans_saisie >= JOURS_INACTIF) {
-    pastilles.push(['Sans activité ' + (eleve.jours_sans_saisie === null ? '' : `depuis ${eleve.jours_sans_saisie} j`), 'var(--danger)'])
-  }
-  if (eleve.retours_ia_a_relire > 0) {
-    pastilles.push([`${eleve.retours_ia_a_relire} retour${eleve.retours_ia_a_relire > 1 ? 's' : ''} d'Idris à relire`, 'var(--warning)'])
-  }
-  if (!pastilles.length) return null
+function inactif(eleve) {
+  return eleve.jours_sans_saisie === null || eleve.jours_sans_saisie >= JOURS_INACTIF
+}
+
+// Eleve a regarder en premier : decroche ou retours d'Idris en attente.
+function aSurveiller(eleve) {
+  return !eleve.illisible && (inactif(eleve) || eleve.retours_ia_a_relire > 0)
+}
+
+function EtatEleve({ eleve }) {
+  if (!inactif(eleve)) return <span className="coach-puce coach-puce-ok">Actif</span>
   return (
-    <div className="flex flex-wrap gap-1.5 mt-1">
-      {pastilles.map(([texte, couleur]) => (
-        <span key={texte} className="text-xs font-semibold" style={{ color: couleur }}>{texte.trim()}</span>
-      ))}
-    </div>
+    <span className="coach-puce coach-puce-alerte">
+      {eleve.jours_sans_saisie === null ? 'Aucune saisie' : `Sans activité depuis ${eleve.jours_sans_saisie} j`}
+    </span>
   )
 }
 
-function LigneEleve({ eleve, onOuvrir }) {
+// Bandeau du haut, meme style que « Ton cap 90 jours » cote client.
+function BandeauEleves({ eleves }) {
+  const lisibles = eleves.filter((e) => !e.illisible)
+  const decroches = lisibles.filter(inactif).length
+  const retours = lisibles.reduce((n, e) => n + (e.retours_ia_a_relire || 0), 0)
+  const fiches = lisibles.reduce((n, e) => n + (e.fiches_total || 0), 0)
+  const faites = lisibles.reduce((n, e) => n + (e.fiches_terminees || 0), 0)
+  const prospects = lisibles.reduce((n, e) => n + (e.nb_prospects || 0), 0)
+  const signes = lisibles.reduce((n, e) => n + (e.prospects_par_statut?.Client || 0), 0)
+
+  return (
+    <section className="cap coach-bandeau">
+      <div className="cap-temps">
+        <p className="cap-surtitre">Tes élèves</p>
+        <p className="cap-jour">{eleves.length}<small> en cours</small></p>
+        <p className="cap-statut">
+          {decroches > 0
+            ? <span className="cap-statut-puce cap-statut-retard">{decroches} sans activité depuis {JOURS_INACTIF} jours</span>
+            : <span className="cap-statut-puce cap-statut-ok">Tous actifs cette semaine</span>}
+          {retours > 0 && <span>{retours} retour{retours > 1 ? 's' : ''} d'Idris à relire</span>}
+        </p>
+      </div>
+      <div className="cap-objectif">
+        <p className="cap-surtitre">En chiffres</p>
+        <div className="cap-chiffres">
+          <div><strong>{fiches ? Math.round((faites / fiches) * 100) : 0} %</strong><span>des fiches terminées</span></div>
+          <div><strong>{prospects}</strong><span>prospects dans les carnets</span></div>
+          <div><strong>{signes}</strong><span>client{signes > 1 ? 's' : ''} signé{signes > 1 ? 's' : ''}</span></div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function CarteEleve({ eleve, onOuvrir }) {
   if (eleve.illisible) {
     return (
-      <div className="card-glass p-4" style={{ borderRadius: 'var(--radius-md)' }}>
-        <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{eleve.nom}</p>
-        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Données momentanément illisibles.</p>
+      <div className="eleve-carte eleve-carte-illisible">
+        <p className="coach-carte-nom">{eleve.nom}</p>
+        <p className="espace-vide">Données momentanément illisibles.</p>
       </div>
     )
   }
   const pourcent = eleve.fiches_total ? Math.round((eleve.fiches_terminees / eleve.fiches_total) * 100) : 0
+  const clients = eleve.prospects_par_statut?.Client || 0
   return (
-    <button
-      onClick={() => onOuvrir(eleve)}
-      className="card-glass p-4 w-full text-left"
-      style={{ borderRadius: 'var(--radius-md)' }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{eleve.nom}</p>
-          <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-            {[eleve.parcours, eleve.jour !== null && eleve.jour !== undefined ? `J${eleve.jour}/${eleve.duree}` : null, eleve.etat !== 'En cours' ? eleve.etat : null]
+    <button type="button" onClick={() => onOuvrir(eleve)} className={`eleve-carte${aSurveiller(eleve) ? ' eleve-carte-alerte' : ''}`}>
+      <div className="eleve-carte-haut">
+        <div className="min-w-0">
+          <p className="coach-carte-nom">{eleve.nom}</p>
+          <p className="eleve-carte-meta">
+            {[eleve.parcours, eleve.jour !== null && eleve.jour !== undefined ? `Jour ${eleve.jour} sur ${eleve.duree}` : null, eleve.etat !== 'En cours' ? eleve.etat : null]
               .filter(Boolean).join(' · ')}
           </p>
-          <Pastilles eleve={eleve} />
         </div>
-        <ChevronDown size={18} color="var(--text-secondary)" style={{ transform: 'rotate(-90deg)' }} />
+        <EtatEleve eleve={eleve} />
       </div>
-      <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--accent-soft)' }}>
-        <div className="h-full rounded-full" style={{ width: `${pourcent}%`, background: 'var(--accent)' }} />
+
+      {eleve.retours_ia_a_relire > 0 && (
+        <p className="eleve-carte-retours">
+          {eleve.retours_ia_a_relire} retour{eleve.retours_ia_a_relire > 1 ? 's' : ''} d'Idris à relire
+        </p>
+      )}
+
+      <div className="eleve-carte-progres">
+        <div className="resultat-jauge"><span style={{ width: `${pourcent}%` }} /></div>
+        <span><strong>{eleve.fiches_terminees}/{eleve.fiches_total}</strong> fiches</span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 mt-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-        <span>Fiches : <strong style={{ color: 'var(--text-primary)' }}>{eleve.fiches_terminees}/{eleve.fiches_total}</strong></span>
-        <span>Dernière saisie : <strong style={{ color: 'var(--text-primary)' }}>{depuis(eleve.jours_sans_saisie)}</strong></span>
-        <span>Connexion : <strong style={{ color: 'var(--text-primary)' }}>{dateFr(eleve.derniere_connexion) || '—'}</strong></span>
-        <span>Prospects : <strong style={{ color: 'var(--text-primary)' }}>{eleve.nb_prospects}</strong>
-          {eleve.prospects_par_statut?.Client ? ` · ${eleve.prospects_par_statut.Client} client(s)` : ''}</span>
-      </div>
+
+      <dl className="eleve-carte-chiffres">
+        <div><dt>Dernière saisie</dt><dd>{depuis(eleve.jours_sans_saisie)}</dd></div>
+        <div><dt>Connexion</dt><dd>{dateFr(eleve.derniere_connexion) || '—'}</dd></div>
+        <div><dt>Prospects</dt><dd>{eleve.nb_prospects}{clients ? ` · ${clients} client${clients > 1 ? 's' : ''}` : ''}</dd></div>
+      </dl>
+
+      <span className="eleve-carte-lien">Voir son espace <ChevronRight size={15} aria-hidden="true" /></span>
     </button>
   )
 }
@@ -175,10 +211,10 @@ function ReponsesFiche({ fiche, clientPageId, coachKey, onAuthFailure }) {
           .map((c) => [c.libelle, entree.donnees?.[c.cle]])
           .filter(([, v]) => v !== undefined && v !== null && v !== '')
         return (
-          <div key={entree.id} className="p-3 rounded-xl" style={{ border: 'var(--border-subtle)' }}>
-            {entree.date && <p className="text-xs mb-1" style={{ color: 'var(--text-tertiary)' }}>Enregistré le {dateFr(entree.date)}</p>}
+          <div key={entree.id} className="coach-reponse">
+            {entree.date && <p className="coach-reponse-date">Enregistré le {dateFr(entree.date)}</p>}
             {lignes.length === 0 && <Vide>Entrée vide.</Vide>}
-            <dl className="space-y-1.5">
+            <dl className="space-y-2">
               {lignes.map(([libelle, valeur], i) => (
                 <div key={i}>
                   <dt className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{libelle}</dt>
@@ -187,8 +223,8 @@ function ReponsesFiche({ fiche, clientPageId, coachKey, onAuthFailure }) {
               ))}
             </dl>
             {entree.retour_ia?.texte && (
-              <div className="mt-2 p-2 rounded-lg" style={{ background: 'var(--accent-soft)' }}>
-                <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Retour d'Idris</p>
+              <div className="coach-retour-idris">
+                <p className="energie-surtitre">Retour d'Idris</p>
                 <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{entree.retour_ia.texte}</p>
               </div>
             )}
@@ -199,9 +235,102 @@ function ReponsesFiche({ fiche, clientPageId, coachKey, onAuthFailure }) {
   )
 }
 
+// Fiches regroupees par module, comme « Mon parcours » cote client.
+function FichesParModule({ fiches, clientPageId, coachKey, onAuthFailure }) {
+  const [ouverte, setOuverte] = useState(null)
+  const modules = []
+  for (const fiche of fiches) {
+    const label = fiche.module || 'Autres'
+    let groupe = modules.find((m) => m.label === label)
+    if (!groupe) {
+      groupe = { label, fiches: [] }
+      modules.push(groupe)
+    }
+    groupe.fiches.push(fiche)
+  }
+
+  return (
+    <div className="coach-modules">
+      {modules.map((module) => {
+        const { surtitre, titre } = lireModule(module.label)
+        const faites = module.fiches.filter((f) => f.etat === 'Terminé').length
+        return (
+          <div key={module.label} className="energie-carte">
+            <div className="coach-module-entete">
+              <div className="min-w-0">
+                <p className="energie-surtitre">{surtitre}</p>
+                <p className="coach-module-titre">{titre}</p>
+              </div>
+              <span className={`coach-puce ${faites === module.fiches.length ? 'coach-puce-ok' : 'coach-puce-neutre'}`}>
+                {faites}/{module.fiches.length}
+              </span>
+            </div>
+            <ul className="module-carte-fiches">
+              {module.fiches.map((fiche) => {
+                const estOuverte = ouverte === fiche.id
+                const bloquee = String(fiche.acces || '').includes('Bloqué')
+                const finie = fiche.etat === 'Terminé'
+                const { numero, titre: titreFiche } = lireFiche(fiche.nom)
+                return (
+                  <li key={fiche.id}>
+                    <button
+                      type="button"
+                      onClick={() => setOuverte(estOuverte ? null : fiche.id)}
+                      disabled={bloquee}
+                      className={`module-fiche${finie ? ' module-fiche-fini' : fiche.etat === 'En cours' ? ' module-fiche-actif' : ''}`}
+                      aria-expanded={estOuverte}
+                    >
+                      <span className="module-fiche-numero">{numero ?? '•'}</span>
+                      <span className="module-fiche-titre">
+                        {titreFiche}
+                        {fiche.priorite?.type === 'prioritaire' && <span className="coach-prioritaire"> · prioritaire</span>}
+                      </span>
+                      <span className="coach-fiche-etat" style={{ color: STATUT_COULEURS[fiche.etat] || 'var(--text-tertiary)' }}>
+                        {bloquee ? 'Pas encore ouverte' : fiche.etat || 'Pas commencé'}
+                      </span>
+                    </button>
+                    {estOuverte && (
+                      <div className="coach-fiche-reponses">
+                        <ReponsesFiche fiche={fiche} clientPageId={clientPageId} coachKey={coachKey} onAuthFailure={onAuthFailure} />
+                      </div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TableauKpi({ kpis }) {
+  return (
+    <div className="coach-tableau">
+      <table>
+        <thead>
+          <tr>
+            <th>Indicateur</th>
+            {KPI_COLONNES.map(([cle, libelle]) => <th key={cle}>{libelle}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {kpis.map((kpi) => (
+            <tr key={kpi.id}>
+              <td>{kpi.nom}</td>
+              {KPI_COLONNES.map(([cle]) => <td key={cle}>{nombre(kpi[cle])}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function DetailEleve({ eleve, coachKey, onAuthFailure, onRetour }) {
   const [etat, setEtat] = useState({ chargement: true })
-  const [ficheOuverte, setFicheOuverte] = useState(null)
+  const [detailKpi, setDetailKpi] = useState(false)
 
   async function charger(frais = false) {
     setEtat((e) => ({ ...e, chargement: true, erreur: '' }))
@@ -211,37 +340,42 @@ function DetailEleve({ eleve, coachKey, onAuthFailure, onRetour }) {
 
   useEffect(() => {
     charger()
+    window.scrollTo(0, 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eleve.client_page_id])
 
   const d = etat.data?.dashboard
   const carnet = etat.data?.carnet
   const bilans = (etat.data?.bilans || []).slice(-8).reverse()
+  const kpis = Array.isArray(d?.kpi) ? d.kpi : []
+  const jour = d?.rythme ? d.rythme.jour : null
+  const fichesFaites = d ? d.fiches.filter((f) => f.etat === 'Terminé').length : 0
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <button onClick={onRetour} className="flex items-center gap-1 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-          <ChevronLeft size={16} /> Tous les élèves
+    <div>
+      <div className="coach-detail-barre">
+        <button type="button" onClick={onRetour} className="coach-retour">
+          <ChevronLeft size={16} aria-hidden="true" /> Tous les élèves
         </button>
         <button
+          type="button"
           onClick={() => charger(true)}
           disabled={etat.chargement}
-          className="px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-sm disabled:opacity-50"
-          style={{ color: 'var(--text-secondary)', border: 'var(--border-subtle)' }}
+          className="coach-bouton-icone"
           aria-label="Actualiser"
+          title="Actualiser"
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={15} className={etat.chargement ? 'coach-tourne' : undefined} />
         </button>
       </div>
 
-      <div>
-        <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{d?.nom || eleve.nom}</h2>
-        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-          {[eleve.parcours, d?.rythme ? `J${d.rythme.jour}/${d.rythme.duree}` : null, d?.date_demarrage ? `démarré le ${dateFr(d.date_demarrage)}` : null]
+      <div className="coach-detail-entete">
+        <h2 className="coach-detail-nom">{d?.nom || eleve.nom}</h2>
+        <p className="eleve-carte-meta">
+          {[eleve.parcours, d?.date_demarrage ? `démarré le ${dateFr(d.date_demarrage)}` : null, `connexion ${dateFr(eleve.derniere_connexion) || 'jamais'}`]
             .filter(Boolean).join(' · ')}
         </p>
-        <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Ce que l'élève voit dans son espace, lu à la même source.</p>
+        <p className="coach-intro">Ce que l'élève voit dans son espace, lu à la même source.</p>
       </div>
 
       {etat.chargement && !d && <Vide>Chargement...</Vide>}
@@ -249,146 +383,136 @@ function DetailEleve({ eleve, coachKey, onAuthFailure, onRetour }) {
 
       {d && (
         <>
-          <Bloc titre="En bref">
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <p style={{ color: 'var(--text-secondary)' }}>Fiches en retard : <strong style={{ color: d.rythme?.en_retard ? 'var(--danger)' : 'var(--text-primary)' }}>{d.rythme?.en_retard ?? '—'}</strong></p>
-              <p style={{ color: 'var(--text-secondary)' }}>Bilans d'affilée : <strong style={{ color: 'var(--text-primary)' }}>{d.regularite?.serie ?? '—'}</strong></p>
-              <p style={{ color: 'var(--text-secondary)' }}>Dernière relance : <strong style={{ color: 'var(--text-primary)' }}>{dateFr(eleve.derniere_relance) || '—'}</strong></p>
-              <p style={{ color: 'var(--text-secondary)' }}>Relances envoyées : <strong style={{ color: 'var(--text-primary)' }}>{eleve.nb_relances}</strong></p>
-            </div>
-            {d.objectif_90j && (
-              <p className="text-sm mt-2" style={{ color: 'var(--text-primary)' }}>
-                <span style={{ color: 'var(--text-tertiary)' }}>Objectif 90 jours : </span>{d.objectif_90j}
-              </p>
-            )}
-            {d.personnalisation?.zones_prioritaires?.length > 0 && (
-              <p className="text-sm mt-1" style={{ color: 'var(--text-primary)' }}>
-                <span style={{ color: 'var(--text-tertiary)' }}>Zones prioritaires : </span>
-                {d.personnalisation.zones_prioritaires.map((z) => z.zone).join(', ')}
-              </p>
-            )}
-          </Bloc>
+          <CapParcours
+            coach
+            rythme={d.rythme}
+            objectif={d.objectif_90j}
+            fichesFaites={fichesFaites}
+            fichesTotal={d.fiches.length}
+            regularite={d.regularite}
+          />
 
-          <Bloc titre="Fiches">
-            <ul className="space-y-1">
-              {d.fiches.map((fiche) => {
-                const ouverte = ficheOuverte === fiche.id
-                const bloquee = String(fiche.acces || '').includes('Bloqué')
-                return (
-                  <li key={fiche.id}>
-                    <button
-                      onClick={() => setFicheOuverte(ouverte ? null : fiche.id)}
-                      disabled={bloquee}
-                      className="w-full flex items-center justify-between gap-3 text-sm text-left py-1 disabled:opacity-60"
-                      aria-expanded={ouverte}
-                    >
-                      <span style={{ color: 'var(--text-primary)' }}>
-                        {String(fiche.nom || '').split(' - ').slice(-1)[0]}
-                        {fiche.priorite?.type === 'prioritaire' && (
-                          <span className="text-xs" style={{ color: 'var(--warning)' }}> · prioritaire</span>
-                        )}
-                      </span>
-                      <span className="text-xs font-semibold shrink-0" style={{ color: STATUT_COULEURS[fiche.etat] || 'var(--text-tertiary)' }}>
-                        {bloquee ? 'Pas encore ouverte' : fiche.etat || 'Pas commencé'}
-                      </span>
-                    </button>
-                    {ouverte && (
-                      <div className="pb-2">
-                        <ReponsesFiche fiche={fiche} clientPageId={eleve.client_page_id} coachKey={coachKey} onAuthFailure={onAuthFailure} />
-                      </div>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </Bloc>
-
-          <Bloc titre="Indicateurs (KPI)">
-            {d.kpi?.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--text-tertiary)' }}>
-                      <th className="text-left font-medium py-1 pr-2">KPI</th>
-                      {KPI_COLONNES.map(([cle, libelle]) => <th key={cle} className="text-right font-medium py-1 px-1">{libelle}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.kpi.map((kpi) => (
-                      <tr key={kpi.id} style={{ borderTop: 'var(--border-subtle)' }}>
-                        <td className="py-1 pr-2" style={{ color: 'var(--text-primary)' }}>{kpi.nom}</td>
-                        {KPI_COLONNES.map(([cle]) => (
-                          <td key={cle} className="text-right py-1 px-1" style={{ color: 'var(--text-primary)' }}>{nombre(kpi[cle])}</td>
-                        ))}
-                      </tr>
+          <Section titre="Son suivi">
+            <div className="energie-grille">
+              <div className="energie-carte">
+                <p className="energie-surtitre">Activité et relances</p>
+                <dl className="coach-stats">
+                  <div><dt>Dernière saisie</dt><dd className={inactif(eleve) ? 'coach-stat-alerte' : undefined}>{depuis(eleve.jours_sans_saisie)}</dd></div>
+                  <div><dt>Fiches en retard</dt><dd className={d.rythme?.en_retard ? 'coach-stat-alerte' : undefined}>{d.rythme?.en_retard ?? '—'}</dd></div>
+                  <div><dt>Bilans d'affilée</dt><dd>{d.regularite?.serie ?? '—'}</dd></div>
+                  <div><dt>Relances envoyées</dt><dd>{eleve.nb_relances ?? 0}</dd></div>
+                  <div><dt>Dernière relance</dt><dd>{dateFr(eleve.derniere_relance) || '—'}</dd></div>
+                  <div><dt>Retours d'Idris à relire</dt><dd className={eleve.retours_ia_a_relire ? 'coach-stat-attente' : undefined}>{eleve.retours_ia_a_relire ?? 0}</dd></div>
+                </dl>
+              </div>
+              <div className="energie-carte">
+                <p className="energie-surtitre">Priorités du diagnostic</p>
+                {d.personnalisation?.zones_prioritaires?.length > 0 ? (
+                  <ul className="coach-zones">
+                    {d.personnalisation.zones_prioritaires.map((z, i) => (
+                      <li key={z.zone}>
+                        <span className="coach-zone-rang">{i + 1}</span>
+                        <span>
+                          <strong>{z.zone}</strong>
+                          {z.score !== undefined && z.score !== null && <small> · {z.score}/3</small>}
+                        </span>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
+                  </ul>
+                ) : <Vide>Pas encore de diagnostic validé.</Vide>}
+              </div>
+            </div>
+          </Section>
+
+          <Section
+            titre="Ses résultats"
+            action={kpis.length > 0 && kpiRenseignes(kpis) && (
+              <button type="button" className="resultats-bouton" aria-expanded={detailKpi} onClick={() => setDetailKpi((v) => !v)}>
+                {detailKpi ? 'Masquer le détail' : 'Détail J0 à J90'}
+                <ChevronDown size={15} aria-hidden="true" className={detailKpi ? 'resultats-chevron-ouvert' : undefined} />
+              </button>
+            )}
+          >
+            {kpis.length > 0 && kpiRenseignes(kpis) ? (
+              <div className="resultats-grille">
+                {kpis.map((kpi) => <TuileResultat key={kpi.id} kpi={kpi} jour={jour} />)}
               </div>
             ) : <Vide>Aucun indicateur saisi.</Vide>}
-          </Bloc>
+            {detailKpi && <TableauKpi kpis={kpis} />}
+            <ScoreCommercial coach personnalisation={d.personnalisation} />
+          </Section>
 
-          <Bloc titre="Bilans hebdomadaires">
-            {bilans.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--text-tertiary)' }}>
-                      <th className="text-left font-medium py-1 pr-2">Semaine du</th>
-                      <th className="text-right font-medium py-1 px-1">Contacts</th>
-                      <th className="text-right font-medium py-1 px-1">RDV</th>
-                      <th className="text-right font-medium py-1 px-1">Propos.</th>
-                      <th className="text-right font-medium py-1 px-1">Ventes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bilans.map((b) => (
-                      <tr key={b.semaine_du} style={{ borderTop: 'var(--border-subtle)', color: 'var(--text-primary)' }}>
-                        <td className="py-1 pr-2">{dateFr(b.semaine_du)}</td>
-                        <td className="text-right py-1 px-1">{nombre(b.contacts)}</td>
-                        <td className="text-right py-1 px-1">{nombre(b.rdv)}</td>
-                        <td className="text-right py-1 px-1">{nombre(b.propositions)}</td>
-                        <td className="text-right py-1 px-1">{nombre(b.ventes)}</td>
+          <Section titre="Ses fiches">
+            <FichesParModule fiches={d.fiches} clientPageId={eleve.client_page_id} coachKey={coachKey} onAuthFailure={onAuthFailure} />
+          </Section>
+
+          <div className="energie-grille coach-section">
+            <div className="energie-carte">
+              <p className="energie-surtitre">Bilans de la semaine</p>
+              {bilans.length ? (
+                <div className="coach-tableau">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Semaine du</th>
+                        <th>Contacts</th>
+                        <th>RDV</th>
+                        <th>Propos.</th>
+                        <th>Ventes</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : <Vide>Aucun bilan enregistré.</Vide>}
-          </Bloc>
+                    </thead>
+                    <tbody>
+                      {bilans.map((b) => (
+                        <tr key={b.semaine_du}>
+                          <td>{dateFr(b.semaine_du)}</td>
+                          <td>{nombre(b.contacts)}</td>
+                          <td>{nombre(b.rdv)}</td>
+                          <td>{nombre(b.propositions)}</td>
+                          <td>{nombre(b.ventes)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : <Vide>Aucun bilan enregistré.</Vide>}
+            </div>
 
-          <Bloc titre="Carnet de prospects">
-            {carnet?.prospects?.length ? (
-              <>
-                <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>
-                  {carnet.statuts.map((s) => `${s} : ${carnet.par_statut[s] || 0}`).join(' · ')}
-                  {carnet.a_relancer?.length ? ` · ${carnet.a_relancer.length} à relancer` : ''}
-                </p>
-                <ul className="space-y-1">
-                  {carnet.prospects.slice(0, 30).map((p) => (
-                    <li key={p.id} className="flex justify-between gap-3 text-sm">
-                      <span style={{ color: 'var(--text-primary)' }}>{p.nom}</span>
-                      <span className="text-xs shrink-0" style={{ color: 'var(--text-tertiary)' }}>
-                        {p.statut}{p.relance ? ` · relance ${dateFr(p.relance)}` : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : <Vide>Carnet vide.</Vide>}
-          </Bloc>
+            <div className="energie-carte">
+              <p className="energie-surtitre">Carnet de prospects</p>
+              {carnet?.prospects?.length ? (
+                <>
+                  <div className="coach-statuts">
+                    {carnet.statuts.map((s) => (
+                      <span key={s} className="coach-puce coach-puce-neutre">{s} <strong>{carnet.par_statut[s] || 0}</strong></span>
+                    ))}
+                    {carnet.a_relancer?.length > 0 && (
+                      <span className="coach-puce coach-puce-attente">À relancer <strong>{carnet.a_relancer.length}</strong></span>
+                    )}
+                  </div>
+                  <ul className="coach-prospects">
+                    {carnet.prospects.slice(0, 30).map((p) => (
+                      <li key={p.id}>
+                        <span>{p.nom}</span>
+                        <small>{p.statut}{p.relance ? ` · relance ${dateFr(p.relance)}` : ''}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : <Vide>Carnet vide.</Vide>}
+            </div>
+          </div>
 
           {d.syntheses?.length > 0 && (
-            <Bloc titre="Synthèses mensuelles envoyées">
-              <div className="space-y-2">
+            <Section titre="Synthèses mensuelles envoyées">
+              <div className="space-y-3">
                 {d.syntheses.map((s) => (
-                  <div key={s.mois}>
-                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Mois {s.mois}{s.date ? ` · ${dateFr(s.date)}` : ''}</p>
+                  <div key={s.mois} className="energie-carte">
+                    <p className="energie-surtitre">Mois {s.mois}{s.date ? ` · ${dateFr(s.date)}` : ''}</p>
                     <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{s.texte}</p>
                   </div>
                 ))}
               </div>
-            </Bloc>
+            </Section>
           )}
         </>
       )}
@@ -396,7 +520,7 @@ function DetailEleve({ eleve, coachKey, onAuthFailure, onRetour }) {
   )
 }
 
-export default function CoachEleves({ coachKey, onAuthFailure }) {
+export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
   const [eleves, setEleves] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -418,10 +542,17 @@ export default function CoachEleves({ coachKey, onAuthFailure }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Les eleves a surveiller passent en tete, l'ordre du serveur est garde sinon.
   const filtres = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('fr-FR')
-    return eleves.filter((e) => !q || (e.nom || '').toLocaleLowerCase('fr-FR').includes(q))
+    const liste = eleves.filter((e) => !q || (e.nom || '').toLocaleLowerCase('fr-FR').includes(q))
+    return [...liste.filter(aSurveiller), ...liste.filter((e) => !aSurveiller(e))]
   }, [eleves, query])
+
+  useEffect(() => {
+    onDetail?.(Boolean(ouvert))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ouvert])
 
   if (ouvert) {
     return <DetailEleve eleve={ouvert} coachKey={coachKey} onAuthFailure={onAuthFailure} onRetour={() => setOuvert(null)} />
@@ -429,13 +560,11 @@ export default function CoachEleves({ coachKey, onAuthFailure }) {
 
   return (
     <div>
-      <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-        Ce que chaque élève fait dans son espace client : fiches, indicateurs, bilans, carnet de prospects. Lecture seule.
-      </p>
+      {eleves.length > 0 && <BandeauEleves eleves={eleves} />}
 
-      <div className="card-glass p-4 mb-4 flex gap-2" style={{ borderRadius: 'var(--radius-lg)' }}>
-        <div className="flex-1 flex items-center gap-2 field-input px-3 py-2">
-          <Search size={14} color="var(--text-tertiary)" />
+      <div className="coach-recherche">
+        <div className="field-input coach-recherche-champ">
+          <Search size={15} color="var(--text-tertiary)" aria-hidden="true" />
           <input
             type="text"
             value={query}
@@ -445,22 +574,23 @@ export default function CoachEleves({ coachKey, onAuthFailure }) {
           />
         </div>
         <button
+          type="button"
           onClick={charger}
           disabled={loading}
-          className="px-3 rounded-xl flex items-center gap-1.5 text-sm font-medium disabled:opacity-50"
-          style={{ color: 'var(--text-secondary)', border: 'var(--border-subtle)' }}
+          className="coach-bouton-icone"
           aria-label="Actualiser"
+          title="Actualiser"
         >
-          <RefreshCw size={14} />
+          <RefreshCw size={15} className={loading ? 'coach-tourne' : undefined} />
         </button>
       </div>
 
-      {loading && <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Chargement...</p>}
+      {loading && <Vide>Chargement...</Vide>}
       {error && <p className="text-sm" style={{ color: 'var(--danger)' }}>{error}</p>}
       {!loading && !error && eleves.length === 0 && <Vide>Aucun élève en cours.</Vide>}
 
-      <div className="space-y-3">
-        {filtres.map((eleve) => <LigneEleve key={eleve.client_page_id} eleve={eleve} onOuvrir={setOuvert} />)}
+      <div className="eleves-grille">
+        {filtres.map((eleve) => <CarteEleve key={eleve.client_page_id} eleve={eleve} onOuvrir={setOuvert} />)}
       </div>
     </div>
   )

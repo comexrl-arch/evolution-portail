@@ -5643,3 +5643,469 @@ ul.idris-rdv-liste {
 .carnet-rappel .fiche-bouton {
   margin-top: 0.9rem;
 }
+
+/* ==========================================================================
+   ESPACE COACH (lifting du 28/10/2026) : meme coquille que l'espace client
+   (menu lateral, en-tete, bandeau sombre, cartes blanches).
+   ========================================================================== */
+
+.espace-menu-rubrique {
+  margin: -1.1rem 0.6rem 1.4rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-gold-champagne);
+}
+
+.espace-menu-installer {
+  margin-top: auto;
+  border: 1px dashed rgba(201, 162, 101, 0.45);
+  color: var(--brand-gold-champagne);
+}
+
+.coach-intro {
+  margin: -0.35rem 0 1.25rem;
+  max-width: 62ch;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.coach-colonne {
+  max-width: 760px;
+}
+
+.coach-section {
+  margin-bottom: 1.75rem;
+}
+
+.coach-carte-nom {
+  font-family: var(--font-serif);
+  font-size: 1.12rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.coach-puce {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  padding: 0.16rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.coach-puce-ok { background: var(--success-soft); color: var(--success); }
+.coach-puce-alerte { background: var(--danger-soft); color: var(--danger); }
+.coach-puce-attente { background: var(--warning-soft); color: var(--warning); }
+.coach-puce-neutre { background: var(--surface-3); border: var(--border-subtle); color: var(--text-secondary); font-weight: 600; }
+.coach-puce strong { color: var(--text-primary); }
+
+.coach-recherche {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.coach-recherche-champ {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--surface-2);
+}
+
+.coach-bouton-icone {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+
+.coach-bouton-icone:hover:not(:disabled) {
+  border-color: var(--brand-gold-metal);
+  color: var(--accent);
+}
+
+.coach-bouton-icone:disabled {
+  opacity: 0.6;
+}
+
+.coach-tourne {
+  animation: coach-tourne 1s linear infinite;
+}
+
+@keyframes coach-tourne {
+  to { transform: rotate(360deg); }
+}
+
+/* Liste des eleves */
+.coach-bandeau .cap-jour small {
+  font-size: 1.1rem;
+}
+
+.eleves-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 0.85rem;
+}
+
+.eleve-carte {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1.1rem 1.15rem 0.95rem;
+  border: var(--border-subtle);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  text-align: left;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+button.eleve-carte:hover {
+  border-color: var(--brand-gold-metal);
+  box-shadow: 0 6px 18px rgba(20, 23, 31, 0.06);
+}
+
+.eleve-carte-alerte {
+  border-left-color: var(--danger);
+}
+
+.eleve-carte-illisible {
+  background: var(--surface-3);
+}
+
+.eleve-carte-haut {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.eleve-carte-meta {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.eleve-carte-retours {
+  margin-top: -0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.eleve-carte-progres {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.eleve-carte-progres strong {
+  color: var(--text-primary);
+}
+
+.eleve-carte-chiffres {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding-top: 0.7rem;
+  border-top: var(--border-subtle);
+}
+
+.eleve-carte-chiffres dt,
+.coach-stats dt {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+.eleve-carte-chiffres dd {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.eleve-carte-lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  align-self: flex-end;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Fiche d'un eleve */
+.coach-detail-barre {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.coach-retour {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.coach-detail-entete {
+  margin-bottom: 1.1rem;
+}
+
+.coach-detail-entete .coach-intro {
+  margin: 0.35rem 0 0;
+}
+
+.coach-detail-nom {
+  font-family: var(--font-serif);
+  font-size: 1.9rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.coach-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem 0.75rem;
+}
+
+.coach-stats dd {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.coach-stats .coach-stat-alerte { color: var(--danger); }
+.coach-stats .coach-stat-attente { color: var(--warning); }
+
+.coach-zones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.coach-zones li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+
+.coach-zones small {
+  color: var(--text-tertiary);
+}
+
+.coach-zone-rang {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--danger);
+}
+
+.coach-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.coach-module-entete {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.coach-module-titre {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.coach-fiche-etat {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.coach-prioritaire {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.coach-fiche-reponses {
+  padding: 0.4rem 0 0.8rem;
+}
+
+.coach-reponse {
+  padding: 0.85rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+
+.coach-reponse-date {
+  margin-bottom: 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+.coach-retour-idris {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.coach-tableau {
+  overflow-x: auto;
+  margin-top: 0.25rem;
+}
+
+.coach-tableau table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.coach-tableau th {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: right;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.coach-tableau td {
+  padding: 0.45rem 0.5rem;
+  border-top: var(--border-subtle);
+  text-align: right;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.coach-tableau th:first-child,
+.coach-tableau td:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.resultats-grille + .coach-tableau {
+  margin-top: 0.85rem;
+  padding: 0.6rem 0.9rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.coach-statuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.coach-prospects li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0;
+  border-top: var(--border-subtle);
+  font-size: 0.86rem;
+  color: var(--text-primary);
+}
+
+.coach-prospects small {
+  flex-shrink: 0;
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+}
+
+/* Ecran de deverrouillage */
+.coach-verrou {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.coach-verrou-carte {
+  width: 100%;
+  max-width: 380px;
+  padding: 2rem;
+  border-radius: var(--radius-xl);
+}
+
+.coach-verrou-logo {
+  height: 46px;
+  width: auto;
+  margin-bottom: 1.5rem;
+}
+
+.coach-verrou-surtitre {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--accent);
+}
+
+.coach-verrou-titre {
+  margin: 0.3rem 0 0.5rem;
+  font-family: var(--font-serif);
+  font-size: 1.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.coach-verrou .fiche-bouton {
+  align-self: stretch;
+}
+
+@media (max-width: 640px) {
+  .eleves-grille,
+  .coach-modules {
+    grid-template-columns: 1fr;
+  }
+
+  .coach-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .coach-detail-nom {
+    font-size: 1.55rem;
+  }
+}

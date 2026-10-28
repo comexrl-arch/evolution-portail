@@ -196,10 +196,7 @@ export default function CoachSuiviClients({ coachKey, onAuthFailure }) {
   }, [clients, query, etapeFiltre])
 
   return (
-    <div>
-      <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
-        Avancement du process client, lu dans le cockpit Google Sheets (lecture seule).
-      </p>
+    <div className="coach-colonne">
 
       <div className="card-glass p-4 mb-4 space-y-2" style={{ borderRadius: 'var(--radius-lg)' }}>
         <div className="flex items-center gap-2 field-input px-3 py-2">
@@ -253,7 +250,7 @@ export default function CoachSuiviClients({ coachKey, onAuthFailure }) {
                 aria-expanded={ouvert}
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{client.nom}</p>
+                  <p className="coach-carte-nom">{client.nom}</p>
                   <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
                     {[client.offre, client.etape].filter(Boolean).join(' · ') || 'Étape non renseignée'}
                   </p>

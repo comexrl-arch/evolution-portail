@@ -1,0 +1,17 @@
+{
+  "id": "/coach",
+  "name": "RL-eVolution Coach · Espace Coach",
+  "short_name": "RL-eVolution Coach",
+  "description": "Suivi des élèves, diagnostics et onboarding RL-eVolution.",
+  "lang": "fr",
+  "start_url": "/coach",
+  "scope": "/coach",
+  "display": "standalone",
+  "background_color": "#F1F0EC",
+  "theme_color": "#8E6C38",
+  "icons": [
+    { "src": "/coach-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/coach-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/coach-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
