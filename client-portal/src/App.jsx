@@ -4,7 +4,7 @@ import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, Ch
 import logo from './assets/logo.svg'
 import { installer, useInstallation } from './installation.js'
 import BoutonInstaller from './BoutonInstaller.jsx'
-import { ListePoints } from './PointsRythme.jsx'
+import { ListePoints, libellePoint } from './PointsRythme.jsx'
 import { cleRdv, useNouveautesEleve } from './Nouveautes.js'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
@@ -2955,9 +2955,19 @@ function lienSur(lien) {
 }
 
 // Onglet Communaute (lot 4) : lien du groupe, prochain point collectif, replays.
-function Communaute({ dashboard }) {
+function Communaute({ dashboard, points }) {
   const sessions = dashboard.sessions || []
-  const prochaine = prochaineSession(sessions)
+  // Prochain point collectif : session Notion ou point pose dans l'agenda de
+  // Rony (28/10/2026), le plus proche des deux.
+  const maintenant = new Date().toISOString().slice(0, 16)
+  const collectifAgenda = (points || [])
+    .filter((p) => p.type === 'collectif' && p.evenement && p.evenement.fin >= maintenant)
+    .sort((a, b) => a.evenement.debut.localeCompare(b.evenement.debut))[0]
+  const deSession = prochaineSession(sessions)
+  const prochaine = collectifAgenda && (!deSession || collectifAgenda.evenement.debut < String(deSession.date_heure || '').slice(0, 16))
+    ? { nom: libellePoint(collectifAgenda), date_heure: collectifAgenda.evenement.debut, lien: collectifAgenda.evenement.lieu, lieu: collectifAgenda.evenement.lieu }
+    : deSession
+  const suggere = !prochaine && (points || []).find((p) => p.type === 'collectif' && p.statut === 'a_planifier' && p.date >= maintenant.slice(0, 10))
   const replays = sessions.filter((s) => lienSur(s.replay))
 
   return (
@@ -2982,12 +2992,17 @@ function Communaute({ dashboard }) {
         {prochaine ? (
           <div className="communaute-prochaine">
             <p className="communaute-prochaine-date">{dateSession(prochaine.date_heure)}</p>
-            <p className="communaute-texte">{prochaine.nom}</p>
+            <p className="communaute-texte">{prochaine.nom}{prochaine.lieu && !lienSur(prochaine.lieu) ? ` · ${prochaine.lieu}` : ''}</p>
             {lienSur(prochaine.lien) && (
               <a className="fiche-bouton communaute-bouton" href={prochaine.lien} target="_blank" rel="noopener noreferrer">
                 <Rocket size={16} /> Rejoindre la session
               </a>
             )}
+          </div>
+        ) : suggere ? (
+          <div className="communaute-prochaine">
+            <p className="communaute-prochaine-date">Vers le {new Date(...suggere.date.split('-').map((v, i) => Number(v) - (i === 1 ? 1 : 0))).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+            <p className="communaute-texte">{libellePoint(suggere)} · Rony te confirme la date et l'heure.</p>
           </div>
         ) : (
           <p className="espace-vide">La date de ton prochain point collectif apparaîtra ici dès qu'elle sera planifiée.</p>
@@ -4697,15 +4712,15 @@ function Portail() {
                 regularite={dashboard.regularite}
               />
 
+              {/* RDV avec Rony juste sous le cap 90 jours (demande de Rony, 28/10/2026). */}
+              <MesPoints points={nouveautes.points} nouveaux={nouveautes.rdvNouveaux} onVu={nouveautes.marquerRdvVus} />
+
               <ProchaineEtape
                 module={moduleEnCours}
                 fiche={ficheAReprendre}
                 onOpen={openFiche}
                 onParcours={() => changerOnglet('parcours')}
               />
-
-              {/* RDV avec Rony haut dans la page (28/10/2026) : ils etaient tout en bas. */}
-              <MesPoints points={nouveautes.points} nouveaux={nouveautes.rdvNouveaux} onVu={nouveautes.marquerRdvVus} />
 
               <RelancesDuJour onOuvrir={() => changerOnglet('prospects')} />
 
@@ -4795,7 +4810,7 @@ function Portail() {
           {onglet === 'communaute' && (
             <>
               <h2 className="accueil-section-titre">Communauté</h2>
-              <Communaute dashboard={dashboard} />
+              <Communaute dashboard={dashboard} points={nouveautes.points} />
             </>
           )}
 
