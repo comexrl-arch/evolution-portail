@@ -5,6 +5,7 @@ import logo from './assets/logo.svg'
 import { installer, useInstallation } from './installation.js'
 import BoutonInstaller from './BoutonInstaller.jsx'
 import { ListePoints } from './PointsRythme.jsx'
+import { cleRdv, useNouveautesEleve } from './Nouveautes.js'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
 import illustrationModule1 from './assets/modules/module-1.jpg'
@@ -2174,18 +2175,18 @@ function ProchaineSession({ sessions, onVoir }) {
 }
 
 // « Mes prochains points » (28/10/2026) : les RDV avec Rony poses dans son
-// agenda, et le point suivant suggere selon le jour de parcours.
-function MesPoints() {
-  const [points, setPoints] = useState(null)
-
+// agenda, et le point suivant suggere selon le jour de parcours. Les points
+// viennent de useNouveautesEleve ; un RDV nouveau ou deplace porte un badge.
+function MesPoints({ points, nouveaux = [], onVu }) {
+  // Ce qui etait nouveau a l'affichage le reste a l'ecran, puis devient « vu ».
+  const [marques, setMarques] = useState(() => new Set())
   useEffect(() => {
-    let actif = true
-    fetch(`${API_BASE}/portal/points`, { headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` } })
-      .then((r) => (r.ok ? r.json() : { points: [] }))
-      .then((data) => { if (actif) setPoints(Array.isArray(data.points) ? data.points : []) })
-      .catch(() => { if (actif) setPoints([]) })
-    return () => { actif = false }
-  }, [])
+    if (!points) return
+    const cles = nouveaux.map(cleRdv)
+    if (cles.length) setMarques((m) => new Set([...m, ...cles]))
+    onVu?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points])
 
   if (!points) return null
   const aujourdhui = new Date().toISOString().slice(0, 10)
@@ -2200,8 +2201,33 @@ function MesPoints() {
   return (
     <section className="panel mes-points">
       <p className="panel-eyebrow"><CalendarDays size={14} /> Mes prochains points</p>
-      <ListePoints points={affiches} />
+      <ListePoints points={affiches} nouveaux={marques} />
       {suivant && !avenir.length && <p className="mes-points-note">Rony te confirme la date et l'heure.</p>}
+    </section>
+  )
+}
+
+// Retours d'Idris pas encore lus, en tete de « Mon parcours ».
+function NouveauxRetoursIdris({ retours, fiches, onOpen }) {
+  const parFiche = [...new Set(retours.map((r) => r.fiche_id).filter(Boolean))]
+    .map((id) => (fiches || []).find((f) => f.id === id))
+    .filter(Boolean)
+  if (!parFiche.length) return null
+
+  return (
+    <section className="panel nouveaux-retours">
+      <p className="panel-eyebrow"><MessageCircle size={14} /> Idris t'a répondu</p>
+      <ul className="nouveaux-retours-liste">
+        {parFiche.map((f) => (
+          <li key={f.id}>
+            <button type="button" className="session-ligne" onClick={() => onOpen(f.id)}>
+              <span className="badge-nouveau">Nouveau</span>
+              <span className="session-ligne-texte">{lireFiche(f.nom).titre || 'Ta fiche'}</span>
+              <ChevronRight size={15} aria-hidden="true" />
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }
@@ -4049,6 +4075,7 @@ function Portail() {
   const [attestationOuverte, setAttestationOuverte] = useState(false)
   const [accueilFerme, setAccueilFerme] = useState(false)
   const [menuOuvert, setMenuOuvert] = useState(false)
+  const nouveautes = useNouveautesEleve(screen === 'dashboard' && Boolean(dashboard))
   // Lien direct (WhatsApp du lundi, notification) : ?ouvrir=bilan, prospects,
   // parcours ou fiche:<id>. Garde en memoire le temps de se connecter.
   const [ouvrirEnAttente, setOuvrirEnAttente] = useState(() => {
@@ -4223,6 +4250,7 @@ function Portail() {
   }
 
   const openFiche = async (ficheId) => {
+    nouveautes.marquerFicheVue(ficheId)
     const token = localStorage.getItem(SESSION_KEY)
     setActiveFicheId(ficheId)
     setFicheData(null)
@@ -4602,18 +4630,23 @@ function Portail() {
         <aside className={`espace-menu${menuOuvert ? ' espace-menu-ouvert' : ''}`}>
           <img src={logo} alt="RL-eVolution" className="espace-menu-logo" />
           <nav className="espace-menu-liens">
-            {ONGLETS.map(({ cle, libelle, icone: Icone }) => (
-              <button
-                key={cle}
-                type="button"
-                className={`espace-menu-lien${onglet === cle ? ' espace-menu-lien-actif' : ''}`}
-                aria-current={onglet === cle ? 'page' : undefined}
-                onClick={() => changerOnglet(cle)}
-              >
-                <Icone size={17} aria-hidden="true" />
-                {libelle}
-              </button>
-            ))}
+            {ONGLETS.map(({ cle, libelle, icone: Icone }) => {
+              // Badges : RDV nouveaux ou deplaces (tableau de bord), retours d'Idris (parcours).
+              const badge = cle === 'tableau' ? nouveautes.rdvNouveaux.length : cle === 'parcours' ? nouveautes.idrisNouveaux.length : 0
+              return (
+                <button
+                  key={cle}
+                  type="button"
+                  className={`espace-menu-lien${onglet === cle ? ' espace-menu-lien-actif' : ''}`}
+                  aria-current={onglet === cle ? 'page' : undefined}
+                  onClick={() => changerOnglet(cle)}
+                >
+                  <Icone size={17} aria-hidden="true" />
+                  {libelle}
+                  {badge > 0 && <span className="menu-badge" aria-label={`${badge} nouveau${badge > 1 ? 'x' : ''}`}>{badge}</span>}
+                </button>
+              )
+            })}
           </nav>
           <BoutonInstaller />
         </aside>
@@ -4637,6 +4670,7 @@ function Portail() {
               onClick={() => setMenuOuvert((v) => !v)}
             >
               {menuOuvert ? <X size={20} /> : <Menu size={20} />}
+              {!menuOuvert && nouveautes.rdvNouveaux.length + nouveautes.idrisNouveaux.length > 0 && <span className="hamburger-pastille" aria-hidden="true" />}
             </button>
             <div className="accueil-titre">
               <h1>Système eVolution 2.0</h1>
@@ -4670,6 +4704,9 @@ function Portail() {
                 onParcours={() => changerOnglet('parcours')}
               />
 
+              {/* RDV avec Rony haut dans la page (28/10/2026) : ils etaient tout en bas. */}
+              <MesPoints points={nouveautes.points} nouveaux={nouveautes.rdvNouveaux} onVu={nouveautes.marquerRdvVus} />
+
               <RelancesDuJour onOuvrir={() => changerOnglet('prospects')} />
 
               {bilanFinalOuvert(dashboard) && <BilanFinal onAttestation={() => { setAttestationOuverte(true); window.scrollTo(0, 0) }} />}
@@ -4699,13 +4736,13 @@ function Portail() {
 
               <IdrisLigne etape={etapeDuCalendrier(dashboard.rythme)} onOuvrir={() => changerOnglet('idris')} />
               <ProchaineSession sessions={dashboard.sessions} onVoir={() => changerOnglet('communaute')} />
-              <MesPoints />
             </>
           )}
 
           {onglet === 'parcours' && (
             <>
               <h2 className="accueil-section-titre">Mon parcours</h2>
+              <NouveauxRetoursIdris retours={nouveautes.idrisNouveaux} fiches={dashboard.fiches} onOpen={openFiche} />
               <FriseParcours modules={modules} moduleEnCours={moduleEnCours} rythme={dashboard.rythme} onOpen={openFiche} />
               <ParcoursSurMesure personnalisation={dashboard.personnalisation} fiches={dashboard.fiches} onOpen={openFiche} />
               <Jalons jalons={jalons} regularite={dashboard.regularite} />

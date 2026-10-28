@@ -470,6 +470,20 @@ def portal_points(authorization: str = Header(default="")):
     ]}
 
 
+@app.get("/portal/nouveautes")
+def portal_nouveautes(authorization: str = Header(default="")):
+    # Badges de l'espace client : retours d'Idris lisibles. Les RDV viennent de
+    # /portal/points. Ce qui est « deja vu » reste dans le navigateur.
+    session = _session_from_header(authorization)
+
+    try:
+        return {"retours_idris": notion_service.retours_idris_publies(session["client_page_id"])}
+
+    except Exception as error:
+        _journaliser_erreur_portail("portal_nouveautes", error)
+        return {"retours_idris": []}
+
+
 @app.get("/portal/fiches/{fiche_id}")
 def portal_get_fiche(fiche_id: str, authorization: str = Header(default="")):
     session = _session_from_header(authorization)
@@ -1356,6 +1370,20 @@ def coach_eleves(x_coach_key: str = Header(default="")):
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("coach_eleves", error)
+
+
+@app.get("/coach/eleves/activite")
+def coach_eleves_activite(x_coach_key: str = Header(default="")):
+    # Badge « nouveau » : derniere saisie de chaque eleve. Requete legere, relue
+    # quand l'Espace Coach revient au premier plan. Jamais d'erreur.
+    _require_coach_key(x_coach_key)
+
+    try:
+        return {"activite": eleves_service.activite()}
+
+    except Exception as error:
+        _journaliser_erreur_portail("coach_eleves_activite", error)
+        return {"activite": {}}
 
 
 @app.get("/coach/eleves/{client_page_id}")
