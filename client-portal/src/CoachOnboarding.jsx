@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import { formaterMaj } from './dates'
-import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks, Users, Menu, X } from 'lucide-react'
+import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks, Users, Menu, X, CalendarDays } from 'lucide-react'
 import logo from './assets/logo.svg'
 import BoutonInstaller from './BoutonInstaller.jsx'
 import CoachSuiviClients from './CoachSuiviClients.jsx'
 import CoachEleves from './CoachEleves.jsx'
+import CoachAgenda from './CoachAgenda.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 const COACH_KEY_STORAGE = 'coach_onboard_key'
@@ -19,6 +20,10 @@ const ONGLETS_COACH = [
   {
     cle: 'eleves', libelle: 'Élèves', icone: Users, titre: 'Mes élèves',
     intro: 'Ce que chaque élève fait dans son espace client : fiches, résultats, bilans, carnet de prospects. Lecture seule.',
+  },
+  {
+    cle: 'agenda', libelle: 'Agenda', icone: CalendarDays, titre: 'Mon agenda',
+    intro: 'Votre Google Agenda : RDV de coaching et étapes de suivi de vos élèves, à côté de vos autres rendez-vous.',
   },
   {
     cle: 'diagnostics', libelle: 'Diagnostics', icone: ClipboardCheck, titre: 'Diagnostics à valider',
@@ -385,6 +390,7 @@ export default function CoachOnboarding() {
         )}
 
       {tab === 'suivi' && <CoachSuiviClients coachKey={coachKey} onAuthFailure={handleAuthFailure} />}
+      {tab === 'agenda' && <CoachAgenda coachKey={coachKey} onAuthFailure={handleAuthFailure} />}
       {tab === 'eleves' && <CoachEleves coachKey={coachKey} onAuthFailure={handleAuthFailure} onDetail={setEleveOuvert} />}
 
 

@@ -2,7 +2,7 @@
   "id": "/coach",
   "name": "RL-eVolution Coach · Espace Coach",
   "short_name": "RL-eVolution Coach",
-  "description": "Suivi des élèves, diagnostics et onboarding RL-eVolution.",
+  "description": "Suivi des élèves, diagnostics, agenda et onboarding RL-eVolution.",
   "lang": "fr",
   "start_url": "/coach",
   "scope": "/coach",

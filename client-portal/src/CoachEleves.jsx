@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react'
+import { CalendarClock, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react'
+import { FormulaireRdv, appelAgenda, dateLongue, heureFr, nouveauRdv } from './CoachAgenda.jsx'
 import { CapParcours, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
@@ -87,6 +88,22 @@ function Vide({ children }) {
   return <p className="espace-vide">{children}</p>
 }
 
+function maintenantLocal() {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function ProchainRdv({ rdv }) {
+  if (!rdv) return null
+  return (
+    <p className="eleve-prochain-rdv">
+      <CalendarClock size={14} aria-hidden="true" />
+      {rdv.type === 'suivi' ? 'Suivi' : 'RDV'} {dateLongue(rdv.debut)}, {heureFr(rdv.debut)}
+    </p>
+  )
+}
+
 function inactif(eleve) {
   return eleve.jours_sans_saisie === null || eleve.jours_sans_saisie >= JOURS_INACTIF
 }
@@ -139,7 +156,7 @@ function BandeauEleves({ eleves }) {
   )
 }
 
-function CarteEleve({ eleve, onOuvrir }) {
+function CarteEleve({ eleve, rdv, onOuvrir }) {
   if (eleve.illisible) {
     return (
       <div className="eleve-carte eleve-carte-illisible">
@@ -168,6 +185,8 @@ function CarteEleve({ eleve, onOuvrir }) {
           {eleve.retours_ia_a_relire} retour{eleve.retours_ia_a_relire > 1 ? 's' : ''} d'Idris à relire
         </p>
       )}
+
+      <ProchainRdv rdv={rdv} />
 
       <div className="eleve-carte-progres">
         <div className="resultat-jauge"><span style={{ width: `${pourcent}%` }} /></div>
@@ -328,9 +347,11 @@ function TableauKpi({ kpis }) {
   )
 }
 
-function DetailEleve({ eleve, coachKey, onAuthFailure, onRetour }) {
+function DetailEleve({ eleve, rdv, eleves, coachKey, onAuthFailure, onRetour, onRdv }) {
   const [etat, setEtat] = useState({ chargement: true })
   const [detailKpi, setDetailKpi] = useState(false)
+  const [planifier, setPlanifier] = useState(false)
+  const [message, setMessage] = useState('')
 
   async function charger(frais = false) {
     setEtat((e) => ({ ...e, chargement: true, erreur: '' }))
@@ -376,7 +397,33 @@ function DetailEleve({ eleve, coachKey, onAuthFailure, onRetour }) {
             .filter(Boolean).join(' · ')}
         </p>
         <p className="coach-intro">Ce que l'élève voit dans son espace, lu à la même source.</p>
+        <div className="coach-detail-actions">
+          <ProchainRdv rdv={rdv} />
+          {onRdv && (
+            <button type="button" className="resultats-bouton" onClick={() => setPlanifier(true)}>
+              <CalendarPlus size={15} aria-hidden="true" /> Planifier un RDV
+            </button>
+          )}
+        </div>
+        {message && <p className="agenda-message" role="status">{message}</p>}
       </div>
+
+      {planifier && (
+        <FormulaireRdv
+          initial={nouveauRdv({ eleve })}
+          eleves={eleves}
+          coachKey={coachKey}
+          onAuthFailure={onAuthFailure}
+          onFerme={() => setPlanifier(false)}
+          onEnregistre={(evt) => {
+            setPlanifier(false)
+            if (evt) {
+              setMessage('Ajouté à votre Google Agenda.')
+              onRdv(evt)
+            }
+          }}
+        />
+      )}
 
       {etat.chargement && !d && <Vide>Chargement...</Vide>}
       {etat.erreur && <p className="text-sm" style={{ color: 'var(--danger)' }}>{etat.erreur}</p>}
@@ -526,8 +573,20 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [ouvert, setOuvert] = useState(null)
+  // Prochain RDV de chaque eleve, lu dans l'agenda (absent si non branche).
+  const [prochains, setProchains] = useState({})
+  const [agendaBranche, setAgendaBranche] = useState(false)
+
+  async function chargerProchains() {
+    const r = await appelAgenda(`/coach/agenda/prochains?depuis=${encodeURIComponent(maintenantLocal())}`, coachKey, () => {})
+    if (r.data) {
+      setAgendaBranche(Boolean(r.data.configure))
+      setProchains(r.data.prochains || {})
+    }
+  }
 
   async function charger() {
+    chargerProchains()
     setLoading(true)
     setError('')
     const r = await lireCoach('/coach/eleves', coachKey, onAuthFailure)
@@ -555,7 +614,17 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
   }, [ouvert])
 
   if (ouvert) {
-    return <DetailEleve eleve={ouvert} coachKey={coachKey} onAuthFailure={onAuthFailure} onRetour={() => setOuvert(null)} />
+    return (
+      <DetailEleve
+        eleve={ouvert}
+        rdv={prochains[ouvert.client_page_id]}
+        eleves={eleves}
+        coachKey={coachKey}
+        onAuthFailure={onAuthFailure}
+        onRetour={() => setOuvert(null)}
+        onRdv={agendaBranche ? () => chargerProchains() : null}
+      />
+    )
   }
 
   return (
@@ -590,7 +659,7 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
       {!loading && !error && eleves.length === 0 && <Vide>Aucun élève en cours.</Vide>}
 
       <div className="eleves-grille">
-        {filtres.map((eleve) => <CarteEleve key={eleve.client_page_id} eleve={eleve} onOuvrir={setOuvert} />)}
+        {filtres.map((eleve) => <CarteEleve key={eleve.client_page_id} eleve={eleve} rdv={prochains[eleve.client_page_id]} onOuvrir={setOuvert} />)}
       </div>
     </div>
   )
