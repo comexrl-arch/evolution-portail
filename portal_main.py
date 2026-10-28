@@ -20,6 +20,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from backend.services import agenda_service
 from backend.services import cockpit_service
 from backend.services import eleves_service
 from backend.services import docuseal_service
@@ -1328,6 +1329,136 @@ def coach_eleve_detail(client_page_id: str, frais: bool = False, x_coach_key: st
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("coach_eleve_detail", error)
+
+
+# --- Agenda de l'Espace Coach (28/10/2026) : le Google Agenda de Rony. Seuls
+# les evenements crees depuis le portail sont modifiables (agenda_service). ---
+
+class AgendaEvenement(BaseModel):
+    type: str = "rdv"
+    eleve_id: str | None = None
+    eleve_nom: str | None = None
+    titre: str | None = None
+    description: str | None = None
+    lieu: str | None = None
+    debut: str
+    fin: str
+
+
+class AgendaModification(BaseModel):
+    type: str | None = None
+    eleve_id: str | None = None
+    eleve_nom: str | None = None
+    titre: str | None = None
+    description: str | None = None
+    lieu: str | None = None
+    debut: str | None = None
+    fin: str | None = None
+
+
+_JOUR_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _agenda_config() -> dict:
+    return {
+        "configure": False,
+        "compte_de_service": agenda_service.compte_de_service(),
+    }
+
+
+def _agenda_erreur(contexte: str, error: Exception) -> HTTPException:
+    if isinstance(error, agenda_service.EvenementIntrouvable):
+        return HTTPException(status_code=404, detail="Rendez-vous introuvable dans l'agenda.")
+    if isinstance(error, agenda_service.EvenementProtege):
+        return HTTPException(status_code=403, detail="Ce rendez-vous n'a pas été créé depuis l'Espace Coach : modifiez-le dans Google Agenda.")
+    if isinstance(error, agenda_service.CreneauInvalide):
+        return HTTPException(status_code=422, detail=error.message)
+    return _erreur_service_indisponible(contexte, error)
+
+
+@app.get("/coach/agenda")
+def coach_agenda(debut: str, fin: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not (_JOUR_ISO.match(debut) and _JOUR_ISO.match(fin)) or fin <= debut:
+        raise HTTPException(status_code=422, detail="Période invalide.")
+
+    if not agenda_service.enabled():
+        return {**_agenda_config(), "evenements": []}
+
+    try:
+        return {"configure": True, "fuseau": agenda_service.fuseau(), "evenements": agenda_service.lister(debut, fin)}
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_agenda", error)
+
+
+@app.get("/coach/agenda/prochains")
+def coach_agenda_prochains(depuis: str, x_coach_key: str = Header(default="")):
+    # Prochain RDV ou suivi de chaque eleve (cartes de l'onglet Eleves).
+    _require_coach_key(x_coach_key)
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$", depuis):
+        raise HTTPException(status_code=422, detail="Date invalide.")
+
+    if not agenda_service.enabled():
+        return {"configure": False, "prochains": {}}
+
+    try:
+        return {"configure": True, "prochains": agenda_service.prochains(depuis)}
+
+    except RuntimeError as error:
+        raise _agenda_erreur("coach_agenda_prochains", error)
+
+
+@app.post("/coach/agenda")
+def coach_agenda_creer(evenement: AgendaEvenement, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if evenement.type not in agenda_service.TYPES:
+        raise HTTPException(status_code=422, detail="Type de rendez-vous inconnu.")
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_agenda_creer", "GOOGLE_CALENDAR_ID")
+
+    try:
+        return agenda_service.creer(evenement.model_dump())
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_agenda_creer", error)
+
+
+@app.patch("/coach/agenda/{evenement_id}")
+def coach_agenda_modifier(evenement_id: str, modification: AgendaModification, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if modification.type is not None and modification.type not in agenda_service.TYPES:
+        raise HTTPException(status_code=422, detail="Type de rendez-vous inconnu.")
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_agenda_modifier", "GOOGLE_CALENDAR_ID")
+
+    try:
+        return agenda_service.modifier(evenement_id, modification.model_dump(exclude_unset=True))
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_agenda_modifier", error)
+
+
+@app.delete("/coach/agenda/{evenement_id}")
+def coach_agenda_supprimer(evenement_id: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_agenda_supprimer", "GOOGLE_CALENDAR_ID")
+
+    try:
+        agenda_service.supprimer(evenement_id)
+
+    except RuntimeError as error:
+        raise _agenda_erreur("coach_agenda_supprimer", error)
+
+    return {"supprime": True}
 
 
 @app.get("/coach/leads/systeme-io")
