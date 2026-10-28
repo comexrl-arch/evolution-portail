@@ -2189,7 +2189,7 @@ function MesPoints({ points, nouveaux = [], onVu }) {
   }, [points])
 
   if (!points) return null
-  const aujourdhui = new Date().toISOString().slice(0, 10)
+  const aujourdhui = maintenantLocal().slice(0, 10)
   // Tous les RDV a venir poses par Rony (dans le rythme ou non), puis le
   // prochain point suggere.
   const avenir = points.filter((p) => p.statut === 'planifie' && p.evenement)
@@ -2943,6 +2943,14 @@ function NotificationsTelephone() {
   )
 }
 
+// Date et heure locales 'AAAA-MM-JJTHH:MM', comparables aux heures de l'agenda
+// (toISOString donne l'heure universelle, 4 h d'ecart en Guadeloupe).
+function maintenantLocal() {
+  const d = new Date()
+  const n = (v) => String(v).padStart(2, '0')
+  return `${d.getFullYear()}-${n(d.getMonth() + 1)}-${n(d.getDate())}T${n(d.getHours())}:${n(d.getMinutes())}`
+}
+
 function dateSession(valeur) {
   const date = valeur ? new Date(valeur) : null
   if (!date || Number.isNaN(date.getTime())) return valeur || ''
@@ -2959,7 +2967,7 @@ function Communaute({ dashboard, points }) {
   const sessions = dashboard.sessions || []
   // Prochain point collectif : session Notion ou point pose dans l'agenda de
   // Rony (28/10/2026), le plus proche des deux.
-  const maintenant = new Date().toISOString().slice(0, 16)
+  const maintenant = maintenantLocal()
   const collectifAgenda = (points || [])
     .filter((p) => p.type === 'collectif' && p.evenement && p.evenement.fin >= maintenant)
     .sort((a, b) => a.evenement.debut.localeCompare(b.evenement.debut))[0]
