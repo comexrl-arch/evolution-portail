@@ -6781,3 +6781,99 @@ button.eleve-carte:hover {
 .agenda-agendas input { accent-color: var(--brand-gold); }
 .agenda-agenda-principal { cursor: default; color: var(--text-primary); }
 .agenda-agendas em { font-style: normal; color: var(--text-tertiary); }
+
+/* Creneaux de RDV : plages en fond, creneaux libres cliquables */
+.agenda-plage {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(142, 108, 56, 0.07);
+  pointer-events: none;
+}
+
+.agenda-libre {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  z-index: 1;
+  overflow: hidden;
+  padding: 0 0.4rem;
+  border: 1px dashed rgba(142, 108, 56, 0.55);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #8E6C38;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.agenda-libre:hover { background: rgba(142, 108, 56, 0.12); }
+
+.agenda-pastille-libre {
+  border: 1px dashed rgba(142, 108, 56, 0.7);
+  background: rgba(142, 108, 56, 0.08);
+}
+
+.agenda-libres-choix {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.agenda-libre-puce {
+  padding: 0.3rem 0.65rem;
+  border: 1px dashed rgba(142, 108, 56, 0.6);
+  border-radius: 999px;
+  background: var(--surface-1, #FFFFFF);
+  color: #8E6C38;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.agenda-libre-puce-active {
+  border-style: solid;
+  background: #8E6C38;
+  color: #FFFFFF;
+}
+
+.agenda-mois-libres {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #8E6C38;
+}
+
+.agenda-mes-creneaux {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.agenda-plages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.agenda-plage-ligne {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.agenda-ajout-plage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  align-self: flex-start;
+  padding: 0.35rem 0.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #8E6C38;
+}

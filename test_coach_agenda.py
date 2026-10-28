@@ -293,5 +293,72 @@ check("jeton sans droit sur la liste -> liste=False, pas d'erreur", code == 200 
 code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
 check("... et l'agenda principal s'affiche quand meme", code == 200 and rep["configure"] is True and rep["evenements"])
 
+print("\n8. Creneaux de RDV : plages hebdomadaires dans l'agenda principal")
+from datetime import datetime as _dt
+
+
+class AvecCreneaux(FausseSession):
+    def get(self, url, params=None):
+        if params and params.get("privateExtendedProperty") == "type=creneau":
+            self.appels.append(("GET", url, params))
+            items = [e for e in self.evenements.values()
+                     if ((e.get("extendedProperties") or {}).get("private") or {}).get("type") == "creneau"]
+            return Reponse(200, {"items": items})
+        return super().get(url, params)
+
+
+session = AvecCreneaux()
+agenda_service._session = session
+code, rep = statut(portal_main.coach_agenda_creneaux, x_coach_key=CLE)
+check("aucune plage au depart", code == 200 and rep == {"plages": [], "duree": 60})
+
+regles = portal_main.AgendaReglesCreneaux(duree=45, plages=[
+    portal_main.AgendaPlage(jour=3, debut="14:00", fin="17:00"),
+    portal_main.AgendaPlage(jour=1, debut="09:00", fin="12:00"),
+])
+code, rep = statut(agenda_service.enregistrer_regles, [p.model_dump() for p in regles.plages], 45, _dt(2026, 10, 28))
+crees = [a[2] for a in session.appels if a[0] == "POST"]
+check("une serie hebdomadaire par plage", code == 200 and [c["recurrence"] for c in crees] == [["RRULE:FREQ=WEEKLY;BYDAY=TU"], ["RRULE:FREQ=WEEKLY;BYDAY=TH"]])
+check("premiere occurrence = prochain jour concerne",
+      crees[0]["start"]["dateTime"] == "2026-11-03T09:00:00" and crees[1]["start"]["dateTime"] == "2026-10-29T14:00:00")
+check("plages disponibles (ne bloquent rien) et sans rappel",
+      all(c["transparency"] == "transparent" and c["reminders"] == {"useDefault": False, "overrides": []} for c in crees))
+check("type creneau + duree en propriete privee",
+      crees[0]["extendedProperties"]["private"] == {"source": "portail", "type": "creneau", "duree": "45"})
+
+code, rep = statut(portal_main.coach_agenda_creneaux, x_coach_key=CLE)
+check("relecture des plages (lundi=0) et de la duree",
+      rep == {"duree": 45, "plages": [{"jour": 1, "debut": "09:00", "fin": "12:00"}, {"jour": 3, "debut": "14:00", "fin": "17:00"}]})
+
+session.appels.clear()
+code, rep = statut(portal_main.coach_agenda_creneaux_enregistrer,
+                   portal_main.AgendaReglesCreneaux(duree=60, plages=[portal_main.AgendaPlage(jour=0, debut="08:00", fin="10:00")]), x_coach_key=CLE)
+types = [a[0] for a in session.appels]
+check("enregistrer remplace : anciennes series supprimees puis nouvelles creees",
+      code == 200 and types.count("DELETE") == 2 and types.count("POST") == 1)
+
+for libelle, plages, duree in [
+    ("fin avant debut", [portal_main.AgendaPlage(jour=0, debut="10:00", fin="09:00")], 60),
+    ("chevauchement", [portal_main.AgendaPlage(jour=0, debut="09:00", fin="11:00"), portal_main.AgendaPlage(jour=0, debut="10:00", fin="12:00")], 60),
+    ("jour hors bornes", [portal_main.AgendaPlage(jour=7, debut="09:00", fin="10:00")], 60),
+    ("heure mal formee", [portal_main.AgendaPlage(jour=0, debut="9h", fin="10:00")], 60),
+    ("duree exotique", [], 50),
+]:
+    avant = len(session.appels)
+    code, rep = statut(portal_main.coach_agenda_creneaux_enregistrer, portal_main.AgendaReglesCreneaux(duree=duree, plages=plages), x_coach_key=CLE)
+    check(f"refus ({libelle}) -> 422 sans rien toucher", code == 422 and len(session.appels) == avant)
+
+serie = next(e for e in session.evenements.values() if (e.get("extendedProperties") or {}).get("private", {}).get("type") == "creneau")
+serie["start"] = {"dateTime": "2026-10-26T08:00:00-04:00"}
+serie["end"] = {"dateTime": "2026-10-26T10:00:00-04:00"}
+code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
+check("la vue renvoie les plages a part, pas comme des evenements",
+      code == 200 and rep["creneaux"] == [{"debut": "2026-10-26T08:00", "fin": "2026-10-26T10:00"}]
+      and all(e["type"] != "creneau" for e in rep["evenements"]))
+code, rep = statut(portal_main.coach_agenda_supprimer, serie["id"], x_coach_key=CLE)
+check("une serie de creneaux ne se modifie pas comme un RDV (403)", code == 403)
+code, rep = statut(portal_main.coach_agenda_prochains, "2026-10-26T00:00", x_coach_key=CLE)
+check("les creneaux n'apparaissent pas comme prochain RDV d'un eleve", code == 200 and rep["prochains"] == {})
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

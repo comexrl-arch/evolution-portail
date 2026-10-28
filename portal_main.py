@@ -1400,11 +1400,8 @@ def coach_agenda(debut: str, fin: str, agendas: str = "", x_coach_key: str = Hea
     secondaires = [a.strip() for a in agendas.split(",") if a.strip()]
 
     try:
-        return {
-            "configure": True,
-            "fuseau": agenda_service.fuseau(),
-            "evenements": agenda_service.lister(debut, fin, secondaires),
-        }
+        evenements, creneaux = agenda_service.lister_complet(debut, fin, secondaires)
+        return {"configure": True, "fuseau": agenda_service.fuseau(), "evenements": evenements, "creneaux": creneaux}
 
     except agenda_service.AgendaInaccessible as error:
         _journaliser_erreur_portail("coach_agenda", error)
@@ -1431,6 +1428,46 @@ def coach_agenda_agendas(x_coach_key: str = Header(default="")):
         return {"liste": False, "agendas": []}
 
     return {"liste": liste is not None, "agendas": liste or []}
+
+
+class AgendaPlage(BaseModel):
+    jour: int
+    debut: str
+    fin: str
+
+
+class AgendaReglesCreneaux(BaseModel):
+    plages: list[AgendaPlage]
+    duree: int = 60
+
+
+@app.get("/coach/agenda/creneaux")
+def coach_agenda_creneaux(x_coach_key: str = Header(default="")):
+    # Plages de RDV possibles (fenetre "Mes creneaux").
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_agenda_creneaux", "GOOGLE_CALENDAR_ID")
+
+    try:
+        return agenda_service.lire_regles()
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_agenda_creneaux", error)
+
+
+@app.put("/coach/agenda/creneaux")
+def coach_agenda_creneaux_enregistrer(regles: AgendaReglesCreneaux, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_agenda_creneaux", "GOOGLE_CALENDAR_ID")
+
+    try:
+        return agenda_service.enregistrer_regles([p.model_dump() for p in regles.plages], regles.duree)
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_agenda_creneaux_enregistrer", error)
 
 
 @app.get("/coach/agenda/prochains")
