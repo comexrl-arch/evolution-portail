@@ -3100,8 +3100,8 @@ function PartageProgression() {
   return (
     <section className="panel partage">
       <p className="panel-eyebrow"><Share2 size={14} /> Partager ma progression</p>
-      <p className="panel-lead">Voici un lien de partage pour montrer ton avancement à ton banquier, ton associé ou un proche : ton score, tes chiffres et tes fiches validées, en lecture seule.</p>
-      <p className="communaute-texte">Tes réponses aux fiches et tes coordonnées ne sont jamais montrées. Le lien reste valable 30 jours.</p>
+      <p className="panel-lead">{lien ? 'Voici ton lien. Copie-le et envoie-le à qui tu veux.' : 'Montre ton avancement à ton banquier, ton associé ou un proche avec un simple lien.'}</p>
+      <p className="communaute-texte">La personne voit ton prénom, ton score, tes chiffres et le nombre de fiches terminées. Elle ne peut rien modifier. Tes réponses aux fiches, ton nom de famille, ton e-mail et ton téléphone restent privés. Le lien marche pendant 30 jours.</p>
       {lien ? (
         <div className="partage-lien">
           <input className="field-input" readOnly value={lien.url} aria-label="Lien de partage" onFocus={(e) => e.target.select()} />
@@ -3199,7 +3199,7 @@ function PagePartage({ jeton }) {
     document.body.dataset.ecran = 'partage'
     fetch(`${API_BASE}/public/partage?jeton=${encodeURIComponent(jeton)}`)
       .then(async (response) => {
-        if (!response.ok) throw new Error(response.status === 404 ? "Ce lien de partage n'est plus valable. Demande un nouveau lien à la personne qui te l'a envoyé." : 'Cette page est indisponible pour le moment.')
+        if (!response.ok) throw new Error(response.status === 404 ? "Ce lien de partage n'est plus valable. Demandez-en un nouveau à la personne qui vous l'a envoyé." : 'Cette page est indisponible pour le moment.')
         setDonnees(await response.json())
       })
       .catch((err) => setErreur(err.message))
@@ -3247,7 +3247,7 @@ function PagePartage({ jeton }) {
           </ul>
         </section>
       )}
-      <p className="attestation-note">Page en lecture seule, partagée par {donnees.prenom || 'le participant'}. Chiffres tels qu'il les a saisis dans son espace.</p>
+      <p className="attestation-note">Page en lecture seule partagée par {donnees.prenom || 'le participant'}, avec les chiffres saisis dans son espace RL-eVolution.</p>
     </div>
   )
 }
