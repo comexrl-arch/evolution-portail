@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
 import { formaterMaj } from './dates'
-import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks } from 'lucide-react'
+import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks, Users } from 'lucide-react'
 import CoachSuiviClients from './CoachSuiviClients.jsx'
+import CoachEleves from './CoachEleves.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 const COACH_KEY_STORAGE = 'coach_onboard_key'
@@ -301,7 +302,7 @@ export default function CoachOnboarding() {
         <h1 className="gold-title text-xl font-extrabold">Espace Coach</h1>
       </header>
 
-      <div className="flex gap-2 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
         <button
           onClick={() => setTab('onboarding')}
           className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5"
@@ -335,9 +336,21 @@ export default function CoachOnboarding() {
         >
           <ListChecks size={15} /> Suivi client
         </button>
+        <button
+          onClick={() => setTab('eleves')}
+          className="flex-1 py-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5"
+          style={{
+            background: tab === 'eleves' ? 'var(--accent)' : 'transparent',
+            color: tab === 'eleves' ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+            border: tab === 'eleves' ? 'none' : 'var(--border-subtle)',
+          }}
+        >
+          <Users size={15} /> Élèves
+        </button>
       </div>
 
       {tab === 'suivi' && <CoachSuiviClients coachKey={coachKey} onAuthFailure={handleAuthFailure} />}
+      {tab === 'eleves' && <CoachEleves coachKey={coachKey} onAuthFailure={handleAuthFailure} />}
 
       {tab === 'diagnostics' && (
         <div>
