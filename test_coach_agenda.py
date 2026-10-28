@@ -183,5 +183,51 @@ agenda_service._session = Panne()
 code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
 check("503 sans detail technique", code == 503 and "boom" not in str(rep))
 
+print("\n5. Reglage pas fini : etat clair, jamais d'exception brute (28/10/2026)")
+from google.auth.exceptions import RefreshError
+
+class Refus(FausseSession):
+    def __init__(self, code):
+        super().__init__()
+        self.code = code
+    def get(self, url, params=None):
+        return Reponse(self.code, {"error": "refus"})
+
+for code_google in (403, 404):
+    agenda_service._session = Refus(code_google)
+    code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
+    check(f"Google {code_google} sur la liste -> 200, a brancher, acces refuse", code == 200 and rep["configure"] is False and rep["raison"] == "acces_refuse")
+    check(f"Google {code_google} : compte de service et agenda vise renvoyes", rep["acces"] == "compte_de_service" and rep["calendrier"] == "rony@gmail.com" and rep["compte_de_service"])
+    code, rep = statut(portal_main.coach_agenda_prochains, "2026-10-28T08:00", x_coach_key=CLE)
+    check(f"Google {code_google} : prochains reste vide sans erreur", code == 200 and rep["prochains"] == {})
+
+class JetonRefuse(FausseSession):
+    def get(self, url, params=None):
+        raise RefreshError("invalid_scope")
+    post = patch = lambda self, url, json=None: (_ for _ in ()).throw(RefreshError("invalid_scope"))
+
+agenda_service._session = JetonRefuse()
+code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
+check("jeton Google sans droit agenda -> 200, acces refuse (plus de 500)", code == 200 and rep["raison"] == "acces_refuse")
+code, rep = statut(portal_main.coach_agenda_creer, portal_main.AgendaEvenement(debut="2026-10-30T10:00", fin="2026-10-30T11:00"), x_coach_key=CLE)
+check("creation avec jeton refuse -> 403 avec phrase claire", code == 403 and "réglage" in rep)
+
+class Coupure(FausseSession):
+    def get(self, url, params=None):
+        raise ConnectionError("reset")
+
+agenda_service._session = Coupure()
+code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
+check("coupure reseau vers Google -> 503 generique (pas d'exception brute)", code == 503)
+
+print("\n6. Acces OAuth seul (celui du cockpit), sans GOOGLE_CALENDAR_ID")
+os.environ.pop("GOOGLE_SERVICE_ACCOUNT_JSON")
+os.environ.pop("GOOGLE_CALENDAR_ID")
+os.environ.update(GOOGLE_OAUTH_CLIENT_ID="id", GOOGLE_OAUTH_CLIENT_SECRET="s", GOOGLE_OAUTH_REFRESH_TOKEN="r")
+agenda_service._session = JetonRefuse()
+code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
+check("OAuth sans droit agenda -> a brancher, acces oauth, pas de compte de service",
+      code == 200 and rep["raison"] == "acces_refuse" and rep["acces"] == "oauth" and rep["compte_de_service"] is None)
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

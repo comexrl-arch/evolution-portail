@@ -6735,3 +6735,8 @@ button.eleve-carte:hover {
   display: inline;
   margin-right: 0.25rem;
 }
+
+.agenda-erreur {
+  gap: 0.6rem;
+  align-items: flex-start;
+}

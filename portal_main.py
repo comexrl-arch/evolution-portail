@@ -1359,14 +1359,23 @@ class AgendaModification(BaseModel):
 _JOUR_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def _agenda_config() -> dict:
+def _agenda_config(raison: str = "a_configurer") -> dict:
+    # Etat "a brancher" : l'onglet affiche la marche a suivre. raison vaut
+    # "a_configurer" (GOOGLE_CALENDAR_ID absent) ou "acces_refuse" (Google
+    # refuse l'agenda : pas encore partage, ou mauvais identifiant).
     return {
         "configure": False,
+        "raison": raison,
+        "acces": agenda_service.mode_acces(),
         "compte_de_service": agenda_service.compte_de_service(),
+        "calendrier": agenda_service.calendrier_configure(),
     }
 
 
 def _agenda_erreur(contexte: str, error: Exception) -> HTTPException:
+    if isinstance(error, agenda_service.AgendaInaccessible):
+        _journaliser_erreur_portail(contexte, error)
+        return HTTPException(status_code=403, detail="Votre Google Agenda n'est pas encore accessible : finissez le réglage indiqué dans l'onglet Agenda.")
     if isinstance(error, agenda_service.EvenementIntrouvable):
         return HTTPException(status_code=404, detail="Rendez-vous introuvable dans l'agenda.")
     if isinstance(error, agenda_service.EvenementProtege):
@@ -1389,6 +1398,10 @@ def coach_agenda(debut: str, fin: str, x_coach_key: str = Header(default="")):
     try:
         return {"configure": True, "fuseau": agenda_service.fuseau(), "evenements": agenda_service.lister(debut, fin)}
 
+    except agenda_service.AgendaInaccessible as error:
+        _journaliser_erreur_portail("coach_agenda", error)
+        return {**_agenda_config("acces_refuse"), "evenements": []}
+
     except (RuntimeError, ValueError) as error:
         raise _agenda_erreur("coach_agenda", error)
 
@@ -1404,11 +1417,13 @@ def coach_agenda_prochains(depuis: str, x_coach_key: str = Header(default="")):
     if not agenda_service.enabled():
         return {"configure": False, "prochains": {}}
 
+    # Simple pastille sur les cartes eleves : jamais d'erreur, au pire rien.
     try:
         return {"configure": True, "prochains": agenda_service.prochains(depuis)}
 
-    except RuntimeError as error:
-        raise _agenda_erreur("coach_agenda_prochains", error)
+    except Exception as error:
+        _journaliser_erreur_portail("coach_agenda_prochains", error)
+        return {"configure": False, "prochains": {}}
 
 
 @app.post("/coach/agenda")
