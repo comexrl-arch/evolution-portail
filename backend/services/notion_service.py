@@ -3239,6 +3239,45 @@ def _retour_ia_visible(props: dict) -> dict | None:
     return {"statut": "publie", "texte": texte, "date": date}
 
 
+def _relation_id(props: dict, nom: str) -> str | None:
+    relation = (props.get(nom) or {}).get("relation") or []
+    return relation[0].get("id") if relation else None
+
+
+def retours_idris_publies(client_page_id: str) -> list[dict]:
+    """Retours d'Idris que le client peut lire (badge « nouveau », 28/10/2026).
+    Une requete, memorisee 30 s."""
+    cle = f"retours_idris:{client_page_id}"
+    en_cache = _cache_get(cle)
+
+    if en_cache is not None:
+        return en_cache
+
+    entrees = _query_data_source(
+        ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={"and": [
+            {"property": "Client", "relation": {"contains": client_page_id}},
+            {"or": [
+                {"property": "Retour IA statut", "select": {"equals": "Publié"}},
+                {"property": "Retour IA statut", "select": {"equals": "À relire"}},
+            ]},
+        ]},
+        sorts=[{"timestamp": "last_edited_time", "direction": "descending"}],
+    )
+    retours = []
+
+    for entree in entrees:
+        props = entree.get("properties", {})
+        visible = _retour_ia_visible(props)
+
+        if not visible or visible.get("statut") != "publie":
+            continue
+
+        retours.append({"id": entree["id"], "fiche_id": _relation_id(props, "Fiche Client"), "date": visible.get("date")})
+
+    return _cache_set(cle, retours, 30)
+
+
 def demander_retour_ia(fiche_client_id: str, entry_id: str | None) -> bool:
     """Apres un enregistrement : met l'entree en file pour le retour IA.
 

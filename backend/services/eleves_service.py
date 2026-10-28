@@ -13,7 +13,7 @@
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from backend.services import notion_service as ns
 from backend.services import prospects_service
@@ -155,6 +155,29 @@ def liste(maintenant: datetime | None = None) -> list[dict]:
         e.get("nom") or "",
     ))
     return eleves
+
+
+def activite(jours: int = 30, maintenant: datetime | None = None) -> dict[str, str]:
+    """Derniere saisie de chaque eleve (fiche, bilan, carnet de prospects) sur
+    les `jours` derniers jours : badge « nouveau » de l'Espace Coach. Une seule
+    requete Notion, les 100 entrees les plus recentes."""
+    maintenant = maintenant or datetime.now(timezone.utc)
+    depuis = (maintenant - timedelta(days=jours)).isoformat()
+    entrees = ns._query_data_source(
+        ns.ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={"timestamp": "last_edited_time", "last_edited_time": {"on_or_after": depuis}},
+        sorts=[{"timestamp": "last_edited_time", "direction": "descending"}],
+    )
+    dernieres = {}
+
+    for entree in entrees:
+        for lien in (entree.get("properties", {}).get("Client") or {}).get("relation") or []:
+            quand = entree.get("last_edited_time") or ""
+
+            if quand > dernieres.get(lien["id"], ""):
+                dernieres[lien["id"]] = quand
+
+    return dernieres
 
 
 def calendrier() -> list[dict]:

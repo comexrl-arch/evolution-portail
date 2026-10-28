@@ -34,7 +34,7 @@ function dateCourte(iso) {
 }
 
 // Liste des points d'un eleve. coach : vouvoiement et bouton « Planifier ».
-export function ListePoints({ points, coach = false, onPlanifier }) {
+export function ListePoints({ points, coach = false, onPlanifier, nouveaux }) {
   if (!points?.length) {
     return <p className="espace-vide">{coach ? 'Aucun point prévu pour cette formule.' : 'Tes points avec Rony apparaîtront ici.'}</p>
   }
@@ -52,9 +52,13 @@ export function ListePoints({ points, coach = false, onPlanifier }) {
           {coach && p.statut === 'a_planifier' && onPlanifier ? (
             <button type="button" className="resultats-bouton points-planifier" onClick={() => onPlanifier(p)}>Planifier</button>
           ) : (
-            <span className={`coach-puce points-statut-${p.statut}`}>
-              {!coach && p.statut === 'a_planifier' ? 'Date à confirmer' : STATUTS[p.statut]}
-            </span>
+            nouveaux?.has(`${p.type}|${p.evenement?.debut}`) ? (
+              <span className="badge-nouveau">Nouveau</span>
+            ) : (
+              <span className={`coach-puce points-statut-${p.statut}`}>
+                {!coach && p.statut === 'a_planifier' ? 'Date à confirmer' : STATUTS[p.statut]}
+              </span>
+            )
           )}
         </li>
       ))}

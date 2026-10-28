@@ -157,7 +157,7 @@ function BandeauEleves({ eleves }) {
   )
 }
 
-function CarteEleve({ eleve, rdv, onOuvrir }) {
+function CarteEleve({ eleve, rdv, onOuvrir, nouveau = false }) {
   if (eleve.illisible) {
     return (
       <div className="eleve-carte eleve-carte-illisible">
@@ -172,7 +172,7 @@ function CarteEleve({ eleve, rdv, onOuvrir }) {
     <button type="button" onClick={() => onOuvrir(eleve)} className={`eleve-carte${aSurveiller(eleve) ? ' eleve-carte-alerte' : ''}`}>
       <div className="eleve-carte-haut">
         <div className="min-w-0">
-          <p className="coach-carte-nom">{eleve.nom}</p>
+          <p className="coach-carte-nom">{eleve.nom}{nouveau && <span className="badge-nouveau">Nouveau</span>}</p>
           <p className="eleve-carte-meta">
             {[eleve.parcours, eleve.jour !== null && eleve.jour !== undefined ? `Jour ${eleve.jour} sur ${eleve.duree}` : null, eleve.etat !== 'En cours' ? eleve.etat : null]
               .filter(Boolean).join(' · ')}
@@ -578,7 +578,7 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
   )
 }
 
-export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
+export default function CoachEleves({ coachKey, onAuthFailure, onDetail, nouveaux = [], onVu, onActualiser }) {
   const [eleves, setEleves] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -605,6 +605,7 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
   }
 
   async function charger() {
+    onActualiser?.()
     chargerProchains()
     setLoading(true)
     setError('')
@@ -628,6 +629,7 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
   }, [eleves, query])
 
   useEffect(() => {
+    if (ouvert) onVu?.(ouvert.client_page_id)
     onDetail?.(Boolean(ouvert))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ouvert])
@@ -679,7 +681,7 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
       {!loading && !error && eleves.length === 0 && <Vide>Aucun élève en cours.</Vide>}
 
       <div className="eleves-grille">
-        {filtres.map((eleve) => <CarteEleve key={eleve.client_page_id} eleve={eleve} rdv={prochains[eleve.client_page_id]} onOuvrir={setOuvert} />)}
+        {filtres.map((eleve) => <CarteEleve key={eleve.client_page_id} eleve={eleve} rdv={prochains[eleve.client_page_id]} onOuvrir={setOuvert} nouveau={nouveaux.includes(eleve.client_page_id)} />)}
       </div>
     </div>
   )

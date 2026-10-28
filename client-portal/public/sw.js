@@ -14,14 +14,23 @@ self.addEventListener('push', (event) => {
     donnees = { texte: event.data ? event.data.text() : '' }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(donnees.titre || 'eVolution 2.0', {
+  event.waitUntil((async () => {
+    await self.registration.showNotification(donnees.titre || 'eVolution 2.0', {
       body: donnees.texte || '',
       icon: '/icone-192.png',
       badge: '/icone-192.png',
       data: { url: donnees.url || '/' },
-    }),
-  )
+    })
+    // Badges (28/10/2026) : pastille sur l'icone de l'application, et l'espace
+    // deja ouvert relit ses nouveautes tout de suite.
+    try {
+      await self.navigator.setAppBadge?.()
+    } catch {
+      // Non pris en charge.
+    }
+    const fenetres = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    fenetres.forEach((f) => f.postMessage({ type: 'push' }))
+  })())
 })
 
 self.addEventListener('notificationclick', (event) => {

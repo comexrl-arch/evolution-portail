@@ -6,6 +6,7 @@ import BoutonInstaller from './BoutonInstaller.jsx'
 import CoachSuiviClients from './CoachSuiviClients.jsx'
 import CoachEleves from './CoachEleves.jsx'
 import CoachAgenda from './CoachAgenda.jsx'
+import { useActiviteEleves } from './Nouveautes.js'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 const COACH_KEY_STORAGE = 'coach_onboard_key'
@@ -53,6 +54,8 @@ export default function CoachOnboarding() {
   const [tab, setTab] = useState('eleves')
   const [menuOuvert, setMenuOuvert] = useState(false)
   const [eleveOuvert, setEleveOuvert] = useState(false)
+  // Badge « nouveau » : eleves qui ont saisi quelque chose depuis votre derniere visite.
+  const activite = useActiviteEleves(coachKey, Boolean(coachKey))
 
   const [leadsQuery, setLeadsQuery] = useState('')
   const [leads, setLeads] = useState([])
@@ -343,18 +346,22 @@ export default function CoachOnboarding() {
         <img src={logo} alt="RL-eVolution" className="espace-menu-logo" />
         <p className="espace-menu-rubrique">Espace Coach</p>
         <nav className="espace-menu-liens">
-          {ONGLETS_COACH.map(({ cle, libelle, icone: Icone }) => (
-            <button
-              key={cle}
-              type="button"
-              className={`espace-menu-lien${tab === cle ? ' espace-menu-lien-actif' : ''}`}
-              aria-current={tab === cle ? 'page' : undefined}
-              onClick={() => changerOnglet(cle)}
-            >
-              <Icone size={17} aria-hidden="true" />
-              {libelle}
-            </button>
-          ))}
+          {ONGLETS_COACH.map(({ cle, libelle, icone: Icone }) => {
+            const badge = cle === 'eleves' ? activite.nouveaux.length : 0
+            return (
+              <button
+                key={cle}
+                type="button"
+                className={`espace-menu-lien${tab === cle ? ' espace-menu-lien-actif' : ''}`}
+                aria-current={tab === cle ? 'page' : undefined}
+                onClick={() => changerOnglet(cle)}
+              >
+                <Icone size={17} aria-hidden="true" />
+                {libelle}
+                {badge > 0 && <span className="menu-badge" aria-label={`${badge} élève${badge > 1 ? 's' : ''} avec du nouveau`}>{badge}</span>}
+              </button>
+            )
+          })}
         </nav>
         <BoutonInstaller />
       </aside>
@@ -369,6 +376,7 @@ export default function CoachOnboarding() {
             onClick={() => setMenuOuvert((v) => !v)}
           >
             {menuOuvert ? <X size={20} /> : <Menu size={20} />}
+            {!menuOuvert && activite.nouveaux.length > 0 && <span className="hamburger-pastille" aria-hidden="true" />}
           </button>
           <div className="accueil-titre">
             <h1>Espace Coach</h1>
@@ -391,7 +399,7 @@ export default function CoachOnboarding() {
 
       {tab === 'suivi' && <CoachSuiviClients coachKey={coachKey} onAuthFailure={handleAuthFailure} />}
       {tab === 'agenda' && <CoachAgenda coachKey={coachKey} onAuthFailure={handleAuthFailure} />}
-      {tab === 'eleves' && <CoachEleves coachKey={coachKey} onAuthFailure={handleAuthFailure} onDetail={setEleveOuvert} />}
+      {tab === 'eleves' && <CoachEleves coachKey={coachKey} onAuthFailure={handleAuthFailure} onDetail={setEleveOuvert} nouveaux={activite.nouveaux} onVu={activite.marquerVu} onActualiser={activite.relire} />}
 
 
       {tab === 'diagnostics' && (

@@ -6949,3 +6949,67 @@ button.eleve-carte:hover {
   .points-ligne { grid-template-columns: 1fr auto; }
   .points-quand { grid-column: 1 / -1; }
 }
+
+/* Badges « nouveau » (28/10/2026) : RDV, retours d'Idris, activite des eleves. */
+.menu-badge {
+  margin-left: auto;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #FFFFFF;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  text-align: center;
+}
+
+.espace-hamburger {
+  position: relative;
+}
+
+.hamburger-pastille {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-primary, #FFFFFF);
+}
+
+.badge-nouveau {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #FFFFFF;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.nouveaux-retours-liste {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nouveaux-retours .badge-nouveau {
+  margin-left: 0;
+}
+
+.mes-points .panel-eyebrow,
+.nouveaux-retours .panel-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
