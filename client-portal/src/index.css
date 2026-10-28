@@ -6877,3 +6877,75 @@ button.eleve-carte:hover {
   font-weight: 600;
   color: #8E6C38;
 }
+
+/* Rythme des points (individuels et collectifs) */
+.agenda-evt-collectif { background: #6E7F5A; }
+.agenda-prochain-collectif { border-left-color: #6E7F5A; }
+.agenda-type-actif.agenda-type-collectif { background: #6E7F5A; border-color: #6E7F5A; color: #FFFFFF; }
+
+.agenda-a-planifier .agenda-prochain { position: relative; padding-right: 5.5rem; }
+.agenda-a-planifier .agenda-prochain em {
+  position: absolute;
+  top: 50%;
+  right: 0.8rem;
+  transform: translateY(-50%);
+  font-style: normal;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #8E6C38;
+}
+
+.points-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.points-ligne {
+  display: grid;
+  grid-template-columns: 11.5rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.points-quand { font-size: 0.82rem; font-weight: 600; color: var(--text-primary); }
+.points-quoi { display: flex; flex-direction: column; min-width: 0; }
+.points-quoi strong { font-size: 0.88rem; color: var(--text-primary); }
+.points-quoi small { font-size: 0.74rem; color: var(--text-tertiary); }
+.points-fait { opacity: 0.6; }
+.points-a_planifier .points-quand { color: var(--text-secondary); font-weight: 500; }
+.points-statut-planifie { background: rgba(110, 127, 90, 0.14); color: #4F5D3E; }
+.points-statut-a_planifier { background: rgba(142, 108, 56, 0.12); color: #8E6C38; }
+.points-planifier { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
+
+.mes-points { margin-top: 1rem; }
+.mes-points-note { margin: 0.6rem 0 0; font-size: 0.8rem; color: var(--text-tertiary); }
+
+.rythme-panneau { max-width: 560px; }
+.rythme-formule {
+  margin: 0 0 0.7rem;
+  padding: 0.6rem 0.8rem 0.7rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.rythme-formule legend { padding: 0 0.3rem; font-weight: 600; font-size: 0.85rem; color: var(--text-primary); }
+.rythme-ligne { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.3rem 0; }
+.rythme-inactif { color: var(--text-tertiary); }
+.rythme-actif { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.85rem; font-weight: 600; }
+.rythme-actif input { accent-color: var(--brand-gold); }
+.rythme-champs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding-left: 1.4rem; font-size: 0.82rem; color: var(--text-secondary); }
+.rythme-champs label { display: inline-flex; align-items: center; gap: 0.3rem; }
+.rythme-champs input.field-input { width: 4.2rem; padding: 0.3rem 0.45rem; }
+.rythme-champs select.field-input { padding: 0.3rem 0.45rem; }
+
+@media (max-width: 640px) {
+  .points-ligne { grid-template-columns: 1fr auto; }
+  .points-quand { grid-column: 1 / -1; }
+}

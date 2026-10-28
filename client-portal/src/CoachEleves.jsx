@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { CalendarClock, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react'
 import { FormulaireRdv, appelAgenda, dateLongue, heureFr, nouveauRdv } from './CoachAgenda.jsx'
+import { ListePoints, rdvPourPoint } from './PointsRythme.jsx'
 import { CapParcours, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
@@ -347,7 +348,7 @@ function TableauKpi({ kpis }) {
   )
 }
 
-function DetailEleve({ eleve, rdv, eleves, coachKey, onAuthFailure, onRetour, onRdv }) {
+function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRetour, onRdv }) {
   const [etat, setEtat] = useState({ chargement: true })
   const [detailKpi, setDetailKpi] = useState(false)
   const [planifier, setPlanifier] = useState(false)
@@ -400,7 +401,7 @@ function DetailEleve({ eleve, rdv, eleves, coachKey, onAuthFailure, onRetour, on
         <div className="coach-detail-actions">
           <ProchainRdv rdv={rdv} />
           {onRdv && (
-            <button type="button" className="resultats-bouton" onClick={() => setPlanifier(true)}>
+            <button type="button" className="resultats-bouton" onClick={() => setPlanifier(nouveauRdv({ eleve }))}>
               <CalendarPlus size={15} aria-hidden="true" /> Planifier un RDV
             </button>
           )}
@@ -410,7 +411,7 @@ function DetailEleve({ eleve, rdv, eleves, coachKey, onAuthFailure, onRetour, on
 
       {planifier && (
         <FormulaireRdv
-          initial={nouveauRdv({ eleve })}
+          initial={planifier}
           eleves={eleves}
           coachKey={coachKey}
           onAuthFailure={onAuthFailure}
@@ -423,6 +424,16 @@ function DetailEleve({ eleve, rdv, eleves, coachKey, onAuthFailure, onRetour, on
             }
           }}
         />
+      )}
+
+      {points && (
+        <Section titre="Ses points">
+          <ListePoints
+            coach
+            points={points.points}
+            onPlanifier={onRdv ? (p) => setPlanifier(rdvPourPoint(p, { ...eleve, parcours: points.parcours })) : null}
+          />
+        </Section>
       )}
 
       {etat.chargement && !d && <Vide>Chargement...</Vide>}
@@ -576,12 +587,20 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
   // Prochain RDV de chaque eleve, lu dans l'agenda (absent si non branche).
   const [prochains, setProchains] = useState({})
   const [agendaBranche, setAgendaBranche] = useState(false)
+  // Points suggeres par eleve (rythme des points), lus avec l'agenda.
+  const [points, setPoints] = useState({})
+
+  async function chargerPoints() {
+    const r = await appelAgenda('/coach/points', coachKey, () => {})
+    if (Array.isArray(r.data?.eleves)) setPoints(Object.fromEntries(r.data.eleves.map((e) => [e.client_page_id, e])))
+  }
 
   async function chargerProchains() {
     const r = await appelAgenda(`/coach/agenda/prochains?depuis=${encodeURIComponent(maintenantLocal())}`, coachKey, () => {})
     if (r.data) {
       setAgendaBranche(Boolean(r.data.configure))
       setProchains(r.data.prochains || {})
+      if (r.data.configure) chargerPoints()
     }
   }
 
@@ -618,6 +637,7 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail }) {
       <DetailEleve
         eleve={ouvert}
         rdv={prochains[ouvert.client_page_id]}
+        points={points[ouvert.client_page_id]}
         eleves={eleves}
         coachKey={coachKey}
         onAuthFailure={onAuthFailure}

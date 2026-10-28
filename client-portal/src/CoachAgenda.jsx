@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, Plus, RefreshCw, Repeat, Trash2, X } from 'lucide-react'
+import { ReglagesRythme, libellePoint, pointsAPlanifier, rdvPourPoint } from './PointsRythme.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 
@@ -18,8 +19,11 @@ const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 
 export const TYPES_RDV = [
   ['rdv', 'RDV coaching'],
   ['suivi', 'Étape de suivi'],
+  ['collectif', 'Point collectif'],
   ['autre', 'Autre'],
 ]
+
+export const FORMULES = ['Coaching 90 jours', 'Atelier', 'Autonome']
 
 const DUREES = [15, 30, 45, 60, 90, 120]
 
@@ -194,10 +198,11 @@ export async function appelAgenda(chemin, coachKey, onAuthFailure, options = {})
 
 // --- Formulaire de RDV (aussi ouvert depuis la fiche d'un eleve) -------------
 
-export function nouveauRdv({ jour, heure = '10:00', eleve = null, type = 'rdv' } = {}) {
+export function nouveauRdv({ jour, heure = '10:00', eleve = null, type = 'rdv', parcours = '' } = {}) {
   return {
     mode: 'creer',
     type,
+    parcours,
     eleve_id: eleve?.client_page_id || '',
     eleve_nom: eleve?.nom || '',
     titre: '',
@@ -210,9 +215,14 @@ export function nouveauRdv({ jour, heure = '10:00', eleve = null, type = 'rdv' }
 }
 
 // Meme regle que agenda_service.titre_evenement cote serveur.
-function titreAutomatique(type, eleveNom) {
-  const libelle = { rdv: 'RDV coaching', suivi: 'Suivi' }[type] || 'Rendez-vous'
-  return eleveNom ? `${libelle} · ${eleveNom}` : libelle
+function titreAutomatique(type, nom) {
+  const libelle = { rdv: 'RDV coaching', suivi: 'Suivi', collectif: 'Point collectif' }[type] || 'Rendez-vous'
+  return nom ? `${libelle} · ${nom}` : libelle
+}
+
+// Nom repris dans le titre : l'eleve, ou la formule pour un point collectif.
+function nomDuTitre(f) {
+  return f.type === 'collectif' ? f.parcours : f.eleve_nom
 }
 
 function depuisEvenement(evt) {
@@ -221,10 +231,11 @@ function depuisEvenement(evt) {
     id: evt.id,
     evt,
     type: evt.type || 'rdv',
+    parcours: evt.parcours || '',
     eleve_id: evt.eleve_id || '',
     eleve_nom: evt.eleve_nom || '',
     titre: evt.titre,
-    titreAuto: evt.titre === titreAutomatique(evt.type, evt.eleve_nom),
+    titreAuto: evt.titre === titreAutomatique(evt.type, nomDuTitre(evt)),
     date: evt.debut.slice(0, 10),
     heure: evt.journee ? '10:00' : evt.debut.slice(11, 16),
     duree: duree(evt) || 60,
@@ -246,10 +257,12 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
     setAttente(true)
     setErreur('')
     const debut = `${f.date}T${f.heure}`
+    const collectif = f.type === 'collectif'
     const corps = {
       type: f.type,
-      eleve_id: f.eleve_id || null,
-      eleve_nom: f.eleve_nom || null,
+      eleve_id: collectif ? null : f.eleve_id || null,
+      eleve_nom: collectif ? null : f.eleve_nom || null,
+      parcours: collectif ? f.parcours || null : null,
       // Titre laisse vide (ou titre automatique d'origine) : le serveur le refait.
       titre: f.titre && !(f.mode === 'modifier' && f.titreAuto && f.titre === initial.titre) ? f.titre : null,
       description: f.description,
@@ -280,7 +293,7 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
         <div className="agenda-panneau-entete">
           <div>
             <p className="energie-surtitre">{f.mode === 'creer' ? 'Nouveau rendez-vous' : lecture ? 'Dans votre agenda' : 'Rendez-vous'}</p>
-            <h3 className="coach-module-titre">{lecture ? f.titre : f.eleve_nom || (f.mode === 'creer' ? 'Planifier' : f.titre)}</h3>
+            <h3 className="coach-module-titre">{lecture ? f.titre : (f.type === 'collectif' ? f.parcours && `Point collectif · ${f.parcours}` : f.eleve_nom) || (f.mode === 'creer' ? 'Planifier' : f.titre)}</h3>
           </div>
           <button type="button" className="coach-bouton-icone" onClick={onFerme} aria-label="Fermer"><X size={16} /></button>
         </div>
@@ -311,6 +324,15 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
               ))}
             </div>
 
+            {f.type === 'collectif' ? (
+              <label className="agenda-champ">
+                <span>Formule concernée</span>
+                <select className="field-input" value={f.parcours} onChange={(e) => changer('parcours', e.target.value)}>
+                  <option value="">Toutes les formules</option>
+                  {FORMULES.map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </label>
+            ) : (
             <label className="agenda-champ">
               <span>Élève</span>
               <select
@@ -326,6 +348,7 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
                 {eleves.filter((x) => !x.illisible).map((x) => <option key={x.client_page_id} value={x.client_page_id}>{x.nom}</option>)}
               </select>
             </label>
+            )}
 
             <label className="agenda-champ">
               <span>Titre</span>
@@ -333,7 +356,7 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
                 className="field-input"
                 value={f.titre}
                 onChange={(e) => changer('titre', e.target.value)}
-                placeholder={titreAutomatique(f.type, f.eleve_nom)}
+                placeholder={titreAutomatique(f.type, nomDuTitre(f))}
               />
             </label>
 
@@ -793,6 +816,9 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
   // Plages de RDV : regles (fenetre "Mes creneaux") et occurrences de la periode.
   const [regles, setRegles] = useState(null)
   const [reglagesOuverts, setReglagesOuverts] = useState(false)
+  // Rythme des points : dates suggerees par eleve (null tant que non lu).
+  const [points, setPoints] = useState(null)
+  const [rythmeOuvert, setRythmeOuvert] = useState(false)
 
   const { debut, fin } = periode(vue, ancre)
   const secondaires = (agendas?.items || [])
@@ -814,6 +840,12 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
     })
   }
 
+  function chargerPoints() {
+    appelAgenda('/coach/points', coachKey, onAuthFailure).then((r) => {
+      if (r.data?.regles) setPoints(r.data)
+    })
+  }
+
   function chargerRegles() {
     appelAgenda('/coach/agenda/creneaux', coachKey, onAuthFailure).then((r) => {
       if (r.data?.plages) setRegles(r.data)
@@ -831,7 +863,10 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
   }, [])
 
   useEffect(() => {
-    if (etat.configure) chargerRegles()
+    if (etat.configure) {
+      chargerRegles()
+      chargerPoints()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [etat.configure])
 
@@ -867,6 +902,7 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
     [etat.plages, evenements, dureeRdv],
   )
   const nouveau = (jour, heure, d) => ({ ...nouveauRdv({ jour, heure }), duree: d || dureeRdv })
+  const aPlanifier = useMemo(() => pointsAPlanifier(points?.eleves), [points])
 
   function naviguer(sens) {
     if (sens === 0) return setAncre(aujourdhui())
@@ -924,6 +960,11 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
             <RefreshCw size={15} className={etat.chargement ? 'coach-tourne' : undefined} />
           </button>
           {etat.configure && (
+            <button type="button" className="resultats-bouton agenda-mes-creneaux" onClick={() => setRythmeOuvert(true)} disabled={!points}>
+              <Repeat size={15} aria-hidden="true" /> Rythme des points
+            </button>
+          )}
+          {etat.configure && (
             <button type="button" className="resultats-bouton agenda-mes-creneaux" onClick={() => setReglagesOuverts(true)} disabled={!regles}>
               <CalendarClock size={15} aria-hidden="true" /> Mes créneaux
             </button>
@@ -953,6 +994,26 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
 
       {etat.configure && (
         <>
+          {aPlanifier.length > 0 && (
+            <div className="agenda-prochains agenda-a-planifier">
+              <p className="energie-surtitre">Points à planifier (14 prochains jours)</p>
+              <div>
+                {aPlanifier.slice(0, 8).map((p) => (
+                  <button
+                    key={`${p.eleve.client_page_id}-${p.type}-${p.numero}`}
+                    type="button"
+                    className={`agenda-prochain agenda-prochain-${p.type === 'collectif' ? 'collectif' : 'rdv'}`}
+                    onClick={() => setFormulaire(rdvPourPoint(p, p.eleve, regles?.plages))}
+                  >
+                    <strong>{p.type === 'collectif' ? `${p.eleve.parcours}` : p.eleve.nom}</strong>
+                    <span>{libellePoint(p)} · {p.date < aujourdhui() ? 'en retard, prévu' : 'prévu'} le {dateLongue(p.date)}</span>
+                    <em>Planifier</em>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {prochains.length > 0 && (
             <div className="agenda-prochains">
               <p className="energie-surtitre">À venir avec vos élèves</p>
@@ -1046,6 +1107,21 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
             setFormulaire(null)
             setMessage(evt ? `Enregistré dans votre Google Agenda : ${libelleCreneau(evt)}.` : 'Rendez-vous supprimé de votre Google Agenda.')
             charger()
+            chargerPoints()
+          }}
+        />
+      )}
+
+      {rythmeOuvert && points && (
+        <ReglagesRythme
+          initial={points.regles}
+          coachKey={coachKey}
+          onAuthFailure={onAuthFailure}
+          onFerme={() => setRythmeOuvert(false)}
+          onEnregistre={() => {
+            setRythmeOuvert(false)
+            setMessage('Rythme des points enregistré.')
+            chargerPoints()
           }}
         />
       )}
