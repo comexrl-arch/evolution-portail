@@ -32,6 +32,7 @@ et propose les creneaux libres a la creation d'un RDV.
 Sans configuration, l'onglet affiche la marche a suivre au lieu de planter.
 """
 
+import json
 import logging
 import os
 import re
@@ -55,6 +56,7 @@ _MAX_AGENDAS = 12
 TYPES = {
     "rdv": "RDV coaching",
     "suivi": "Suivi",
+    "collectif": "Point collectif",
     "autre": "",
 }
 
@@ -226,6 +228,8 @@ def _vers_portail(evt: dict, agenda: str | None = None) -> dict:
         "type": prive.get("type") if prive.get("source") == "portail" else None,
         "eleve_id": prive.get("eleve_id") or None,
         "eleve_nom": prive.get("eleve_nom") or None,
+        # Point collectif : la formule concernee (Atelier, Autonome...).
+        "parcours": prive.get("parcours") or None,
         "agenda": agenda,
         # "Disponible" dans Google : ne bloque pas un creneau.
         "libre": evt.get("transparency") == "transparent",
@@ -242,10 +246,16 @@ def titre_evenement(type_: str, eleve_nom: str | None, titre: str | None) -> str
     return f"{libelle} · {eleve_nom}" if eleve_nom else libelle
 
 
+def _titre(donnees: dict) -> str:
+    if donnees.get("type") == "collectif" and not (donnees.get("titre") or "").strip():
+        return titre_evenement("collectif", donnees.get("parcours"), None)
+    return titre_evenement(donnees.get("type", "rdv"), donnees.get("eleve_nom"), donnees.get("titre"))
+
+
 def _corps(donnees: dict) -> dict:
     tz = fuseau()
     corps = {
-        "summary": titre_evenement(donnees.get("type", "rdv"), donnees.get("eleve_nom"), donnees.get("titre")),
+        "summary": _titre(donnees),
         "description": donnees.get("description") or "",
         "location": donnees.get("lieu") or "",
         "start": {"dateTime": f"{donnees['debut']}:00", "timeZone": tz},
@@ -255,6 +265,7 @@ def _corps(donnees: dict) -> dict:
             "type": donnees.get("type", "rdv"),
             "eleve_id": donnees.get("eleve_id") or "",
             "eleve_nom": donnees.get("eleve_nom") or "",
+            "parcours": donnees.get("parcours") or "",
         }},
     }
 
@@ -430,7 +441,7 @@ def _evenement_portail(evenement_id: str) -> dict:
     prive = (brut.get("extendedProperties") or {}).get("private") or {}
 
     # Les series de creneaux se reglent depuis "Mes creneaux", pas comme un RDV.
-    if prive.get("source") != "portail" or prive.get("type") == "creneau":
+    if prive.get("source") != "portail" or prive.get("type") in ("creneau", "reglages"):
         raise EvenementProtege(evenement_id)
 
     return brut
@@ -446,6 +457,7 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
     prive = brut["extendedProperties"]["private"]
     complet = {
         "type": prive.get("type", "rdv"),
+        "parcours": prive.get("parcours"),
         "eleve_id": prive.get("eleve_id"),
         "eleve_nom": prive.get("eleve_nom"),
         "titre": brut.get("summary"),
@@ -456,7 +468,7 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
     }
 
     # Changement d'eleve ou de type sans titre saisi : le titre automatique suit.
-    if ("eleve_id" in donnees or "type" in donnees) and "titre" not in donnees:
+    if ("eleve_id" in donnees or "type" in donnees or "parcours" in donnees) and "titre" not in donnees:
         complet["titre"] = None
 
     complet.update({k: v for k, v in donnees.items() if v is not None or k == "titre"})
@@ -571,3 +583,94 @@ def enregistrer_regles(plages: list[dict], duree: int, aujourdhui: datetime | No
         })
 
     return {"plages": plages, "duree": duree}
+
+
+# ------------------------------------------------------------- points des eleves
+
+def evenements_portail(debut: str, fin: str) -> list[dict]:
+    """RDV, suivis et points collectifs crees depuis le portail (hors creneaux)."""
+    params = {
+        "timeMin": f"{debut}T00:00:00Z",
+        "timeMax": f"{fin}T00:00:00Z",
+        "singleEvents": "true",
+        "orderBy": "startTime",
+        "maxResults": "500",
+        "timeZone": fuseau(),
+        "privateExtendedProperty": "source=portail",
+    }
+    evenements = []
+    page = None
+
+    while True:
+        if page:
+            params["pageToken"] = page
+
+        data = _lire_liste("points", params)
+        evenements.extend(
+            _vers_portail(e) for e in data.get("items", []) if e.get("status") != "cancelled"
+        )
+        page = data.get("nextPageToken")
+
+        if not page:
+            break
+
+    return [e for e in evenements if not e["journee"] and e["type"] != "creneau"]
+
+
+# ------------------------------------------------------------- reglages
+
+# Petits reglages de l'Espace Coach (rythme des points...) : gardes dans un
+# evenement prive du 1er janvier 2000, "disponible", que personne ne voit.
+# Ainsi pas de stockage en plus, et le droit agenda deja accorde suffit.
+_JOUR_REGLAGES = "2000-01-01"
+_MAX_VALEUR = 1000
+
+
+def _evenement_reglages() -> dict | None:
+    params = {"privateExtendedProperty": "type=reglages", "maxResults": "5"}
+    for brut in _lire_liste("reglages", params).get("items", []):
+        prive = (brut.get("extendedProperties") or {}).get("private") or {}
+        if prive.get("source") == "portail" and brut.get("status") != "cancelled":
+            return brut
+    return None
+
+
+def lire_reglage(cle: str):
+    brut = _evenement_reglages()
+    morceaux = []
+    prive = ((brut or {}).get("extendedProperties") or {}).get("private") or {}
+
+    # Une propriete Google tient 1024 caracteres : la valeur est decoupee.
+    for i in range(20):
+        morceau = prive.get(f"{cle}_{i}")
+        if morceau is None:
+            break
+        morceaux.append(morceau)
+
+    try:
+        return json.loads("".join(morceaux)) if morceaux else None
+    except ValueError:
+        return None
+
+
+def ecrire_reglage(cle: str, valeur) -> None:
+    texte = json.dumps(valeur, ensure_ascii=False, separators=(",", ":"))
+    brut = _evenement_reglages()
+    prive = dict(((brut or {}).get("extendedProperties") or {}).get("private") or {})
+    prive = {k: v for k, v in prive.items() if not k.startswith(f"{cle}_")}
+    prive.update({f"{cle}_{i // _MAX_VALEUR}": texte[i:i + _MAX_VALEUR] for i in range(0, len(texte), _MAX_VALEUR)})
+    prive.update({"source": "portail", "type": "reglages"})
+    corps = {
+        "summary": "Réglages de l'Espace Coach (ne pas supprimer)",
+        "start": {"date": _JOUR_REGLAGES},
+        "end": {"date": "2000-01-02"},
+        "transparency": "transparent",
+        "visibility": "private",
+        "reminders": {"useDefault": False, "overrides": []},
+        "extendedProperties": {"private": prive},
+    }
+
+    if brut:
+        _appel("put", f"/{quote(brut['id'], safe='')}", "reglages", json=corps)
+    else:
+        _appel("post", "", "reglages", json=corps)

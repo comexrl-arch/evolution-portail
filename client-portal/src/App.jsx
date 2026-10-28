@@ -4,6 +4,7 @@ import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, Ch
 import logo from './assets/logo.svg'
 import { installer, useInstallation } from './installation.js'
 import BoutonInstaller from './BoutonInstaller.jsx'
+import { ListePoints } from './PointsRythme.jsx'
 import monogramme from './assets/monogramme.svg'
 import illustrationModule0 from './assets/modules/module-0.jpg'
 import illustrationModule1 from './assets/modules/module-1.jpg'
@@ -2169,6 +2170,36 @@ function ProchaineSession({ sessions, onVoir }) {
       <span className="session-ligne-texte"><strong>Prochain point collectif</strong> · {session.nom} · {dateSession(session.date_heure)}</span>
       <ChevronRight size={15} aria-hidden="true" />
     </button>
+  )
+}
+
+// « Mes prochains points » (28/10/2026) : les points avec Rony planifies dans
+// son agenda, et le suivant suggere selon le jour de parcours.
+function MesPoints() {
+  const [points, setPoints] = useState(null)
+
+  useEffect(() => {
+    let actif = true
+    fetch(`${API_BASE}/portal/points`, { headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` } })
+      .then((r) => (r.ok ? r.json() : { points: [] }))
+      .then((data) => { if (actif) setPoints(Array.isArray(data.points) ? data.points : []) })
+      .catch(() => { if (actif) setPoints([]) })
+    return () => { actif = false }
+  }, [])
+
+  if (!points) return null
+  const aujourdhui = new Date().toISOString().slice(0, 10)
+  const avenir = points.filter((p) => p.statut === 'planifie')
+  const suivant = points.find((p) => p.statut === 'a_planifier' && p.date >= aujourdhui)
+  const affiches = [...avenir.slice(0, 2), ...(suivant ? [suivant] : [])]
+  if (!affiches.length) return null
+
+  return (
+    <section className="panel mes-points">
+      <p className="panel-eyebrow"><CalendarDays size={14} /> Mes prochains points</p>
+      <ListePoints points={affiches} />
+      {suivant && !avenir.length && <p className="mes-points-note">Rony te confirme la date et l'heure.</p>}
+    </section>
   )
 }
 
@@ -4665,6 +4696,7 @@ function Portail() {
 
               <IdrisLigne etape={etapeDuCalendrier(dashboard.rythme)} onOuvrir={() => changerOnglet('idris')} />
               <ProchaineSession sessions={dashboard.sessions} onVoir={() => changerOnglet('communaute')} />
+              <MesPoints />
             </>
           )}
 
