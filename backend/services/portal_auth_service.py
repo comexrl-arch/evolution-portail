@@ -36,7 +36,7 @@ def create_magic_link_token(email: str, client_page_id: str) -> str:
         "client_page_id": client_page_id,
         "type": "magic_link",
         # Horodatage precis (l'horodatage signe d'itsdangerous est a la seconde).
-        "emis_le": round(time.time(), 3),
+        "emis_le": round(time.time(), 6),
     })
 
 
@@ -75,7 +75,9 @@ def _verify(token: str, max_age: int, expected_type: str) -> dict:
 # --- Mot de passe du portail ---------------------------------------------------
 # Stocke dans Notion sous la forme "pbkdf2_sha256$iterations$sel$empreinte$defini_le"
 # (jamais le mot de passe en clair). "defini_le" (secondes) permet d'invalider
-# tout lien emis avant la derniere definition du mot de passe.
+# tout lien emis avant la derniere definition du mot de passe. Les deux horodatages
+# sont a la microseconde : au millieme, un lien et un mot de passe crees dans la
+# meme milliseconde (cas des tests) se retrouvaient a egalite.
 
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
@@ -104,7 +106,7 @@ def hash_password(mot_de_passe: str, defini_le: float | None = None) -> str:
     sel = secrets.token_bytes(16)
     empreinte = hashlib.pbkdf2_hmac("sha256", mot_de_passe.encode("utf-8"), sel, _PBKDF2_ITERATIONS)
     defini_le = time.time() if defini_le is None else defini_le
-    return f"{_PBKDF2_PREFIX}${_PBKDF2_ITERATIONS}${_b64(sel)}${_b64(empreinte)}${defini_le:.3f}"
+    return f"{_PBKDF2_PREFIX}${_PBKDF2_ITERATIONS}${_b64(sel)}${_b64(empreinte)}${defini_le:.6f}"
 
 
 def _decouper(stocke: str) -> tuple[int, bytes, bytes, float] | None:
