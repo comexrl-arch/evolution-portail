@@ -554,23 +554,43 @@ function useEstMobile() {
   return mobile
 }
 
-function AgendaNonBranche({ compte }) {
+// Etat « a brancher » : la cause exacte vient du serveur (raison, acces).
+function AgendaNonBranche({ info }) {
+  const { raison, acces, compte, calendrier } = info
+  const refuse = raison === 'acces_refuse'
   return (
     <div className="energie-carte coach-colonne">
-      <p className="energie-surtitre">Agenda à brancher</p>
-      <p className="coach-module-titre" style={{ marginBottom: '0.6rem' }}>Un réglage et votre Google Agenda s'affiche ici.</p>
-      <ol className="agenda-etapes">
-        {compte ? (
+      <p className="energie-surtitre">{refuse ? 'Accès à finir' : 'Agenda à brancher'}</p>
+      <p className="coach-module-titre" style={{ marginBottom: '0.6rem' }}>
+        {refuse
+          ? `Google refuse encore l'accès ${calendrier ? `à l'agenda ${calendrier}` : 'à votre agenda'}.`
+          : "Un réglage et votre Google Agenda s'affiche ici."}
+      </p>
+      {acces === 'compte_de_service' && (
+        <ol className="agenda-etapes">
           <li>
-            Dans Google Agenda, ouvrez <strong>Paramètres de mon agenda</strong>, puis <strong>Partager avec des personnes</strong>.
-            Ajoutez <code>{compte}</code> avec le droit <strong>Apporter des modifications aux événements</strong>.
+            Dans Google Agenda, survolez l'agenda à votre nom (votre agenda principal), cliquez sur les trois points, puis <strong>Paramètres et partage</strong>.
+            Dans <strong>Partager avec des personnes</strong>, ajoutez <code>{compte}</code> avec le droit <strong>Apporter des modifications aux événements</strong>.
           </li>
-        ) : (
-          <li>Donnez au portail l'accès à votre Google Agenda (même accès Google que le cockpit).</li>
-        )}
-        <li>Sur Render, ajoutez la variable <code>GOOGLE_CALENDAR_ID</code> avec l'adresse Gmail de votre agenda.</li>
-        <li>Rechargez cette page.</li>
-      </ol>
+          <li>
+            Sur Render, la variable <code>GOOGLE_CALENDAR_ID</code> doit contenir l'<strong>ID de l'agenda</strong> (même page, rubrique <strong>Intégrer l'agenda</strong>).
+            Pour l'agenda principal, c'est votre adresse Gmail.
+            {calendrier && <> Valeur actuelle : <code>{calendrier}</code>.</>}
+          </li>
+          <li>Rechargez cette page.</li>
+        </ol>
+      )}
+      {acces === 'oauth' && (
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Le portail se connecte à Google avec votre propre compte (le même accès que le cockpit), mais cet accès n'inclut pas encore l'agenda.
+          Il faut renouveler le jeton Google en ajoutant le droit Agenda : demandez-le à Claude, c'est une étape à faire ensemble.
+        </p>
+      )}
+      {!acces && (
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Le portail n'a aucun accès Google configuré sur Render (ni compte de service, ni accès OAuth).
+        </p>
+      )}
     </div>
   )
 }
@@ -590,7 +610,12 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
     setEtat((e) => ({ ...e, chargement: true, erreur: '' }))
     const r = await appelAgenda(`/coach/agenda?debut=${debut}&fin=${fin}`, coachKey, onAuthFailure)
     if (r.erreur !== undefined) return setEtat((e) => ({ ...e, chargement: false, erreur: r.erreur }))
-    setEtat({ chargement: false, configure: r.data.configure, compte: r.data.compte_de_service, evenements: r.data.evenements || [] })
+    setEtat({
+      chargement: false,
+      configure: r.data.configure,
+      info: { raison: r.data.raison, acces: r.data.acces, compte: r.data.compte_de_service, calendrier: r.data.calendrier },
+      evenements: r.data.evenements || [],
+    })
   }
 
   useEffect(() => {
@@ -671,10 +696,20 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
         </div>
       </div>
 
-      {etat.erreur && <p className="text-sm mb-3" style={{ color: 'var(--danger)' }}>{etat.erreur}</p>}
+      {etat.erreur && (
+        <div className="energie-carte coach-colonne agenda-erreur">
+          <p className="energie-surtitre">Agenda injoignable</p>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            {etat.erreur} Si le serveur vient de redémarrer, il lui faut parfois une minute.
+          </p>
+          <button type="button" className="resultats-bouton" onClick={charger} disabled={etat.chargement}>
+            {etat.chargement ? 'Nouvel essai...' : 'Réessayer'}
+          </button>
+        </div>
+      )}
       {message && <p className="agenda-message" role="status">{message}</p>}
 
-      {etat.configure === false && <AgendaNonBranche compte={etat.compte} />}
+      {etat.configure === false && !etat.erreur && <AgendaNonBranche info={etat.info} />}
 
       {etat.configure && (
         <>

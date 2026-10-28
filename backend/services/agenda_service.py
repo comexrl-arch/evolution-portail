@@ -65,6 +65,17 @@ def enabled() -> bool:
     return bool(_calendrier()) and sheets_service.enabled()
 
 
+def calendrier_configure() -> str | None:
+    return os.getenv("GOOGLE_CALENDAR_ID", "").strip() or None
+
+
+def mode_acces() -> str | None:
+    # Acces Google utilise par le portail : "compte_de_service", "oauth" ou None.
+    if sheets_service._config():
+        return "compte_de_service"
+    return "oauth" if sheets_service._oauth_config() else None
+
+
 def compte_de_service() -> str | None:
     # Adresse a laquelle partager l'agenda (affichee dans la marche a suivre).
     info = sheets_service._config()
@@ -111,6 +122,13 @@ class EvenementIntrouvable(RuntimeError):
     pass
 
 
+class AgendaInaccessible(RuntimeError):
+    # Google refuse l'acces a l'agenda (pas partage avec le compte de service,
+    # mauvais GOOGLE_CALENDAR_ID, jeton sans le droit agenda) : c'est un
+    # reglage a finir, pas une panne. L'onglet affiche alors la marche a suivre.
+    pass
+
+
 class EvenementProtege(RuntimeError):
     pass
 
@@ -122,11 +140,32 @@ class CreneauInvalide(ValueError):
         self.message = message
 
 
+def _appel(methode: str, suffixe: str, quoi: str, **kwargs):
+    # Toute erreur Google ou reseau devient une RuntimeError connue : jamais
+    # d'exception brute, qui donnerait une 500 sans en-tetes CORS (le
+    # navigateur n'y voit alors qu'une "connexion impossible").
+    try:
+        from google.auth.exceptions import GoogleAuthError
+
+        reponse = getattr(_http(), methode)(_url(suffixe), **kwargs)
+    except GoogleAuthError as error:
+        raise AgendaInaccessible(f"Google Agenda ({quoi}) identification : {type(error).__name__}") from error
+    except RuntimeError:
+        raise
+    except Exception as error:
+        raise RuntimeError(f"Google Agenda ({quoi}) injoignable : {type(error).__name__}") from error
+
+    return _check(reponse, quoi)
+
+
 def _url(suffixe: str = "") -> str:
     return f"{_API}/{quote(_calendrier(), safe='')}/events{suffixe}"
 
 
 def _check(response, quoi: str):
+    if response.status_code in (401, 403):
+        raise AgendaInaccessible(f"Google Agenda ({quoi}) {response.status_code}")
+
     if response.status_code == 404:
         raise EvenementIntrouvable(quoi)
 
@@ -215,6 +254,15 @@ def valider_creneau(debut: str, fin: str) -> None:
 
 # ------------------------------------------------------------- lecture
 
+def _lire_liste(quoi: str, params: dict) -> dict:
+    # Sur la liste, un 404 veut dire que l'agenda lui-meme est introuvable
+    # (GOOGLE_CALENDAR_ID errone ou agenda pas partage) : reglage a finir.
+    try:
+        return _appel("get", "", quoi, params=params).json()
+    except EvenementIntrouvable as error:
+        raise AgendaInaccessible(f"Google Agenda ({quoi}) agenda introuvable") from error
+
+
 def lister(debut: str, fin: str) -> list[dict]:
     """Evenements entre deux dates (AAAA-MM-JJ, fin exclue), tous agendas confondus."""
     # Marge d'un jour de chaque cote : timeMin/timeMax sont en UTC, le fuseau
@@ -235,7 +283,7 @@ def lister(debut: str, fin: str) -> list[dict]:
         if page:
             params["pageToken"] = page
 
-        data = _check(_http().get(_url(), params=params), "lecture").json()
+        data = _lire_liste("lecture", params)
         evenements.extend(
             _vers_portail(e) for e in data.get("items", []) if e.get("status") != "cancelled"
         )
@@ -259,7 +307,7 @@ def prochains(depuis: str, jours: int = 60) -> dict[str, dict]:
         "timeZone": fuseau(),
         "privateExtendedProperty": "source=portail",
     }
-    data = _check(_http().get(_url(), params=params), "prochains").json()
+    data = _lire_liste("prochains", params)
     par_eleve: dict[str, dict] = {}
 
     for brut in data.get("items", []):
@@ -277,7 +325,7 @@ def prochains(depuis: str, jours: int = 60) -> dict[str, dict]:
 # ------------------------------------------------------------- ecriture
 
 def _evenement_portail(evenement_id: str) -> dict:
-    brut = _check(_http().get(_url(f"/{quote(evenement_id, safe='')}")), "lecture evenement").json()
+    brut = _appel("get", f"/{quote(evenement_id, safe='')}", "lecture evenement").json()
     prive = (brut.get("extendedProperties") or {}).get("private") or {}
 
     if prive.get("source") != "portail":
@@ -288,7 +336,7 @@ def _evenement_portail(evenement_id: str) -> dict:
 
 def creer(donnees: dict) -> dict:
     valider_creneau(donnees.get("debut"), donnees.get("fin"))
-    return _vers_portail(_check(_http().post(_url(), json=_corps(donnees)), "creation").json())
+    return _vers_portail(_appel("post", "", "creation", json=_corps(donnees)).json())
 
 
 def modifier(evenement_id: str, donnees: dict) -> dict:
@@ -312,11 +360,9 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
     complet.update({k: v for k, v in donnees.items() if v is not None or k == "titre"})
     valider_creneau(complet["debut"], complet["fin"])
     corps = _corps(complet)
-    return _vers_portail(_check(
-        _http().patch(_url(f"/{quote(evenement_id, safe='')}"), json=corps), "modification"
-    ).json())
+    return _vers_portail(_appel("patch", f"/{quote(evenement_id, safe='')}", "modification", json=corps).json())
 
 
 def supprimer(evenement_id: str) -> None:
     _evenement_portail(evenement_id)
-    _check(_http().delete(_url(f"/{quote(evenement_id, safe='')}")), "suppression")
+    _appel("delete", f"/{quote(evenement_id, safe='')}", "suppression")
