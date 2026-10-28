@@ -157,6 +157,30 @@ def liste(maintenant: datetime | None = None) -> list[dict]:
     return eleves
 
 
+def calendrier() -> list[dict]:
+    """Eleves en cours, avec juste ce qu'il faut pour le rythme des points
+    (une seule requete Notion, sans lire leurs fiches)."""
+    eleves = []
+
+    for row in ns._query_data_source(ns.CLIENTS_DATA_SOURCE_ID):
+        props = row.get("properties", {})
+
+        if ns._prop_value(ns._prop(props, "État")) != "En cours":
+            continue
+
+        debut = ns._prop_value(ns._prop(props, "Date de demarrage")) or ns._prop_value(ns._prop(props, "Date de démarrage"))
+        eleves.append({
+            "client_page_id": row["id"],
+            "nom": ns.client_display_name(row),
+            "parcours": ns._nom_parcours(ns._prop_value(ns._prop(props, "Parcours"))),
+            "date_demarrage": str(debut)[:10] if debut else None,
+            "jour": ns._jour_parcours(debut),
+        })
+
+    eleves.sort(key=lambda e: e["nom"] or "")
+    return eleves
+
+
 def detail(client_page_id: str, frais: bool = False) -> dict:
     if frais:
         ns._cache_clear(f"dashboard:{client_page_id}")

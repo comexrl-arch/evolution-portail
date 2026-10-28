@@ -10,7 +10,7 @@ import logging
 import math
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import re
 
@@ -30,6 +30,7 @@ from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
 from backend.services import request_link_guard
+from backend.services import rythme_service
 from backend.services import sheets_service
 from backend.services import systeme_io_service
 
@@ -430,6 +431,41 @@ def portal_me(authorization: str = Header(default="")):
         raise _erreur_service_indisponible("portal_me", error)
 
     return dashboard
+
+
+@app.get("/portal/points")
+def portal_points(authorization: str = Header(default="")):
+    # « Mes prochains points » : points planifies dans l'agenda de Rony et
+    # dates suggerees. Simple bloc du tableau de bord : jamais d'erreur.
+    session = _session_from_header(authorization)
+
+    if not agenda_service.enabled():
+        return {"points": []}
+
+    try:
+        props = notion_service._get_page(session["client_page_id"]).get("properties", {})
+        debut = notion_service._prop_value(notion_service._prop(props, "Date de demarrage")) or notion_service._prop_value(notion_service._prop(props, "Date de démarrage"))
+
+        if not debut:
+            return {"points": []}
+
+        eleve = {
+            "client_page_id": session["client_page_id"],
+            "parcours": notion_service._nom_parcours(notion_service._prop_value(notion_service._prop(props, "Parcours"))),
+            "date_demarrage": str(debut)[:10],
+        }
+        evenements = agenda_service.evenements_portail(*_fenetre_points([eleve["date_demarrage"]]))
+        points = _points_eleve(eleve, rythme_service.lire(), evenements, _maintenant_agenda())
+
+    except Exception as error:
+        _journaliser_erreur_portail("portal_points", error)
+        return {"points": []}
+
+    # Rien sur les autres eleves : seulement date, heure, lieu et lien de visio.
+    return {"points": [
+        {**p, "evenement": {k: p["evenement"][k] for k in ("debut", "fin", "lieu")} if p["evenement"] else None}
+        for p in points
+    ]}
 
 
 @app.get("/portal/fiches/{fiche_id}")
@@ -1338,6 +1374,7 @@ class AgendaEvenement(BaseModel):
     type: str = "rdv"
     eleve_id: str | None = None
     eleve_nom: str | None = None
+    parcours: str | None = None
     titre: str | None = None
     description: str | None = None
     lieu: str | None = None
@@ -1349,6 +1386,7 @@ class AgendaModification(BaseModel):
     type: str | None = None
     eleve_id: str | None = None
     eleve_nom: str | None = None
+    parcours: str | None = None
     titre: str | None = None
     description: str | None = None
     lieu: str | None = None
@@ -1400,11 +1438,8 @@ def coach_agenda(debut: str, fin: str, agendas: str = "", x_coach_key: str = Hea
     secondaires = [a.strip() for a in agendas.split(",") if a.strip()]
 
     try:
-        return {
-            "configure": True,
-            "fuseau": agenda_service.fuseau(),
-            "evenements": agenda_service.lister(debut, fin, secondaires),
-        }
+        evenements, creneaux = agenda_service.lister_complet(debut, fin, secondaires)
+        return {"configure": True, "fuseau": agenda_service.fuseau(), "evenements": evenements, "creneaux": creneaux}
 
     except agenda_service.AgendaInaccessible as error:
         _journaliser_erreur_portail("coach_agenda", error)
@@ -1431,6 +1466,114 @@ def coach_agenda_agendas(x_coach_key: str = Header(default="")):
         return {"liste": False, "agendas": []}
 
     return {"liste": liste is not None, "agendas": liste or []}
+
+
+class AgendaPlage(BaseModel):
+    jour: int
+    debut: str
+    fin: str
+
+
+class AgendaReglesCreneaux(BaseModel):
+    plages: list[AgendaPlage]
+    duree: int = 60
+
+
+@app.get("/coach/agenda/creneaux")
+def coach_agenda_creneaux(x_coach_key: str = Header(default="")):
+    # Plages de RDV possibles (fenetre "Mes creneaux").
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_agenda_creneaux", "GOOGLE_CALENDAR_ID")
+
+    try:
+        return agenda_service.lire_regles()
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_agenda_creneaux", error)
+
+
+@app.put("/coach/agenda/creneaux")
+def coach_agenda_creneaux_enregistrer(regles: AgendaReglesCreneaux, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_agenda_creneaux", "GOOGLE_CALENDAR_ID")
+
+    try:
+        return agenda_service.enregistrer_regles([p.model_dump() for p in regles.plages], regles.duree)
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_agenda_creneaux_enregistrer", error)
+
+
+# --- Rythme des points (28/10/2026) : dates suggerees des points individuels
+# et collectifs selon le jour de parcours, rapprochees des RDV de l'agenda. ---
+
+def _points_eleve(eleve: dict, regles: dict, evenements: list[dict], maintenant: str) -> list[dict]:
+    points = rythme_service.dates_suggerees(eleve["parcours"], eleve["date_demarrage"], regles)
+    return rythme_service.rapprocher(points, eleve["client_page_id"], eleve["parcours"], evenements, maintenant)
+
+
+def _fenetre_points(dates: list[str]) -> tuple[str, str]:
+    # Du plus ancien demarrage (moins une semaine) au dernier point possible.
+    debut = min(dates)
+    debut = (datetime.fromisoformat(debut) - timedelta(days=7)).strftime("%Y-%m-%d")
+    fin = (datetime.fromisoformat(max(dates)) + timedelta(days=200)).strftime("%Y-%m-%d")
+    return debut, fin
+
+
+def _maintenant_agenda() -> str:
+    try:
+        from zoneinfo import ZoneInfo
+
+        return datetime.now(ZoneInfo(agenda_service.fuseau())).strftime("%Y-%m-%dT%H:%M")
+    except Exception:
+        return datetime.now().strftime("%Y-%m-%dT%H:%M")
+
+
+class RythmePoints(BaseModel):
+    regles: dict
+
+
+@app.get("/coach/points")
+def coach_points(x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_points", "GOOGLE_CALENDAR_ID")
+
+    try:
+        regles = rythme_service.lire()
+        eleves = [e for e in eleves_service.calendrier() if e["date_demarrage"]]
+        evenements = agenda_service.evenements_portail(*_fenetre_points([e["date_demarrage"] for e in eleves])) if eleves else []
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_points", error)
+
+    maintenant = _maintenant_agenda()
+    return {
+        "regles": regles,
+        "eleves": [{**e, "points": _points_eleve(e, regles, evenements, maintenant)} for e in eleves],
+    }
+
+
+@app.put("/coach/points/regles")
+def coach_points_regles(rythme: RythmePoints, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        raise _erreur_configuration("coach_points_regles", "GOOGLE_CALENDAR_ID")
+
+    try:
+        return {"regles": rythme_service.enregistrer(rythme.regles)}
+
+    except rythme_service.RythmeInvalide as error:
+        raise HTTPException(status_code=422, detail=error.message)
+
+    except (RuntimeError, ValueError) as error:
+        raise _agenda_erreur("coach_points_regles", error)
 
 
 @app.get("/coach/agenda/prochains")

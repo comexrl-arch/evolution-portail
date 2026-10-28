@@ -24,11 +24,18 @@ Ses autres agendas Google (Perso, Calendly...) s'affichent aussi, en lecture
 seule, quand le jeton couvre calendar.calendarlist.readonly (liste des
 agendas). Le portail n'ecrit que dans l'agenda principal (GOOGLE_CALENDAR_ID).
 
+Creneaux de RDV (plages de disponibilite) : enregistres comme evenements
+hebdomadaires de l'agenda principal (type=creneau), marques "disponible" et
+sans rappel. Ils ne bloquent rien dans Google ; le portail les affiche en fond
+et propose les creneaux libres a la creation d'un RDV.
+
 Sans configuration, l'onglet affiche la marche a suivre au lieu de planter.
 """
 
+import json
 import logging
 import os
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
@@ -49,6 +56,7 @@ _MAX_AGENDAS = 12
 TYPES = {
     "rdv": "RDV coaching",
     "suivi": "Suivi",
+    "collectif": "Point collectif",
     "autre": "",
 }
 
@@ -220,7 +228,11 @@ def _vers_portail(evt: dict, agenda: str | None = None) -> dict:
         "type": prive.get("type") if prive.get("source") == "portail" else None,
         "eleve_id": prive.get("eleve_id") or None,
         "eleve_nom": prive.get("eleve_nom") or None,
+        # Point collectif : la formule concernee (Atelier, Autonome...).
+        "parcours": prive.get("parcours") or None,
         "agenda": agenda,
+        # "Disponible" dans Google : ne bloque pas un creneau.
+        "libre": evt.get("transparency") == "transparent",
     }
 
 
@@ -234,10 +246,16 @@ def titre_evenement(type_: str, eleve_nom: str | None, titre: str | None) -> str
     return f"{libelle} · {eleve_nom}" if eleve_nom else libelle
 
 
+def _titre(donnees: dict) -> str:
+    if donnees.get("type") == "collectif" and not (donnees.get("titre") or "").strip():
+        return titre_evenement("collectif", donnees.get("parcours"), None)
+    return titre_evenement(donnees.get("type", "rdv"), donnees.get("eleve_nom"), donnees.get("titre"))
+
+
 def _corps(donnees: dict) -> dict:
     tz = fuseau()
     corps = {
-        "summary": titre_evenement(donnees.get("type", "rdv"), donnees.get("eleve_nom"), donnees.get("titre")),
+        "summary": _titre(donnees),
         "description": donnees.get("description") or "",
         "location": donnees.get("lieu") or "",
         "start": {"dateTime": f"{donnees['debut']}:00", "timeZone": tz},
@@ -247,6 +265,7 @@ def _corps(donnees: dict) -> dict:
             "type": donnees.get("type", "rdv"),
             "eleve_id": donnees.get("eleve_id") or "",
             "eleve_nom": donnees.get("eleve_nom") or "",
+            "parcours": donnees.get("parcours") or "",
         }},
     }
 
@@ -345,6 +364,10 @@ def _lister_agenda(debut: str, fin: str, calendrier: str | None = None) -> list[
     return [e for e in evenements if e["debut"][:10] < fin and (e["fin"] or e["debut"])[:10] >= debut]
 
 
+def _est_creneau(evt: dict) -> bool:
+    return evt["portail"] and evt["type"] == "creneau"
+
+
 def _lister_secondaire(debut: str, fin: str, calendrier: str) -> list[dict]:
     # Un agenda secondaire illisible (desabonne, plus partage) ne doit pas
     # masquer le reste : il est simplement ignore.
@@ -356,11 +379,18 @@ def _lister_secondaire(debut: str, fin: str, calendrier: str) -> list[dict]:
 
 
 def lister(debut: str, fin: str, secondaires: list[str] | None = None) -> list[dict]:
+    return lister_complet(debut, fin, secondaires)[0]
+
+
+def lister_complet(debut: str, fin: str, secondaires: list[str] | None = None) -> tuple[list[dict], list[dict]]:
     """Evenements entre deux dates (AAAA-MM-JJ, fin exclue) : agenda principal,
-    plus les agendas secondaires demandes (lecture seule)."""
+    plus les agendas secondaires demandes (lecture seule). Renvoie aussi les
+    plages de disponibilite de la periode (creneaux de RDV), a part."""
     principal = _calendrier()
     autres = [c for c in dict.fromkeys(secondaires or []) if c and c not in (principal, "primary")][:_MAX_AGENDAS]
-    evenements = _lister_agenda(debut, fin)
+    tous = _lister_agenda(debut, fin)
+    evenements = [e for e in tous if not _est_creneau(e)]
+    creneaux = [{"debut": e["debut"], "fin": e["fin"]} for e in tous if _est_creneau(e) and not e["journee"]]
 
     if autres:
         with ThreadPoolExecutor(max_workers=4) as pool:
@@ -374,7 +404,7 @@ def lister(debut: str, fin: str, secondaires: list[str] | None = None) -> list[d
                     vus.add(evt["id"])
                     evenements.append(evt)
 
-    return evenements
+    return evenements, creneaux
 
 
 def prochains(depuis: str, jours: int = 60) -> dict[str, dict]:
@@ -398,7 +428,7 @@ def prochains(depuis: str, jours: int = 60) -> dict[str, dict]:
 
         evt = _vers_portail(brut)
 
-        if evt["eleve_id"] and evt["debut"] >= depuis and evt["eleve_id"] not in par_eleve:
+        if evt["eleve_id"] and evt["type"] != "creneau" and evt["debut"] >= depuis and evt["eleve_id"] not in par_eleve:
             par_eleve[evt["eleve_id"]] = evt
 
     return par_eleve
@@ -410,7 +440,8 @@ def _evenement_portail(evenement_id: str) -> dict:
     brut = _appel("get", f"/{quote(evenement_id, safe='')}", "lecture evenement").json()
     prive = (brut.get("extendedProperties") or {}).get("private") or {}
 
-    if prive.get("source") != "portail":
+    # Les series de creneaux se reglent depuis "Mes creneaux", pas comme un RDV.
+    if prive.get("source") != "portail" or prive.get("type") in ("creneau", "reglages"):
         raise EvenementProtege(evenement_id)
 
     return brut
@@ -426,6 +457,7 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
     prive = brut["extendedProperties"]["private"]
     complet = {
         "type": prive.get("type", "rdv"),
+        "parcours": prive.get("parcours"),
         "eleve_id": prive.get("eleve_id"),
         "eleve_nom": prive.get("eleve_nom"),
         "titre": brut.get("summary"),
@@ -436,7 +468,7 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
     }
 
     # Changement d'eleve ou de type sans titre saisi : le titre automatique suit.
-    if ("eleve_id" in donnees or "type" in donnees) and "titre" not in donnees:
+    if ("eleve_id" in donnees or "type" in donnees or "parcours" in donnees) and "titre" not in donnees:
         complet["titre"] = None
 
     complet.update({k: v for k, v in donnees.items() if v is not None or k == "titre"})
@@ -448,3 +480,197 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
 def supprimer(evenement_id: str) -> None:
     _evenement_portail(evenement_id)
     _appel("delete", f"/{quote(evenement_id, safe='')}", "suppression")
+
+
+# ------------------------------------------------------------- creneaux de RDV
+
+JOURS_RRULE = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+DUREES_CRENEAU = (15, 30, 45, 60, 90, 120)
+_MAX_PLAGES = 21
+_HEURE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+TITRE_CRENEAU = "Disponible pour un RDV (Espace Coach)"
+
+
+def _regles_brutes() -> list[dict]:
+    params = {"privateExtendedProperty": "type=creneau", "maxResults": "100", "timeZone": fuseau()}
+    data = _lire_liste("creneaux", params)
+    return [
+        e for e in data.get("items", [])
+        if e.get("status") != "cancelled"
+        and ((e.get("extendedProperties") or {}).get("private") or {}).get("source") == "portail"
+    ]
+
+
+def lire_regles() -> dict:
+    """{"plages": [{"jour": 0-6 (lundi=0), "debut": "09:00", "fin": "12:00"}], "duree": 60}"""
+    plages = []
+    duree = 60
+
+    for brut in _regles_brutes():
+        regle = " ".join(brut.get("recurrence") or [])
+        jour = re.search(r"BYDAY=([A-Z]{2})", regle)
+        debut = _local((brut.get("start") or {}).get("dateTime", ""))
+        fin = _local((brut.get("end") or {}).get("dateTime", ""))
+
+        if not jour or jour.group(1) not in JOURS_RRULE or len(debut) < 16 or len(fin) < 16:
+            continue
+
+        plages.append({"jour": JOURS_RRULE.index(jour.group(1)), "debut": debut[11:16], "fin": fin[11:16]})
+
+        try:
+            duree = int(brut["extendedProperties"]["private"].get("duree") or duree)
+        except (TypeError, ValueError):
+            pass
+
+    plages.sort(key=lambda p: (p["jour"], p["debut"]))
+    return {"plages": plages, "duree": duree}
+
+
+def valider_regles(plages: list[dict], duree: int) -> list[dict]:
+    if duree not in DUREES_CRENEAU:
+        raise CreneauInvalide("Durée de RDV invalide.")
+
+    if len(plages) > _MAX_PLAGES:
+        raise CreneauInvalide("Trop de plages : 21 au maximum.")
+
+    propres = []
+
+    for plage in plages:
+        jour, debut, fin = plage.get("jour"), plage.get("debut") or "", plage.get("fin") or ""
+
+        if not isinstance(jour, int) or not 0 <= jour <= 6 or not _HEURE.match(debut) or not _HEURE.match(fin):
+            raise CreneauInvalide("Plage invalide.")
+
+        if fin <= debut:
+            raise CreneauInvalide("Chaque plage doit finir après son début.")
+
+        propres.append({"jour": jour, "debut": debut, "fin": fin})
+
+    propres.sort(key=lambda p: (p["jour"], p["debut"]))
+
+    for a, b in zip(propres, propres[1:]):
+        if a["jour"] == b["jour"] and b["debut"] < a["fin"]:
+            raise CreneauInvalide("Deux plages du même jour se chevauchent.")
+
+    return propres
+
+
+def _prochain_jour(depuis: datetime, jour: int) -> str:
+    return (depuis + timedelta(days=(jour - depuis.weekday()) % 7)).strftime("%Y-%m-%d")
+
+
+def enregistrer_regles(plages: list[dict], duree: int, aujourdhui: datetime | None = None) -> dict:
+    """Remplace toutes les plages par celles-ci (une serie hebdomadaire par plage)."""
+    plages = valider_regles(plages, duree)
+    tz = fuseau()
+    depart = aujourdhui or datetime.now()
+
+    for brut in _regles_brutes():
+        _appel("delete", f"/{quote(brut['id'], safe='')}", "suppression creneau")
+
+    for plage in plages:
+        jour = _prochain_jour(depart, plage["jour"])
+        _appel("post", "", "creation creneau", json={
+            "summary": TITRE_CRENEAU,
+            "description": "Plage de RDV réglée depuis l'Espace Coach. Elle ne vous rend pas occupé.",
+            "start": {"dateTime": f"{jour}T{plage['debut']}:00", "timeZone": tz},
+            "end": {"dateTime": f"{jour}T{plage['fin']}:00", "timeZone": tz},
+            "recurrence": [f"RRULE:FREQ=WEEKLY;BYDAY={JOURS_RRULE[plage['jour']]}"],
+            "transparency": "transparent",
+            "visibility": "private",
+            "reminders": {"useDefault": False, "overrides": []},
+            "extendedProperties": {"private": {"source": "portail", "type": "creneau", "duree": str(duree)}},
+        })
+
+    return {"plages": plages, "duree": duree}
+
+
+# ------------------------------------------------------------- points des eleves
+
+def evenements_portail(debut: str, fin: str) -> list[dict]:
+    """RDV, suivis et points collectifs crees depuis le portail (hors creneaux)."""
+    params = {
+        "timeMin": f"{debut}T00:00:00Z",
+        "timeMax": f"{fin}T00:00:00Z",
+        "singleEvents": "true",
+        "orderBy": "startTime",
+        "maxResults": "500",
+        "timeZone": fuseau(),
+        "privateExtendedProperty": "source=portail",
+    }
+    evenements = []
+    page = None
+
+    while True:
+        if page:
+            params["pageToken"] = page
+
+        data = _lire_liste("points", params)
+        evenements.extend(
+            _vers_portail(e) for e in data.get("items", []) if e.get("status") != "cancelled"
+        )
+        page = data.get("nextPageToken")
+
+        if not page:
+            break
+
+    return [e for e in evenements if not e["journee"] and e["type"] != "creneau"]
+
+
+# ------------------------------------------------------------- reglages
+
+# Petits reglages de l'Espace Coach (rythme des points...) : gardes dans un
+# evenement prive du 1er janvier 2000, "disponible", que personne ne voit.
+# Ainsi pas de stockage en plus, et le droit agenda deja accorde suffit.
+_JOUR_REGLAGES = "2000-01-01"
+_MAX_VALEUR = 1000
+
+
+def _evenement_reglages() -> dict | None:
+    params = {"privateExtendedProperty": "type=reglages", "maxResults": "5"}
+    for brut in _lire_liste("reglages", params).get("items", []):
+        prive = (brut.get("extendedProperties") or {}).get("private") or {}
+        if prive.get("source") == "portail" and brut.get("status") != "cancelled":
+            return brut
+    return None
+
+
+def lire_reglage(cle: str):
+    brut = _evenement_reglages()
+    morceaux = []
+    prive = ((brut or {}).get("extendedProperties") or {}).get("private") or {}
+
+    # Une propriete Google tient 1024 caracteres : la valeur est decoupee.
+    for i in range(20):
+        morceau = prive.get(f"{cle}_{i}")
+        if morceau is None:
+            break
+        morceaux.append(morceau)
+
+    try:
+        return json.loads("".join(morceaux)) if morceaux else None
+    except ValueError:
+        return None
+
+
+def ecrire_reglage(cle: str, valeur) -> None:
+    texte = json.dumps(valeur, ensure_ascii=False, separators=(",", ":"))
+    brut = _evenement_reglages()
+    prive = dict(((brut or {}).get("extendedProperties") or {}).get("private") or {})
+    prive = {k: v for k, v in prive.items() if not k.startswith(f"{cle}_")}
+    prive.update({f"{cle}_{i // _MAX_VALEUR}": texte[i:i + _MAX_VALEUR] for i in range(0, len(texte), _MAX_VALEUR)})
+    prive.update({"source": "portail", "type": "reglages"})
+    corps = {
+        "summary": "Réglages de l'Espace Coach (ne pas supprimer)",
+        "start": {"date": _JOUR_REGLAGES},
+        "end": {"date": "2000-01-02"},
+        "transparency": "transparent",
+        "visibility": "private",
+        "reminders": {"useDefault": False, "overrides": []},
+        "extendedProperties": {"private": prive},
+    }
+
+    if brut:
+        _appel("put", f"/{quote(brut['id'], safe='')}", "reglages", json=corps)
+    else:
+        _appel("post", "", "reglages", json=corps)

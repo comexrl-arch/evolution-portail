@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, RefreshCw, Trash2, X } from 'lucide-react'
+import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, ExternalLink, Plus, RefreshCw, Repeat, Trash2, X } from 'lucide-react'
+import { ReglagesRythme, libellePoint, pointsAPlanifier, rdvPourPoint } from './PointsRythme.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 
@@ -18,10 +19,33 @@ const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 
 export const TYPES_RDV = [
   ['rdv', 'RDV coaching'],
   ['suivi', 'Étape de suivi'],
+  ['collectif', 'Point collectif'],
   ['autre', 'Autre'],
 ]
 
+export const FORMULES = ['Coaching 90 jours', 'Atelier', 'Autonome']
+
 const DUREES = [15, 30, 45, 60, 90, 120]
+
+const JOURS_LONGS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+
+function libelleDuree(d) {
+  return d < 60 ? `${d} min` : `${Math.floor(d / 60)} h${d % 60 ? ` ${d % 60}` : ''}`
+}
+
+// Creneaux libres : les plages de RDV decoupees selon la duree, sans ce qui
+// est deja pris (evenements a l'heure, hors ceux marques "disponible").
+export function creneauxLibres(plages, evenements, duree, apres) {
+  const occupes = evenements.filter((e) => !e.journee && !e.libre)
+  const libres = []
+  for (const plage of plages) {
+    for (let debut = plage.debut; decaler(debut, duree) <= plage.fin; debut = decaler(debut, duree)) {
+      const fin = decaler(debut, duree)
+      if (debut >= apres && !occupes.some((e) => e.debut < fin && e.fin > debut)) libres.push({ debut, fin })
+    }
+  }
+  return libres.sort((a, b) => a.debut.localeCompare(b.debut))
+}
 
 // Agendas secondaires coches : simple confort d'affichage, garde sur cet appareil.
 const CLE_AGENDAS = 'coach_agendas_coches'
@@ -174,10 +198,11 @@ export async function appelAgenda(chemin, coachKey, onAuthFailure, options = {})
 
 // --- Formulaire de RDV (aussi ouvert depuis la fiche d'un eleve) -------------
 
-export function nouveauRdv({ jour, heure = '10:00', eleve = null, type = 'rdv' } = {}) {
+export function nouveauRdv({ jour, heure = '10:00', eleve = null, type = 'rdv', parcours = '' } = {}) {
   return {
     mode: 'creer',
     type,
+    parcours,
     eleve_id: eleve?.client_page_id || '',
     eleve_nom: eleve?.nom || '',
     titre: '',
@@ -190,9 +215,14 @@ export function nouveauRdv({ jour, heure = '10:00', eleve = null, type = 'rdv' }
 }
 
 // Meme regle que agenda_service.titre_evenement cote serveur.
-function titreAutomatique(type, eleveNom) {
-  const libelle = { rdv: 'RDV coaching', suivi: 'Suivi' }[type] || 'Rendez-vous'
-  return eleveNom ? `${libelle} · ${eleveNom}` : libelle
+function titreAutomatique(type, nom) {
+  const libelle = { rdv: 'RDV coaching', suivi: 'Suivi', collectif: 'Point collectif' }[type] || 'Rendez-vous'
+  return nom ? `${libelle} · ${nom}` : libelle
+}
+
+// Nom repris dans le titre : l'eleve, ou la formule pour un point collectif.
+function nomDuTitre(f) {
+  return f.type === 'collectif' ? f.parcours : f.eleve_nom
 }
 
 function depuisEvenement(evt) {
@@ -201,10 +231,11 @@ function depuisEvenement(evt) {
     id: evt.id,
     evt,
     type: evt.type || 'rdv',
+    parcours: evt.parcours || '',
     eleve_id: evt.eleve_id || '',
     eleve_nom: evt.eleve_nom || '',
     titre: evt.titre,
-    titreAuto: evt.titre === titreAutomatique(evt.type, evt.eleve_nom),
+    titreAuto: evt.titre === titreAutomatique(evt.type, nomDuTitre(evt)),
     date: evt.debut.slice(0, 10),
     heure: evt.journee ? '10:00' : evt.debut.slice(11, 16),
     duree: duree(evt) || 60,
@@ -213,7 +244,7 @@ function depuisEvenement(evt) {
   }
 }
 
-export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerme, onEnregistre }) {
+export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerme, onEnregistre, libres = [] }) {
   const [f, setF] = useState(initial)
   const [attente, setAttente] = useState(false)
   const [erreur, setErreur] = useState('')
@@ -226,10 +257,12 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
     setAttente(true)
     setErreur('')
     const debut = `${f.date}T${f.heure}`
+    const collectif = f.type === 'collectif'
     const corps = {
       type: f.type,
-      eleve_id: f.eleve_id || null,
-      eleve_nom: f.eleve_nom || null,
+      eleve_id: collectif ? null : f.eleve_id || null,
+      eleve_nom: collectif ? null : f.eleve_nom || null,
+      parcours: collectif ? f.parcours || null : null,
       // Titre laisse vide (ou titre automatique d'origine) : le serveur le refait.
       titre: f.titre && !(f.mode === 'modifier' && f.titreAuto && f.titre === initial.titre) ? f.titre : null,
       description: f.description,
@@ -260,7 +293,7 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
         <div className="agenda-panneau-entete">
           <div>
             <p className="energie-surtitre">{f.mode === 'creer' ? 'Nouveau rendez-vous' : lecture ? 'Dans votre agenda' : 'Rendez-vous'}</p>
-            <h3 className="coach-module-titre">{lecture ? f.titre : f.eleve_nom || (f.mode === 'creer' ? 'Planifier' : f.titre)}</h3>
+            <h3 className="coach-module-titre">{lecture ? f.titre : (f.type === 'collectif' ? f.parcours && `Point collectif · ${f.parcours}` : f.eleve_nom) || (f.mode === 'creer' ? 'Planifier' : f.titre)}</h3>
           </div>
           <button type="button" className="coach-bouton-icone" onClick={onFerme} aria-label="Fermer"><X size={16} /></button>
         </div>
@@ -291,6 +324,15 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
               ))}
             </div>
 
+            {f.type === 'collectif' ? (
+              <label className="agenda-champ">
+                <span>Formule concernée</span>
+                <select className="field-input" value={f.parcours} onChange={(e) => changer('parcours', e.target.value)}>
+                  <option value="">Toutes les formules</option>
+                  {FORMULES.map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </label>
+            ) : (
             <label className="agenda-champ">
               <span>Élève</span>
               <select
@@ -306,6 +348,7 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
                 {eleves.filter((x) => !x.illisible).map((x) => <option key={x.client_page_id} value={x.client_page_id}>{x.nom}</option>)}
               </select>
             </label>
+            )}
 
             <label className="agenda-champ">
               <span>Titre</span>
@@ -313,9 +356,30 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
                 className="field-input"
                 value={f.titre}
                 onChange={(e) => changer('titre', e.target.value)}
-                placeholder={titreAutomatique(f.type, f.eleve_nom)}
+                placeholder={titreAutomatique(f.type, nomDuTitre(f))}
               />
             </label>
+
+            {f.mode === 'creer' && libres.length > 0 && (
+              <div className="agenda-champ">
+                <span>Prochains créneaux libres</span>
+                <div className="agenda-libres-choix">
+                  {libres.slice(0, 6).map((c) => {
+                    const actif = f.date === c.debut.slice(0, 10) && f.heure === c.debut.slice(11, 16)
+                    return (
+                      <button
+                        key={c.debut}
+                        type="button"
+                        className={`agenda-libre-puce${actif ? ' agenda-libre-puce-active' : ''}`}
+                        onClick={() => setF((x) => ({ ...x, date: c.debut.slice(0, 10), heure: c.debut.slice(11, 16), duree: duree({ debut: c.debut, fin: c.fin }) }))}
+                      >
+                        {dateLongue(c.debut).replace(/ \d{4}$/, '')}, {heureFr(c.debut)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="agenda-ligne">
               <label className="agenda-champ">
@@ -330,7 +394,7 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
                 <span>Durée</span>
                 <select className="field-input" value={f.duree} onChange={(e) => changer('duree', Number(e.target.value))}>
                   {[...new Set([...DUREES, Number(f.duree)])].sort((a, b) => a - b).map((d) => (
-                    <option key={d} value={d}>{d < 60 ? `${d} min` : `${Math.floor(d / 60)} h${d % 60 ? ` ${d % 60}` : ''}`}</option>
+                    <option key={d} value={d}>{libelleDuree(d)}</option>
                   ))}
                 </select>
               </label>
@@ -415,7 +479,7 @@ function placer(evenements) {
   })
 }
 
-function VueSemaine({ debut, evenements, onCreneau, onOuvrir, onDeposer }) {
+function VueSemaine({ debut, evenements, plages = [], libres = [], onCreneau, onOuvrir, onDeposer }) {
   const jours = Array.from({ length: 7 }, (_, i) => ajouterJours(debut, i))
   const today = aujourdhui()
   const heures = Array.from({ length: HEURE_FIN - HEURE_DEBUT }, (_, i) => HEURE_DEBUT + i)
@@ -466,6 +530,31 @@ function VueSemaine({ debut, evenements, onCreneau, onOuvrir, onDeposer }) {
                   />
                 )
               }))}
+              {plages.filter((p) => p.debut.slice(0, 10) === j).map((p) => {
+                const haut = Math.max(0, minutes(p.debut) - HEURE_DEBUT * 60)
+                const bas = Math.min((HEURE_FIN - HEURE_DEBUT) * 60, minutes(p.fin) - HEURE_DEBUT * 60)
+                if (bas <= haut) return null
+                return <span key={p.debut} className="agenda-plage" style={{ top: (haut / 60) * HAUTEUR_HEURE, height: ((bas - haut) / 60) * HAUTEUR_HEURE }} />
+              })}
+              {libres.filter((c) => c.debut.slice(0, 10) === j).map((c) => {
+                const haut = minutes(c.debut) - HEURE_DEBUT * 60
+                const bas = minutes(c.fin) - HEURE_DEBUT * 60
+                if (haut < 0 || bas > (HEURE_FIN - HEURE_DEBUT) * 60) return null
+                return (
+                  <button
+                    key={c.debut}
+                    type="button"
+                    className="agenda-libre"
+                    onClick={(e) => { e.stopPropagation(); onCreneau(j, c.debut.slice(11, 16), duree(c)) }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => { e.preventDefault(); e.stopPropagation(); onDeposer(e.dataTransfer.getData('text/plain'), j, c.debut.slice(11, 16)) }}
+                    style={{ top: (haut / 60) * HAUTEUR_HEURE + 1, height: ((bas - haut) / 60) * HAUTEUR_HEURE - 2 }}
+                    title={`Créneau libre : ${heureFr(c.debut)}`}
+                  >
+                    Libre · {heureFr(c.debut)}
+                  </button>
+                )
+              })}
               {j === today && now.slice(0, 10) === j && minutes(now) >= HEURE_DEBUT * 60 && minutes(now) < HEURE_FIN * 60 && (
                 <span className="agenda-maintenant" style={{ top: ((minutes(now) - HEURE_DEBUT * 60) / 60) * HAUTEUR_HEURE }} />
               )}
@@ -502,7 +591,7 @@ function VueSemaine({ debut, evenements, onCreneau, onOuvrir, onDeposer }) {
   )
 }
 
-function VueMois({ debut, ancre, evenements, onJour, onOuvrir, onDeposer }) {
+function VueMois({ debut, ancre, evenements, libres = [], onJour, onOuvrir, onDeposer }) {
   const jours = Array.from({ length: 42 }, (_, i) => ajouterJours(debut, i))
   const mois = ancre.slice(0, 7)
   const today = aujourdhui()
@@ -534,6 +623,9 @@ function VueMois({ debut, ancre, evenements, onJour, onOuvrir, onDeposer }) {
               </button>
             ))}
             {duJour.length > 3 && <span className="agenda-plus">+{duJour.length - 3}</span>}
+            {libres.some((c) => c.debut.slice(0, 10) === j) && (
+              <span className="agenda-mois-libres">{libres.filter((c) => c.debut.slice(0, 10) === j).length} libre{libres.filter((c) => c.debut.slice(0, 10) === j).length > 1 ? 's' : ''}</span>
+            )}
           </div>
         )
       })}
@@ -542,7 +634,7 @@ function VueMois({ debut, ancre, evenements, onJour, onOuvrir, onDeposer }) {
 }
 
 // Telephone : la semaine en liste, jour par jour.
-function VueListe({ debut, evenements, onJour, onOuvrir }) {
+function VueListe({ debut, evenements, libres = [], onJour, onCreneau, onOuvrir }) {
   const jours = Array.from({ length: 7 }, (_, i) => ajouterJours(debut, i))
   const today = aujourdhui()
   return (
@@ -557,6 +649,15 @@ function VueListe({ debut, evenements, onJour, onOuvrir }) {
                 <CalendarPlus size={16} />
               </button>
             </header>
+            {libres.some((c) => c.debut.slice(0, 10) === j) && (
+              <div className="agenda-libres-choix">
+                {libres.filter((c) => c.debut.slice(0, 10) === j).map((c) => (
+                  <button key={c.debut} type="button" className="agenda-libre-puce" onClick={() => onCreneau(j, c.debut.slice(11, 16), duree(c))}>
+                    Libre · {heureFr(c.debut)}
+                  </button>
+                ))}
+              </div>
+            )}
             {duJour.length === 0 ? <p className="espace-vide">Rien de prévu.</p> : duJour.map((evt) => (
               <button key={evt.id} type="button" className={`${classeEvenement(evt)} agenda-liste-evt`} style={styleAgenda(evt)} onClick={() => onOuvrir(evt)}>
                 <span className="agenda-liste-heure">{evt.journee ? 'Journée' : `${evt.debut.slice(11, 16)} à ${evt.fin.slice(11, 16)}`}</span>
@@ -624,6 +725,83 @@ function AgendaNonBranche({ info }) {
   )
 }
 
+// Fenetre "Mes creneaux" : plages de RDV possibles, jour par jour.
+function ReglagesCreneaux({ initial, coachKey, onAuthFailure, onFerme, onEnregistre }) {
+  const [plages, setPlages] = useState(initial.plages)
+  const [dureeRdv, setDureeRdv] = useState(initial.duree)
+  const [attente, setAttente] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const changer = (i, cle, valeur) => setPlages((ps) => ps.map((p, j) => (j === i ? { ...p, [cle]: valeur } : p)))
+
+  function ajouter() {
+    const dernier = plages[plages.length - 1]
+    setPlages((ps) => [...ps, dernier ? { ...dernier, jour: (dernier.jour + 1) % 7 } : { jour: 1, debut: '09:00', fin: '12:00' }])
+  }
+
+  async function enregistrer(e) {
+    e.preventDefault()
+    setAttente(true)
+    setErreur('')
+    const r = await appelAgenda('/coach/agenda/creneaux', coachKey, onAuthFailure, {
+      method: 'PUT',
+      body: JSON.stringify({ plages: plages.map((p) => ({ ...p, jour: Number(p.jour) })), duree: Number(dureeRdv) }),
+    })
+    setAttente(false)
+    if (r.erreur !== undefined) return setErreur(r.erreur)
+    onEnregistre(r.data)
+  }
+
+  return (
+    <div className="agenda-voile" onClick={onFerme}>
+      <form className="agenda-panneau" onClick={(e) => e.stopPropagation()} onSubmit={enregistrer}>
+        <div className="agenda-panneau-entete">
+          <div>
+            <p className="energie-surtitre">Mes créneaux</p>
+            <h3 className="coach-module-titre">Quand peut-on prendre RDV ?</h3>
+          </div>
+          <button type="button" className="coach-bouton-icone" onClick={onFerme} aria-label="Fermer"><X size={16} /></button>
+        </div>
+        <p className="coach-intro" style={{ margin: '0 0 0.9rem' }}>
+          Chaque semaine, ces plages sont proposées pour vos RDV, sans ce qui est déjà pris dans vos agendas.
+          Elles apparaissent aussi dans Google Agenda comme « disponible » : elles ne vous rendent pas occupé.
+        </p>
+
+        <div className="agenda-plages">
+          {plages.length === 0 && <p className="espace-vide">Aucune plage pour l'instant.</p>}
+          {plages.map((p, i) => (
+            <div key={i} className="agenda-plage-ligne">
+              <select className="field-input" value={p.jour} onChange={(e) => changer(i, 'jour', Number(e.target.value))} aria-label="Jour">
+                {JOURS_LONGS.map((j, k) => <option key={j} value={k}>{j}</option>)}
+              </select>
+              <input type="time" step="900" required className="field-input" value={p.debut} onChange={(e) => changer(i, 'debut', e.target.value)} aria-label="Début" />
+              <span>à</span>
+              <input type="time" step="900" required className="field-input" value={p.fin} onChange={(e) => changer(i, 'fin', e.target.value)} aria-label="Fin" />
+              <button type="button" className="coach-bouton-icone" onClick={() => setPlages((ps) => ps.filter((_, j) => j !== i))} aria-label="Retirer cette plage">
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+          <button type="button" className="agenda-ajout-plage" onClick={ajouter}><Plus size={15} /> Ajouter une plage</button>
+        </div>
+
+        <label className="agenda-champ" style={{ marginTop: '0.9rem' }}>
+          <span>Durée d'un RDV</span>
+          <select className="field-input" value={dureeRdv} onChange={(e) => setDureeRdv(Number(e.target.value))}>
+            {DUREES.map((d) => <option key={d} value={d}>{libelleDuree(d)}</option>)}
+          </select>
+        </label>
+
+        {erreur && <p className="text-sm mt-3" style={{ color: 'var(--danger)' }}>{erreur}</p>}
+
+        <div className="agenda-actions">
+          <button type="submit" className="fiche-bouton" disabled={attente}>{attente ? 'Enregistrement...' : 'Enregistrer mes créneaux'}</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 export default function CoachAgenda({ coachKey, onAuthFailure }) {
   const mobile = useEstMobile()
   const [vue, setVue] = useState('semaine')
@@ -635,6 +813,12 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
   // Ses agendas Google : null tant que la liste n'est pas arrivee.
   const [agendas, setAgendas] = useState(null)
   const [coches, setCoches] = useState(lireCoches)
+  // Plages de RDV : regles (fenetre "Mes creneaux") et occurrences de la periode.
+  const [regles, setRegles] = useState(null)
+  const [reglagesOuverts, setReglagesOuverts] = useState(false)
+  // Rythme des points : dates suggerees par eleve (null tant que non lu).
+  const [points, setPoints] = useState(null)
+  const [rythmeOuvert, setRythmeOuvert] = useState(false)
 
   const { debut, fin } = periode(vue, ancre)
   const secondaires = (agendas?.items || [])
@@ -652,6 +836,19 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
       configure: r.data.configure,
       info: { raison: r.data.raison, acces: r.data.acces, compte: r.data.compte_de_service, calendrier: r.data.calendrier },
       evenements: r.data.evenements || [],
+      plages: r.data.creneaux || [],
+    })
+  }
+
+  function chargerPoints() {
+    appelAgenda('/coach/points', coachKey, onAuthFailure).then((r) => {
+      if (r.data?.regles) setPoints(r.data)
+    })
+  }
+
+  function chargerRegles() {
+    appelAgenda('/coach/agenda/creneaux', coachKey, onAuthFailure).then((r) => {
+      if (r.data?.plages) setRegles(r.data)
     })
   }
 
@@ -664,6 +861,14 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (etat.configure) {
+      chargerRegles()
+      chargerPoints()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etat.configure])
 
   useEffect(() => {
     if (agendas) charger()
@@ -691,6 +896,13 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
       .sort((a, b) => a.debut.localeCompare(b.debut))
   }, [etat.evenements, agendas])
   const parId = useMemo(() => new Map(evenements.map((e) => [e.id, e])), [evenements])
+  const dureeRdv = regles?.duree || 60
+  const libres = useMemo(
+    () => creneauxLibres(etat.plages || [], evenements, dureeRdv, maintenantLocal()),
+    [etat.plages, evenements, dureeRdv],
+  )
+  const nouveau = (jour, heure, d) => ({ ...nouveauRdv({ jour, heure }), duree: d || dureeRdv })
+  const aPlanifier = useMemo(() => pointsAPlanifier(points?.eleves), [points])
 
   function naviguer(sens) {
     if (sens === 0) return setAncre(aujourdhui())
@@ -748,7 +960,17 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
             <RefreshCw size={15} className={etat.chargement ? 'coach-tourne' : undefined} />
           </button>
           {etat.configure && (
-            <button type="button" className="fiche-bouton agenda-nouveau" onClick={() => setFormulaire(nouveauRdv({ jour: ancre >= debut && ancre < fin ? ancre : debut }))}>
+            <button type="button" className="resultats-bouton agenda-mes-creneaux" onClick={() => setRythmeOuvert(true)} disabled={!points}>
+              <Repeat size={15} aria-hidden="true" /> Rythme des points
+            </button>
+          )}
+          {etat.configure && (
+            <button type="button" className="resultats-bouton agenda-mes-creneaux" onClick={() => setReglagesOuverts(true)} disabled={!regles}>
+              <CalendarClock size={15} aria-hidden="true" /> Mes créneaux
+            </button>
+          )}
+          {etat.configure && (
+            <button type="button" className="fiche-bouton agenda-nouveau" onClick={() => setFormulaire(nouveau(ancre >= debut && ancre < fin ? ancre : debut))}>
               <CalendarPlus size={16} aria-hidden="true" /> Nouveau RDV
             </button>
           )}
@@ -772,6 +994,26 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
 
       {etat.configure && (
         <>
+          {aPlanifier.length > 0 && (
+            <div className="agenda-prochains agenda-a-planifier">
+              <p className="energie-surtitre">Points à planifier (14 prochains jours)</p>
+              <div>
+                {aPlanifier.slice(0, 8).map((p) => (
+                  <button
+                    key={`${p.eleve.client_page_id}-${p.type}-${p.numero}`}
+                    type="button"
+                    className={`agenda-prochain agenda-prochain-${p.type === 'collectif' ? 'collectif' : 'rdv'}`}
+                    onClick={() => setFormulaire(rdvPourPoint(p, p.eleve, regles?.plages))}
+                  >
+                    <strong>{p.type === 'collectif' ? `${p.eleve.parcours}` : p.eleve.nom}</strong>
+                    <span>{libellePoint(p)} · {p.date < aujourdhui() ? 'en retard, prévu' : 'prévu'} le {dateLongue(p.date)}</span>
+                    <em>Planifier</em>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {prochains.length > 0 && (
             <div className="agenda-prochains">
               <p className="energie-surtitre">À venir avec vos élèves</p>
@@ -791,6 +1033,7 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
               debut={debut}
               ancre={ancre}
               evenements={evenements}
+              libres={libres}
               onJour={(j) => { setAncre(j); setVue('semaine') }}
               onOuvrir={(e) => setFormulaire(depuisEvenement(e))}
               onDeposer={deposer}
@@ -799,14 +1042,18 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
             <VueListe
               debut={debut}
               evenements={evenements}
-              onJour={(j) => setFormulaire(nouveauRdv({ jour: j }))}
+              libres={libres}
+              onJour={(j) => setFormulaire(nouveau(j))}
+              onCreneau={(j, h, d) => setFormulaire(nouveau(j, h, d))}
               onOuvrir={(e) => setFormulaire(depuisEvenement(e))}
             />
           ) : (
             <VueSemaine
               debut={debut}
               evenements={evenements}
-              onCreneau={(j, h) => setFormulaire(nouveauRdv({ jour: j, heure: h }))}
+              plages={etat.plages || []}
+              libres={libres}
+              onCreneau={(j, h, d) => setFormulaire(nouveau(j, h, d))}
               onOuvrir={(e) => setFormulaire(depuisEvenement(e))}
               onDeposer={deposer}
             />
@@ -816,6 +1063,7 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
             <span className="agenda-pastille agenda-evt-rdv" /> RDV coaching
             <span className="agenda-pastille agenda-evt-suivi" /> Étape de suivi
             <span className="agenda-pastille agenda-evt-perso" /> Vos autres rendez-vous (lecture seule)
+            {(etat.plages || []).length > 0 && <><span className="agenda-pastille agenda-pastille-libre" /> Créneau libre pour un RDV</>}
             {!mobile && <em> · Glissez un rendez-vous pour le déplacer, cliquez sur un créneau libre pour en ajouter un.</em>}
           </p>
 
@@ -853,10 +1101,41 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
           eleves={eleves}
           coachKey={coachKey}
           onAuthFailure={onAuthFailure}
+          libres={libres}
           onFerme={() => setFormulaire(null)}
           onEnregistre={(evt) => {
             setFormulaire(null)
             setMessage(evt ? `Enregistré dans votre Google Agenda : ${libelleCreneau(evt)}.` : 'Rendez-vous supprimé de votre Google Agenda.')
+            charger()
+            chargerPoints()
+          }}
+        />
+      )}
+
+      {rythmeOuvert && points && (
+        <ReglagesRythme
+          initial={points.regles}
+          coachKey={coachKey}
+          onAuthFailure={onAuthFailure}
+          onFerme={() => setRythmeOuvert(false)}
+          onEnregistre={() => {
+            setRythmeOuvert(false)
+            setMessage('Rythme des points enregistré.')
+            chargerPoints()
+          }}
+        />
+      )}
+
+      {reglagesOuverts && regles && (
+        <ReglagesCreneaux
+          initial={regles}
+          coachKey={coachKey}
+          onAuthFailure={onAuthFailure}
+          onFerme={() => setReglagesOuverts(false)}
+          onEnregistre={(nouvelles) => {
+            setReglagesOuverts(false)
+            setRegles(nouvelles)
+            setMessage(nouvelles.plages.length ? 'Créneaux enregistrés dans votre Google Agenda.' : 'Créneaux retirés de votre Google Agenda.')
             charger()
           }}
         />
