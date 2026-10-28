@@ -41,13 +41,13 @@ export function ListePoints({ points, coach = false, onPlanifier }) {
   return (
     <ul className="points-liste">
       {points.map((p) => (
-        <li key={`${p.type}-${p.numero}`} className={`points-ligne points-${p.statut}`}>
+        <li key={`${p.type}-${p.numero}-${p.evenement?.debut || p.date}`} className={`points-ligne points-${p.statut}`}>
           <span className="points-quand">
             {p.evenement ? `${dateCourte(p.evenement.debut)}, ${heureFr(p.evenement.debut)}` : `vers le ${dateCourte(p.date)}`}
           </span>
           <span className="points-quoi">
             <strong>{libellePoint(p)}</strong>
-            <small>J{p.jour} · {p.duree} min{p.evenement?.lieu ? ` · ${p.evenement.lieu}` : ''}</small>
+            <small>{p.jour != null ? `J${p.jour} · ` : ''}{p.duree} min{p.evenement?.lieu ? ` · ${p.evenement.lieu}` : ''}</small>
           </span>
           {coach && p.statut === 'a_planifier' && onPlanifier ? (
             <button type="button" className="resultats-bouton points-planifier" onClick={() => onPlanifier(p)}>Planifier</button>

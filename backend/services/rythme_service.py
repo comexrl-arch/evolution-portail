@@ -164,3 +164,43 @@ def rapprocher(points: list[dict], eleve_id: str, formule: str, evenements: list
         resultat.append({**point, "statut": statut, "evenement": _resume(evt) if evt else None})
 
     return resultat
+
+
+def hors_rythme(points: list[dict], eleve_id: str, formule: str, evenements: list[dict], maintenant: str, date_demarrage=None) -> list[dict]:
+    """RDV a venir de l'eleve que le rythme n'a rattache a aucun point : formule
+    sans points individuels (Autonome), RDV en plus du rythme, eleve sans date
+    de demarrage. L'eleve doit quand meme les voir dans son espace."""
+    pris = {p["evenement"]["id"] for p in points if p.get("evenement")}
+    depart = _date(date_demarrage)
+    autres = []
+
+    for evt in evenements:
+        if evt["id"] in pris or evt["fin"] < maintenant:
+            continue
+
+        if evt.get("type") in ("rdv", "autre") and evt.get("eleve_id") == eleve_id:
+            type_ = "individuel"
+        elif evt.get("type") == "collectif" and evt.get("parcours") == formule:
+            type_ = "collectif"
+        else:
+            continue
+
+        jour = _date(evt["debut"])
+
+        try:
+            duree = int((datetime.fromisoformat(evt["fin"]) - datetime.fromisoformat(evt["debut"])).total_seconds() // 60)
+        except ValueError:
+            duree = 0
+
+        autres.append({
+            "type": type_,
+            "numero": 0,
+            "total": 0,
+            "jour": (jour - depart).days if depart and jour else None,
+            "date": jour.isoformat() if jour else str(evt["debut"])[:10],
+            "duree": duree,
+            "statut": "planifie",
+            "evenement": _resume(evt),
+        })
+
+    return autres

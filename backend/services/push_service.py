@@ -136,6 +136,35 @@ def retour_idris_pret(client_page_id: str, fiche_id: str) -> None:
     envoyer(client_page_id, "Idris t'a répondu", "Ton retour sur la fiche que tu viens d'enregistrer est prêt.", f"/?ouvrir=fiche:{fiche_id}")
 
 
+# --- RDV poses par Rony dans l'Espace Coach (28/10/2026) -------------------------------
+
+_JOURS = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+_MOIS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")
+
+
+def quand(debut: str) -> str:
+    """'2026-10-28T11:00' -> 'mercredi 28 octobre à 11h00'"""
+    d = datetime.fromisoformat(debut)
+    return f"{_JOURS[d.weekday()]} {d.day} {_MOIS[d.month - 1]} à {d.hour}h{d.minute:02d}"
+
+
+def message_rdv(changement: str, evt: dict) -> tuple[str, str]:
+    """changement : nouveau, deplace ou annule. Retourne (titre, texte)."""
+    collectif = evt.get("type") == "collectif"
+    nom = "Point collectif" if collectif else "Rendez-vous"
+    moment = quand(evt["debut"])
+
+    if changement == "nouveau":
+        if collectif:
+            return "Nouveau point collectif", f"{moment.capitalize()}. Tu le retrouves dans ton espace."
+        return "Nouveau rendez-vous avec Rony", f"{moment.capitalize()}. Tu le retrouves dans ton espace."
+
+    if changement == "deplace":
+        return f"{nom} déplacé", f"Nouvelle date : {moment}."
+
+    return f"{nom} annulé", f"Le {nom.lower()} du {moment} est annulé."
+
+
 # --- Notifications du matin (n8n, chaque jour) -----------------------------------------
 
 def _fiches_du_jour(dashboard: dict, jour: int) -> list[str]:

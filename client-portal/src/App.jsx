@@ -2173,8 +2173,8 @@ function ProchaineSession({ sessions, onVoir }) {
   )
 }
 
-// « Mes prochains points » (28/10/2026) : les points avec Rony planifies dans
-// son agenda, et le suivant suggere selon le jour de parcours.
+// « Mes prochains points » (28/10/2026) : les RDV avec Rony poses dans son
+// agenda, et le point suivant suggere selon le jour de parcours.
 function MesPoints() {
   const [points, setPoints] = useState(null)
 
@@ -2189,9 +2189,12 @@ function MesPoints() {
 
   if (!points) return null
   const aujourdhui = new Date().toISOString().slice(0, 10)
-  const avenir = points.filter((p) => p.statut === 'planifie')
+  // Tous les RDV a venir poses par Rony (dans le rythme ou non), puis le
+  // prochain point suggere.
+  const avenir = points.filter((p) => p.statut === 'planifie' && p.evenement)
+    .sort((a, b) => a.evenement.debut.localeCompare(b.evenement.debut))
   const suivant = points.find((p) => p.statut === 'a_planifier' && p.date >= aujourdhui)
-  const affiches = [...avenir.slice(0, 2), ...(suivant ? [suivant] : [])]
+  const affiches = [...avenir.slice(0, 3), ...(suivant ? [suivant] : [])]
   if (!affiches.length) return null
 
   return (
