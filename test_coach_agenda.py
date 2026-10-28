@@ -229,5 +229,69 @@ code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach
 check("OAuth sans droit agenda -> a brancher, acces oauth, pas de compte de service",
       code == 200 and rep["raison"] == "acces_refuse" and rep["acces"] == "oauth" and rep["compte_de_service"] is None)
 
+print("\n7. Tous ses agendas : liste, cases a cocher, secondaires en lecture seule")
+os.environ["GOOGLE_CALENDAR_ID"] = "rony@gmail.com"
+
+
+class PlusieursAgendas(FausseSession):
+    def __init__(self, liste=True, casse=()):
+        super().__init__()
+        self.liste = liste
+        self.casse = set(casse)
+        self.secondaires = {
+            "perso@group": [{"id": "foot", "summary": "Foot", "start": {"dateTime": "2026-10-28T18:00:00-04:00"}, "end": {"dateTime": "2026-10-28T19:00:00-04:00"},
+                             "extendedProperties": {"private": {"source": "portail", "type": "rdv"}}}],
+            "calendly@group": [{"id": "perso", "summary": "Copie", "start": {"dateTime": "2026-10-29T09:00:00-04:00"}, "end": {"dateTime": "2026-10-29T10:00:00-04:00"}}],
+        }
+
+    def get(self, url, params=None):
+        if url.endswith("/users/me/calendarList"):
+            self.appels.append(("GET", url, params))
+            if not self.liste:
+                return Reponse(403)
+            return Reponse(200, {"items": [
+                {"id": "zz@group", "summary": "Anniversaires", "backgroundColor": "#92e1c0"},
+                {"id": "rony@gmail.com", "summary": "Rony Lepitre", "primary": True, "selected": True, "backgroundColor": "#9fe1e7"},
+                {"id": "perso@group", "summary": "Perso", "summaryOverride": "Perso famille", "selected": True},
+                {"id": "cache@group", "summary": "Cache", "hidden": True},
+            ]})
+        for cal, items in self.secondaires.items():
+            if f"/calendars/{cal.replace('@', '%40')}/events" in url:
+                self.appels.append(("GET", url, params))
+                return Reponse(404) if cal in self.casse else Reponse(200, {"items": items})
+        return super().get(url, params)
+
+
+agenda_service._session = PlusieursAgendas()
+code, rep = statut(portal_main.coach_agenda_agendas, x_coach_key=CLE)
+noms = [a["nom"] for a in rep["agendas"]]
+check("liste des agendas : principal en tete, masques exclus, nom personnalise",
+      code == 200 and rep["liste"] is True and noms == ["Rony Lepitre", "Anniversaires", "Perso famille"])
+check("cases cochees par defaut = celles de Google + le principal",
+      [a["coche"] for a in rep["agendas"]] == [True, False, True] and rep["agendas"][0]["principal"])
+
+code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", agendas="perso@group,calendly@group", x_coach_key=CLE)
+par_id = {e["id"]: e for e in rep["evenements"]}
+check("evenements des agendas secondaires ajoutes", code == 200 and "foot" in par_id and par_id["foot"]["agenda"] == "perso@group")
+check("secondaire jamais modifiable, meme avec une propriete portail", par_id["foot"]["portail"] is False and par_id["foot"]["type"] is None)
+check("doublon (meme evenement dans deux agendas) : la version principale gagne",
+      par_id["perso"]["agenda"] is None and par_id["perso"]["titre"] == "Dentiste")
+
+agenda_service._session = PlusieursAgendas(casse={"perso@group"})
+code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", agendas="perso@group,calendly@group", x_coach_key=CLE)
+check("un agenda secondaire illisible est ignore, le reste s'affiche",
+      code == 200 and "foot" not in {e["id"] for e in rep["evenements"]} and "perso" in {e["id"] for e in rep["evenements"]})
+
+session = PlusieursAgendas()
+agenda_service._session = session
+statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", agendas="rony@gmail.com,primary", x_coach_key=CLE)
+check("l'agenda principal n'est jamais lu deux fois", sum(1 for a in session.appels if "/events" in a[1]) == 1)
+
+agenda_service._session = PlusieursAgendas(liste=False)
+code, rep = statut(portal_main.coach_agenda_agendas, x_coach_key=CLE)
+check("jeton sans droit sur la liste -> liste=False, pas d'erreur", code == 200 and rep == {"liste": False, "agendas": []})
+code, rep = statut(portal_main.coach_agenda, "2026-10-26", "2026-11-02", x_coach_key=CLE)
+check("... et l'agenda principal s'affiche quand meme", code == 200 and rep["configure"] is True and rep["evenements"])
+
 print(f"\n{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

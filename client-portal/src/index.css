@@ -6740,3 +6740,44 @@ button.eleve-carte:hover {
   gap: 0.6rem;
   align-items: flex-start;
 }
+
+/* Agendas secondaires (Perso, Calendly...) : lecture seule, couleur Google en liseré */
+.agenda-evt-secondaire {
+  background: #F4F2ED;
+  color: var(--text-secondary);
+  border-left: 3px solid var(--agenda-couleur, #B9B4A8);
+}
+
+.agenda-agendas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin: 0.75rem 0 0;
+  padding: 0.7rem 0.9rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.agenda-agendas legend {
+  padding: 0 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.agenda-agendas label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.agenda-agendas label .agenda-pastille { margin-left: 0; }
+.agenda-agendas input { accent-color: var(--brand-gold); }
+.agenda-agenda-principal { cursor: default; color: var(--text-primary); }
+.agenda-agendas em { font-style: normal; color: var(--text-tertiary); }

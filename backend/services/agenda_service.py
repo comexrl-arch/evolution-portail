@@ -20,12 +20,17 @@ Configuration (variables d'environnement, jamais dans le code) :
                  doit alors couvrir l'agenda).
   AGENDA_FUSEAU : fuseau des creneaux (defaut America/Guadeloupe).
 
+Ses autres agendas Google (Perso, Calendly...) s'affichent aussi, en lecture
+seule, quand le jeton couvre calendar.calendarlist.readonly (liste des
+agendas). Le portail n'ecrit que dans l'agenda principal (GOOGLE_CALENDAR_ID).
+
 Sans configuration, l'onglet affiche la marche a suivre au lieu de planter.
 """
 
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
@@ -33,8 +38,13 @@ from backend.services import sheets_service
 
 logger = logging.getLogger("uvicorn.error")
 
-_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+_SCOPES = [
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+]
 _API = "https://www.googleapis.com/calendar/v3/calendars"
+_LISTE_AGENDAS = "https://www.googleapis.com/calendar/v3/users/me/calendarList"
+_MAX_AGENDAS = 12
 
 TYPES = {
     "rdv": "RDV coaching",
@@ -105,13 +115,15 @@ def _http():
 
             from google.oauth2.credentials import Credentials
 
+            # Sans "scopes" : Google rend un acces avec tous les droits que le
+            # jeton couvre deja. Demander un droit absent du jeton (la liste
+            # des agendas, par exemple) ferait echouer toute l'identification.
             creds = Credentials(
                 None,
                 refresh_token=oauth["refresh_token"],
                 token_uri="https://oauth2.googleapis.com/token",
                 client_id=oauth["client_id"],
                 client_secret=oauth["client_secret"],
-                scopes=_SCOPES,
             )
 
         _session = AuthorizedSession(creds)
@@ -140,14 +152,18 @@ class CreneauInvalide(ValueError):
         self.message = message
 
 
-def _appel(methode: str, suffixe: str, quoi: str, **kwargs):
+def _appel(methode: str, suffixe: str, quoi: str, calendrier: str | None = None, **kwargs):
+    return _requete(methode, _url(suffixe, calendrier), quoi, **kwargs)
+
+
+def _requete(methode: str, url: str, quoi: str, **kwargs):
     # Toute erreur Google ou reseau devient une RuntimeError connue : jamais
     # d'exception brute, qui donnerait une 500 sans en-tetes CORS (le
     # navigateur n'y voit alors qu'une "connexion impossible").
     try:
         from google.auth.exceptions import GoogleAuthError
 
-        reponse = getattr(_http(), methode)(_url(suffixe), **kwargs)
+        reponse = getattr(_http(), methode)(url, **kwargs)
     except GoogleAuthError as error:
         raise AgendaInaccessible(f"Google Agenda ({quoi}) identification : {type(error).__name__}") from error
     except RuntimeError:
@@ -158,8 +174,8 @@ def _appel(methode: str, suffixe: str, quoi: str, **kwargs):
     return _check(reponse, quoi)
 
 
-def _url(suffixe: str = "") -> str:
-    return f"{_API}/{quote(_calendrier(), safe='')}/events{suffixe}"
+def _url(suffixe: str = "", calendrier: str | None = None) -> str:
+    return f"{_API}/{quote(calendrier or _calendrier(), safe='')}/events{suffixe}"
 
 
 def _check(response, quoi: str):
@@ -183,8 +199,10 @@ def _local(valeur: str) -> str:
     return valeur[:16]
 
 
-def _vers_portail(evt: dict) -> dict:
-    prive = (evt.get("extendedProperties") or {}).get("private") or {}
+def _vers_portail(evt: dict, agenda: str | None = None) -> dict:
+    # agenda : None pour l'agenda principal, sinon l'identifiant de l'agenda
+    # secondaire (lecture seule, jamais "portail").
+    prive = (evt.get("extendedProperties") or {}).get("private") or {} if agenda is None else {}
     debut = evt.get("start") or {}
     fin = evt.get("end") or {}
     journee = "date" in debut and "dateTime" not in debut
@@ -202,6 +220,7 @@ def _vers_portail(evt: dict) -> dict:
         "type": prive.get("type") if prive.get("source") == "portail" else None,
         "eleve_id": prive.get("eleve_id") or None,
         "eleve_nom": prive.get("eleve_nom") or None,
+        "agenda": agenda,
     }
 
 
@@ -254,17 +273,48 @@ def valider_creneau(debut: str, fin: str) -> None:
 
 # ------------------------------------------------------------- lecture
 
-def _lire_liste(quoi: str, params: dict) -> dict:
+def _lire_liste(quoi: str, params: dict, calendrier: str | None = None) -> dict:
     # Sur la liste, un 404 veut dire que l'agenda lui-meme est introuvable
     # (GOOGLE_CALENDAR_ID errone ou agenda pas partage) : reglage a finir.
     try:
-        return _appel("get", "", quoi, params=params).json()
+        return _appel("get", "", quoi, calendrier, params=params).json()
     except EvenementIntrouvable as error:
         raise AgendaInaccessible(f"Google Agenda ({quoi}) agenda introuvable") from error
 
 
-def lister(debut: str, fin: str) -> list[dict]:
-    """Evenements entre deux dates (AAAA-MM-JJ, fin exclue), tous agendas confondus."""
+def agendas() -> list[dict] | None:
+    """Agendas de Rony (principal en tete). None si le jeton ne permet pas de les lister."""
+    try:
+        data = _requete("get", _LISTE_AGENDAS, "liste des agendas", params={"maxResults": "100"}).json()
+    except (AgendaInaccessible, EvenementIntrouvable):
+        return None
+
+    principal = _calendrier()
+    liste = []
+
+    for brut in data.get("items", []):
+        if brut.get("deleted") or brut.get("hidden") or not brut.get("id"):
+            continue
+
+        est_principal = brut["id"] == principal or (principal == "primary" and bool(brut.get("primary")))
+        liste.append({
+            "id": brut["id"],
+            "nom": brut.get("summaryOverride") or brut.get("summary") or brut["id"],
+            "couleur": brut.get("backgroundColor") or "",
+            "principal": est_principal,
+            # Coche par defaut : ceux deja affiches dans son Google Agenda.
+            "coche": est_principal or bool(brut.get("selected")),
+        })
+
+    if not any(a["principal"] for a in liste):
+        # Compte de service : l'agenda partage n'est pas dans sa propre liste.
+        liste.append({"id": principal, "nom": "Agenda principal", "couleur": "", "principal": True, "coche": True})
+
+    liste.sort(key=lambda a: (not a["principal"], a["nom"].lower()))
+    return liste
+
+
+def _lister_agenda(debut: str, fin: str, calendrier: str | None = None) -> list[dict]:
     # Marge d'un jour de chaque cote : timeMin/timeMax sont en UTC, le fuseau
     # local les decale de quelques heures. Le filtre exact se fait a la fin.
     params = {
@@ -283,9 +333,9 @@ def lister(debut: str, fin: str) -> list[dict]:
         if page:
             params["pageToken"] = page
 
-        data = _lire_liste("lecture", params)
+        data = _lire_liste("lecture", params, calendrier)
         evenements.extend(
-            _vers_portail(e) for e in data.get("items", []) if e.get("status") != "cancelled"
+            _vers_portail(e, calendrier) for e in data.get("items", []) if e.get("status") != "cancelled"
         )
         page = data.get("nextPageToken")
 
@@ -293,6 +343,38 @@ def lister(debut: str, fin: str) -> list[dict]:
             break
 
     return [e for e in evenements if e["debut"][:10] < fin and (e["fin"] or e["debut"])[:10] >= debut]
+
+
+def _lister_secondaire(debut: str, fin: str, calendrier: str) -> list[dict]:
+    # Un agenda secondaire illisible (desabonne, plus partage) ne doit pas
+    # masquer le reste : il est simplement ignore.
+    try:
+        return _lister_agenda(debut, fin, calendrier)
+    except RuntimeError as error:
+        logger.warning("[agenda] agenda secondaire ignore : %s", type(error).__name__)
+        return []
+
+
+def lister(debut: str, fin: str, secondaires: list[str] | None = None) -> list[dict]:
+    """Evenements entre deux dates (AAAA-MM-JJ, fin exclue) : agenda principal,
+    plus les agendas secondaires demandes (lecture seule)."""
+    principal = _calendrier()
+    autres = [c for c in dict.fromkeys(secondaires or []) if c and c not in (principal, "primary")][:_MAX_AGENDAS]
+    evenements = _lister_agenda(debut, fin)
+
+    if autres:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            lots = list(pool.map(lambda c: _lister_secondaire(debut, fin, c), autres))
+
+        # Une invitation peut figurer dans deux agendas : l'agenda principal gagne.
+        vus = {e["id"] for e in evenements}
+        for lot in lots:
+            for evt in lot:
+                if evt["id"] not in vus:
+                    vus.add(evt["id"])
+                    evenements.append(evt)
+
+    return evenements
 
 
 def prochains(depuis: str, jours: int = 60) -> dict[str, dict]:
