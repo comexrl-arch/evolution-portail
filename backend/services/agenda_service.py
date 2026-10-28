@@ -477,6 +477,11 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
     return _vers_portail(_appel("patch", f"/{quote(evenement_id, safe='')}", "modification", json=corps).json())
 
 
+def lire(evenement_id: str) -> dict:
+    """Un evenement cree depuis le portail, tel que le portail le voit."""
+    return _vers_portail(_evenement_portail(evenement_id))
+
+
 def supprimer(evenement_id: str) -> None:
     _evenement_portail(evenement_id)
     _appel("delete", f"/{quote(evenement_id, safe='')}", "suppression")

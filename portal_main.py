@@ -435,8 +435,9 @@ def portal_me(authorization: str = Header(default="")):
 
 @app.get("/portal/points")
 def portal_points(authorization: str = Header(default="")):
-    # « Mes prochains points » : points planifies dans l'agenda de Rony et
-    # dates suggerees. Simple bloc du tableau de bord : jamais d'erreur.
+    # « Mes prochains points » : points planifies dans l'agenda de Rony, RDV
+    # poses hors rythme et dates suggerees. Simple bloc du tableau de bord :
+    # jamais d'erreur.
     session = _session_from_header(authorization)
 
     if not agenda_service.enabled():
@@ -445,17 +446,18 @@ def portal_points(authorization: str = Header(default="")):
     try:
         props = notion_service._get_page(session["client_page_id"]).get("properties", {})
         debut = notion_service._prop_value(notion_service._prop(props, "Date de demarrage")) or notion_service._prop_value(notion_service._prop(props, "Date de démarrage"))
-
-        if not debut:
-            return {"points": []}
-
         eleve = {
             "client_page_id": session["client_page_id"],
             "parcours": notion_service._nom_parcours(notion_service._prop_value(notion_service._prop(props, "Parcours"))),
-            "date_demarrage": str(debut)[:10],
+            "date_demarrage": str(debut)[:10] if debut else None,
         }
-        evenements = agenda_service.evenements_portail(*_fenetre_points([eleve["date_demarrage"]]))
-        points = _points_eleve(eleve, rythme_service.lire(), evenements, _maintenant_agenda())
+        maintenant = _maintenant_agenda()
+        evenements = agenda_service.evenements_portail(*_fenetre_points([eleve["date_demarrage"] or maintenant[:10]]))
+        points = _points_eleve(eleve, rythme_service.lire(), evenements, maintenant) if debut else []
+        # Un RDV pose pour l'eleve s'affiche toujours, meme hors rythme (formule
+        # Autonome sans points individuels, RDV en plus, pas de date de demarrage).
+        points += rythme_service.hors_rythme(points, eleve["client_page_id"], eleve["parcours"], evenements, maintenant, eleve["date_demarrage"])
+        points.sort(key=lambda p: p["evenement"]["debut"] if p["evenement"] else p["date"])
 
     except Exception as error:
         _journaliser_erreur_portail("portal_points", error)
@@ -1597,7 +1599,7 @@ def coach_agenda_prochains(depuis: str, x_coach_key: str = Header(default="")):
 
 
 @app.post("/coach/agenda")
-def coach_agenda_creer(evenement: AgendaEvenement, x_coach_key: str = Header(default="")):
+def coach_agenda_creer(evenement: AgendaEvenement, background_tasks: BackgroundTasks = None, x_coach_key: str = Header(default="")):
     _require_coach_key(x_coach_key)
 
     if evenement.type not in agenda_service.TYPES:
@@ -1607,14 +1609,17 @@ def coach_agenda_creer(evenement: AgendaEvenement, x_coach_key: str = Header(def
         raise _erreur_configuration("coach_agenda_creer", "GOOGLE_CALENDAR_ID")
 
     try:
-        return agenda_service.creer(evenement.model_dump())
+        cree = agenda_service.creer(evenement.model_dump())
 
     except (RuntimeError, ValueError) as error:
         raise _agenda_erreur("coach_agenda_creer", error)
 
+    _en_fond(background_tasks, _prevenir_rdv, None, cree)
+    return cree
+
 
 @app.patch("/coach/agenda/{evenement_id}")
-def coach_agenda_modifier(evenement_id: str, modification: AgendaModification, x_coach_key: str = Header(default="")):
+def coach_agenda_modifier(evenement_id: str, modification: AgendaModification, background_tasks: BackgroundTasks = None, x_coach_key: str = Header(default="")):
     _require_coach_key(x_coach_key)
 
     if modification.type is not None and modification.type not in agenda_service.TYPES:
@@ -1624,26 +1629,83 @@ def coach_agenda_modifier(evenement_id: str, modification: AgendaModification, x
         raise _erreur_configuration("coach_agenda_modifier", "GOOGLE_CALENDAR_ID")
 
     try:
-        return agenda_service.modifier(evenement_id, modification.model_dump(exclude_unset=True))
+        avant = agenda_service.lire(evenement_id)
+        apres = agenda_service.modifier(evenement_id, modification.model_dump(exclude_unset=True))
 
     except (RuntimeError, ValueError) as error:
         raise _agenda_erreur("coach_agenda_modifier", error)
 
+    _en_fond(background_tasks, _prevenir_rdv, avant, apres)
+    return apres
+
 
 @app.delete("/coach/agenda/{evenement_id}")
-def coach_agenda_supprimer(evenement_id: str, x_coach_key: str = Header(default="")):
+def coach_agenda_supprimer(evenement_id: str, background_tasks: BackgroundTasks = None, x_coach_key: str = Header(default="")):
     _require_coach_key(x_coach_key)
 
     if not agenda_service.enabled():
         raise _erreur_configuration("coach_agenda_supprimer", "GOOGLE_CALENDAR_ID")
 
     try:
+        avant = agenda_service.lire(evenement_id)
         agenda_service.supprimer(evenement_id)
 
     except RuntimeError as error:
         raise _agenda_erreur("coach_agenda_supprimer", error)
 
+    _en_fond(background_tasks, _prevenir_rdv, avant, None)
     return {"supprime": True}
+
+
+# --- Notification des eleves quand Rony pose, deplace ou annule un RDV
+# (28/10/2026). Best-effort, apres la reponse : jamais d'erreur pour le coach. ---
+
+def _en_fond(background_tasks, fonction, *args) -> None:
+    if background_tasks is not None:
+        background_tasks.add_task(fonction, *args)
+    else:
+        fonction(*args)
+
+
+def _eleves_du_rdv(evt: dict | None) -> set[str]:
+    if not evt or evt.get("journee"):
+        return set()
+
+    if evt.get("type") in ("rdv", "autre") and evt.get("eleve_id"):
+        return {evt["eleve_id"]}
+
+    if evt.get("type") == "collectif" and evt.get("parcours"):
+        return {e["client_page_id"] for e in eleves_service.calendrier() if e["parcours"] == evt["parcours"]}
+
+    return set()
+
+
+def _prevenir_rdv(avant: dict | None, apres: dict | None) -> None:
+    try:
+        if not push_service.enabled():
+            return
+
+        maintenant = _maintenant_agenda()
+        a_venir = lambda evt: bool(evt) and evt["debut"] > maintenant
+        anciens = _eleves_du_rdv(avant) if a_venir(avant) else set()
+        nouveaux = _eleves_du_rdv(apres) if a_venir(apres) else set()
+        envois = []
+
+        for eleve_id in nouveaux - anciens:
+            envois.append((eleve_id, "nouveau", apres))
+
+        for eleve_id in anciens - nouveaux:
+            envois.append((eleve_id, "annule", avant))
+
+        if avant and apres and avant["debut"] != apres["debut"]:
+            envois.extend((eleve_id, "deplace", apres) for eleve_id in anciens & nouveaux)
+
+        for eleve_id, changement, evt in envois:
+            titre, texte = push_service.message_rdv(changement, evt)
+            push_service.envoyer(eleve_id, titre, texte, "/")
+
+    except Exception as error:
+        _journaliser_alerte_impossible("push_rdv", error)
 
 
 @app.get("/coach/leads/systeme-io")
