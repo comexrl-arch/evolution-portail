@@ -1386,7 +1386,9 @@ def _agenda_erreur(contexte: str, error: Exception) -> HTTPException:
 
 
 @app.get("/coach/agenda")
-def coach_agenda(debut: str, fin: str, x_coach_key: str = Header(default="")):
+def coach_agenda(debut: str, fin: str, agendas: str = "", x_coach_key: str = Header(default="")):
+    # agendas : identifiants des agendas secondaires a afficher, separes par
+    # des virgules (lecture seule).
     _require_coach_key(x_coach_key)
 
     if not (_JOUR_ISO.match(debut) and _JOUR_ISO.match(fin)) or fin <= debut:
@@ -1395,8 +1397,14 @@ def coach_agenda(debut: str, fin: str, x_coach_key: str = Header(default="")):
     if not agenda_service.enabled():
         return {**_agenda_config(), "evenements": []}
 
+    secondaires = [a.strip() for a in agendas.split(",") if a.strip()]
+
     try:
-        return {"configure": True, "fuseau": agenda_service.fuseau(), "evenements": agenda_service.lister(debut, fin)}
+        return {
+            "configure": True,
+            "fuseau": agenda_service.fuseau(),
+            "evenements": agenda_service.lister(debut, fin, secondaires),
+        }
 
     except agenda_service.AgendaInaccessible as error:
         _journaliser_erreur_portail("coach_agenda", error)
@@ -1404,6 +1412,25 @@ def coach_agenda(debut: str, fin: str, x_coach_key: str = Header(default="")):
 
     except (RuntimeError, ValueError) as error:
         raise _agenda_erreur("coach_agenda", error)
+
+
+@app.get("/coach/agenda/agendas")
+def coach_agenda_agendas(x_coach_key: str = Header(default="")):
+    # Liste de ses agendas Google pour les cases a cocher. liste=False : le
+    # jeton ne couvre pas encore la liste, seul l'agenda principal s'affiche.
+    _require_coach_key(x_coach_key)
+
+    if not agenda_service.enabled():
+        return {"liste": False, "agendas": []}
+
+    try:
+        liste = agenda_service.agendas()
+
+    except RuntimeError as error:
+        _journaliser_erreur_portail("coach_agenda_agendas", error)
+        return {"liste": False, "agendas": []}
+
+    return {"liste": liste is not None, "agendas": liste or []}
 
 
 @app.get("/coach/agenda/prochains")

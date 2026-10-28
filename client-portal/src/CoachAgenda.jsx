@@ -23,6 +23,26 @@ export const TYPES_RDV = [
 
 const DUREES = [15, 30, 45, 60, 90, 120]
 
+// Agendas secondaires coches : simple confort d'affichage, garde sur cet appareil.
+const CLE_AGENDAS = 'coach_agendas_coches'
+
+function lireCoches() {
+  try {
+    const brut = JSON.parse(localStorage.getItem(CLE_AGENDAS) || 'null')
+    return Array.isArray(brut) ? brut : null
+  } catch {
+    return null
+  }
+}
+
+function garderCoches(ids) {
+  try {
+    localStorage.setItem(CLE_AGENDAS, JSON.stringify(ids))
+  } catch {
+    // Stockage indisponible (navigation privee) : la selection vaut pour la session.
+  }
+}
+
 // --- Dates locales en texte ("2026-10-30", "2026-10-30T10:00") : les heures
 // viennent du serveur deja dans le fuseau de l'agenda, on ne les convertit pas.
 
@@ -249,6 +269,7 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
           <>
             <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{libelleCreneau(f.evt)}</p>
             {f.lieu && <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{f.lieu}</p>}
+            {f.evt?.nomAgenda && <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>Agenda « {f.evt.nomAgenda} »</p>}
             <p className="coach-intro" style={{ margin: '0.9rem 0 0' }}>
               Événement personnel ou créé hors de l'Espace Coach : il se modifie dans Google Agenda.
             </p>
@@ -354,8 +375,14 @@ export function FormulaireRdv({ initial, eleves, coachKey, onAuthFailure, onFerm
 // --- Vues ---------------------------------------------------------------------
 
 function classeEvenement(evt) {
+  if (evt.agenda) return 'agenda-evt agenda-evt-secondaire'
   if (!evt.portail) return 'agenda-evt agenda-evt-perso'
   return `agenda-evt agenda-evt-${evt.type || 'autre'}`
+}
+
+// Agenda secondaire : sa couleur Google en liseré.
+function styleAgenda(evt) {
+  return evt.couleur ? { '--agenda-couleur': evt.couleur } : undefined
 }
 
 // Evenements qui se chevauchent : places cote a cote dans la colonne du jour.
@@ -412,7 +439,7 @@ function VueSemaine({ debut, evenements, onCreneau, onOuvrir, onDeposer }) {
           {jours.map((j) => (
             <div key={j}>
               {journee.filter((e) => e.debut <= j && (e.fin > j || e.fin === e.debut)).map((e) => (
-                <button key={e.id} type="button" className={classeEvenement(e)} onClick={() => onOuvrir(e)}>{e.titre}</button>
+                <button key={e.id} type="button" className={classeEvenement(e)} style={styleAgenda(e)} onClick={() => onOuvrir(e)}>{e.titre}</button>
               ))}
             </div>
           ))}
@@ -456,6 +483,7 @@ function VueSemaine({ debut, evenements, onCreneau, onOuvrir, onDeposer }) {
                     onDragStart={(e) => e.dataTransfer.setData('text/plain', evt.id)}
                     onClick={(e) => { e.stopPropagation(); onOuvrir(evt) }}
                     style={{
+                      ...styleAgenda(evt),
                       top: (haut / 60) * HAUTEUR_HEURE,
                       height: Math.max(((bas - haut) / 60) * HAUTEUR_HEURE - 2, 20),
                       left: `calc(${(col / largeur) * 100}% + 2px)`,
@@ -497,6 +525,7 @@ function VueMois({ debut, ancre, evenements, onJour, onOuvrir, onDeposer }) {
                 key={evt.id}
                 type="button"
                 className={classeEvenement(evt)}
+                style={styleAgenda(evt)}
                 draggable={evt.portail}
                 onDragStart={(e) => e.dataTransfer.setData('text/plain', evt.id)}
                 onClick={(e) => { e.stopPropagation(); onOuvrir(evt) }}
@@ -529,7 +558,7 @@ function VueListe({ debut, evenements, onJour, onOuvrir }) {
               </button>
             </header>
             {duJour.length === 0 ? <p className="espace-vide">Rien de prévu.</p> : duJour.map((evt) => (
-              <button key={evt.id} type="button" className={`${classeEvenement(evt)} agenda-liste-evt`} onClick={() => onOuvrir(evt)}>
+              <button key={evt.id} type="button" className={`${classeEvenement(evt)} agenda-liste-evt`} style={styleAgenda(evt)} onClick={() => onOuvrir(evt)}>
                 <span className="agenda-liste-heure">{evt.journee ? 'Journée' : `${evt.debut.slice(11, 16)} à ${evt.fin.slice(11, 16)}`}</span>
                 <span>{evt.titre}</span>
               </button>
@@ -603,12 +632,20 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
   const [eleves, setEleves] = useState([])
   const [formulaire, setFormulaire] = useState(null)
   const [message, setMessage] = useState('')
+  // Ses agendas Google : null tant que la liste n'est pas arrivee.
+  const [agendas, setAgendas] = useState(null)
+  const [coches, setCoches] = useState(lireCoches)
 
   const { debut, fin } = periode(vue, ancre)
+  const secondaires = (agendas?.items || [])
+    .filter((a) => !a.principal && (coches ? coches.includes(a.id) : a.coche))
+    .map((a) => a.id)
+  const cleSecondaires = secondaires.join(',')
 
   async function charger() {
     setEtat((e) => ({ ...e, chargement: true, erreur: '' }))
-    const r = await appelAgenda(`/coach/agenda?debut=${debut}&fin=${fin}`, coachKey, onAuthFailure)
+    const extra = cleSecondaires ? `&agendas=${encodeURIComponent(cleSecondaires)}` : ''
+    const r = await appelAgenda(`/coach/agenda?debut=${debut}&fin=${fin}${extra}`, coachKey, onAuthFailure)
     if (r.erreur !== undefined) return setEtat((e) => ({ ...e, chargement: false, erreur: r.erreur }))
     setEtat({
       chargement: false,
@@ -619,9 +656,26 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
   }
 
   useEffect(() => {
-    charger()
+    appelAgenda('/coach/agenda/agendas', coachKey, onAuthFailure).then((r) => {
+      setAgendas({
+        liste: r.erreur !== undefined ? null : Boolean(r.data?.liste),
+        items: Array.isArray(r.data?.agendas) ? r.data.agendas : [],
+      })
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debut, fin])
+  }, [])
+
+  useEffect(() => {
+    if (agendas) charger()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debut, fin, cleSecondaires, agendas])
+
+  function basculerAgenda(id) {
+    const actuels = coches || (agendas?.items || []).filter((a) => a.coche).map((a) => a.id)
+    const suivants = actuels.includes(id) ? actuels.filter((x) => x !== id) : [...actuels, id]
+    setCoches(suivants)
+    garderCoches(suivants)
+  }
 
   useEffect(() => {
     appelAgenda('/coach/eleves', coachKey, onAuthFailure).then((r) => {
@@ -630,7 +684,12 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const evenements = useMemo(() => [...etat.evenements].sort((a, b) => a.debut.localeCompare(b.debut)), [etat.evenements])
+  const evenements = useMemo(() => {
+    const parAgenda = new Map((agendas?.items || []).map((a) => [a.id, a]))
+    return etat.evenements
+      .map((e) => (e.agenda ? { ...e, couleur: parAgenda.get(e.agenda)?.couleur, nomAgenda: parAgenda.get(e.agenda)?.nom } : e))
+      .sort((a, b) => a.debut.localeCompare(b.debut))
+  }, [etat.evenements, agendas])
   const parId = useMemo(() => new Map(evenements.map((e) => [e.id, e])), [evenements])
 
   function naviguer(sens) {
@@ -759,6 +818,32 @@ export default function CoachAgenda({ coachKey, onAuthFailure }) {
             <span className="agenda-pastille agenda-evt-perso" /> Vos autres rendez-vous (lecture seule)
             {!mobile && <em> · Glissez un rendez-vous pour le déplacer, cliquez sur un créneau libre pour en ajouter un.</em>}
           </p>
+
+          {agendas?.liste && agendas.items.some((a) => !a.principal) && (
+            <fieldset className="agenda-agendas">
+              <legend>Vos agendas affichés</legend>
+              {agendas.items.map((a) => (
+                <label key={a.id} className={a.principal ? 'agenda-agenda-principal' : undefined}>
+                  <input
+                    type="checkbox"
+                    checked={a.principal || secondaires.includes(a.id)}
+                    disabled={a.principal}
+                    onChange={() => basculerAgenda(a.id)}
+                  />
+                  <span className="agenda-pastille" style={{ background: a.couleur || 'var(--brand-gold)' }} />
+                  {a.nom}{a.principal && <em> · celui où le portail écrit</em>}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {agendas?.liste === false && (
+            <p className="agenda-legende">
+              <em>
+                Seul votre agenda principal s'affiche. Pour voir aussi vos autres agendas (Perso, Calendly...),
+                le jeton Google doit inclure la liste des agendas.
+              </em>
+            </p>
+          )}
         </>
       )}
 
