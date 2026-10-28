@@ -3,8 +3,13 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import CoachOnboarding from './CoachOnboarding.jsx'
+import { demarrerInstallation, identiteCoach } from './installation.js'
 
-const Root = window.location.pathname === '/coach' ? CoachOnboarding : App
+const coach = window.location.pathname === '/coach'
+if (coach) identiteCoach()
+demarrerInstallation()
+
+const Root = coach ? CoachOnboarding : App
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
