@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from backend.services import notion_service as ns
-from backend.services import comptes_rendus_service, prospects_service, questions_rony_service
+from backend.services import comptes_rendus_service, fidelite_service, prospects_service, questions_rony_service
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +266,13 @@ def detail(client_page_id: str, frais: bool = False) -> dict:
         except RuntimeError as error:
             logger.warning("Comptes rendus illisibles (%s)", ns._resume_erreur(error))
 
+    avis = None
+
+    try:
+        avis = fidelite_service.dernier_avis(client_page_id)
+    except RuntimeError as error:
+        logger.warning("Avis J90 illisible (%s)", ns._resume_erreur(error))
+
     return {
         "client_page_id": client_page_id,
         "dashboard": dashboard,
@@ -273,4 +280,5 @@ def detail(client_page_id: str, frais: bool = False) -> dict:
         "bilans": bilans,
         "comptes_rendus": comptes_rendus,
         "questions_rony": questions,
+        "avis_j90": avis,
     }

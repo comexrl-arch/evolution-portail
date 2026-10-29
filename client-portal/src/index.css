@@ -7420,3 +7420,49 @@ p.question-rony-attente { margin: 0.35rem 0 0; color: var(--text-tertiary); font
 .compte-rendu-outils .fiche-bouton,
 .question-rony .fiche-bouton { display: inline-flex; align-items: center; gap: 0.4rem; }
 .preparation-questions { list-style: decimal; }
+
+/* Sections repliables de la fiche eleve (Espace Coach) */
+.coach-repliable {
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.coach-repliable-entete {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.9rem 1.1rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.coach-repliable-entete .resultats-titre {
+  margin: 0;
+}
+
+.coach-repliable-resume {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.coach-repliable-chevron {
+  flex-shrink: 0;
+  color: var(--accent);
+  transition: transform 0.2s;
+}
+
+.coach-repliable-corps {
+  padding: 0 1.1rem 1.1rem;
+}
+
+.coach-avis-note {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
