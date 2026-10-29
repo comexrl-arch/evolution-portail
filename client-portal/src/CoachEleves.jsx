@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, ClipboardList, Copy, MessageCircle, MessageSquare, NotebookPen, Plus, RefreshCw, Search, Send, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, ClipboardList, Copy, MessageCircle, MessageSquare, NotebookPen, Plus, RefreshCw, Search, Send, Sparkles, Star, X } from 'lucide-react'
 import { FormulaireRdv, appelAgenda, dateLongue, heureFr, nouveauRdv } from './CoachAgenda.jsx'
 import { ListePoints, rdvPourPoint } from './PointsRythme.jsx'
 import { CapParcours, DicteeVocale, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
@@ -82,6 +82,57 @@ function Section({ titre, action, children }) {
       </div>
       {children}
     </section>
+  )
+}
+
+// Section repliee par defaut (« Ses points », « Ses fiches ») : le resume
+// reste visible, le detail s'ouvre au clic.
+function SectionRepliable({ titre, resume, children }) {
+  const [ouvert, setOuvert] = useState(false)
+  return (
+    <section className="coach-section coach-repliable">
+      <button type="button" className="coach-repliable-entete" aria-expanded={ouvert} onClick={() => setOuvert((v) => !v)}>
+        <span className="resultats-titre">{titre}</span>
+        {resume && <span className="coach-repliable-resume">{resume}</span>}
+        <ChevronDown size={18} aria-hidden="true" className={`coach-repliable-chevron${ouvert ? ' resultats-chevron-ouvert' : ''}`} />
+      </button>
+      {ouvert && <div className="coach-repliable-corps">{children}</div>}
+    </section>
+  )
+}
+
+function resumePoints(points) {
+  const liste = points || []
+  if (!liste.length) return 'Aucun point prévu'
+  const n = (statut) => liste.filter((p) => p.statut === statut).length
+  return [
+    n('fait') && `${n('fait')} fait${n('fait') > 1 ? 's' : ''}`,
+    n('planifie') && `${n('planifie')} planifié${n('planifie') > 1 ? 's' : ''}`,
+    n('a_planifier') && `${n('a_planifier')} à planifier`,
+  ].filter(Boolean).join(' · ')
+}
+
+function resumeFiches(fiches, aRelire) {
+  const faites = fiches.filter((f) => f.etat === 'Terminé').length
+  const relire = (aRelire || []).length
+  return `${faites} sur ${fiches.length} terminées${relire ? ` · ${relire} retour${relire > 1 ? 's' : ''} à relire` : ''}`
+}
+
+function AvisJ90({ avis }) {
+  return (
+    <Section titre="Son avis sur les 90 jours">
+      <div className="energie-carte">
+        <p className="energie-surtitre coach-avis-note">
+          <Star size={14} aria-hidden="true" /> {avis.note ?? '—'}/10{avis.le ? ` · ${dateFr(avis.le)}` : ''}
+        </p>
+        <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{avis.avis}</p>
+        <p className="eleve-carte-meta">
+          {avis.accord_publication
+            ? `Accord pour le citer${avis.signature ? `, signé « ${avis.signature} »` : ''}.`
+            : 'Pas d\'accord pour le citer publiquement.'}
+        </p>
+      </div>
+    </Section>
   )
 }
 
@@ -1008,13 +1059,13 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
       )}
 
       {points && (
-        <Section titre="Ses points">
+        <SectionRepliable titre="Ses points" resume={resumePoints(points.points)}>
           <ListePoints
             coach
             points={points.points}
             onPlanifier={onRdv ? (p) => setPlanifier(rdvPourPoint(p, { ...eleve, parcours: points.parcours })) : null}
           />
-        </Section>
+        </SectionRepliable>
       )}
 
       {d && !autonome && eleve.parcours !== 'Atelier' && (
@@ -1095,7 +1146,7 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
             <ScoreCommercial coach personnalisation={d.personnalisation} />
           </Section>
 
-          <Section titre="Ses fiches">
+          <SectionRepliable titre="Ses fiches" resume={resumeFiches(d.fiches, eleve.fiches_a_relire)}>
             <FichesParModule
               fiches={d.fiches}
               clientPageId={eleve.client_page_id}
@@ -1104,7 +1155,7 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
               coachKey={coachKey}
               onAuthFailure={onAuthFailure}
             />
-          </Section>
+          </SectionRepliable>
 
           <div className="energie-grille coach-section">
             <div className="energie-carte">
@@ -1161,6 +1212,8 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
               ) : <Vide>Carnet vide.</Vide>}
             </div>
           </div>
+
+          {etat.data?.avis_j90 && <AvisJ90 avis={etat.data.avis_j90} />}
 
           {d.syntheses?.length > 0 && (
             <Section titre="Synthèses mensuelles envoyées">

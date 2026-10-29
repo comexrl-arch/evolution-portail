@@ -9,7 +9,7 @@
 import json
 import sys
 from datetime import date, timedelta
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
 
@@ -160,7 +160,7 @@ print("Avis J90")
 def avis(dashboard, **champs):
     requete = portal_main.AvisJ90Request(**{"note": 9, "avis": "J'ai enfin une routine.", **champs})
     with patch.object(ns, "get_client_dashboard", return_value=dashboard), patch.object(ns, "_create_page") as creation:
-        code, resultat = statut(portal_main.portal_avis_j90, requete, authorization=BEARER)
+        code, resultat = statut(portal_main.portal_avis_j90, requete, MagicMock(), authorization=BEARER)
     return code, creation
 
 

@@ -110,6 +110,39 @@ def enregistrer_avis(client_page_id: str, dashboard: dict, note: int, avis: str,
     })
 
 
+def dernier_avis(client_page_id: str) -> dict | None:
+    """Dernier avis J90 de l'eleve, pour l'Espace Coach."""
+    pages = notion_service._query_data_source(
+        notion_service.ENTREES_PORTAIL_DATA_SOURCE_ID,
+        filter_={"and": [
+            {"property": "Client", "relation": {"contains": client_page_id}},
+            {"property": "Nom", "title": {"contains": _NOM_AVIS}},
+        ]},
+    )
+
+    if not pages:
+        return None
+
+    page = max(pages, key=lambda p: p.get("created_time") or "")
+    brut = notion_service._prop_value(notion_service._prop(page.get("properties", {}), "Données (JSON)")) or "{}"
+
+    try:
+        donnees = json.loads(brut)
+    except json.JSONDecodeError:
+        donnees = {}
+
+    if not isinstance(donnees, dict):
+        donnees = {}
+
+    return {
+        "note": donnees.get("note_sur_10"),
+        "avis": str(donnees.get("avis") or ""),
+        "accord_publication": bool(donnees.get("accord_publication")),
+        "signature": str(donnees.get("signature_souhaitee") or ""),
+        "le": page.get("created_time"),
+    }
+
+
 # --- Recap hebdomadaire --------------------------------------------------------
 
 _SYSTEME_RECAP = """Tu es Idris, l'assistant IA du programme eVolution 2.0 (RL-eVolution). Tu écris UNE ou DEUX phrases (35 mots au plus) que Rony glisse dans son e-mail du lundi à un client, à partir de ses chiffres de la semaine. Tutoiement, ton d'un coach qui connaît son client : chaleureux, concret, sans flatterie. Commente ce que les chiffres disent (un progrès, un déséquilibre entre contacts et rendez-vous...) et propose une petite action pour la semaine. Ne répète pas les chiffres un par un, n'en invente aucun. Ne commence pas par le prénom ni par « Bravo ». Réponds uniquement avec le texte."""

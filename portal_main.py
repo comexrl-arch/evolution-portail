@@ -1268,7 +1268,7 @@ def public_partage(jeton: str):
 
 
 @app.post("/portal/avis-j90")
-def portal_avis_j90(request: AvisJ90Request, authorization: str = Header(default="")):
+def portal_avis_j90(request: AvisJ90Request, background_tasks: BackgroundTasks, authorization: str = Header(default="")):
     session, dashboard = _dashboard_idris(authorization)
 
     try:
@@ -1285,7 +1285,26 @@ def portal_avis_j90(request: AvisJ90Request, authorization: str = Header(default
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_avis_j90", error)
 
+    background_tasks.add_task(_prevenir_avis, session["client_page_id"], dashboard.get("nom"), request.note)
     return {"status": "merci"}
+
+
+def _prevenir_avis(client_page_id: str, nom: str | None, note: int) -> None:
+    try:
+        if push_service.enabled():
+            prenom = (nom or "Un élève").split(" ")[0]
+            push_service.envoyer_coach(f"Avis J90 de {prenom}", f"{prenom} a donné son avis sur ses 90 jours : {note}/10.", f"/coach?onglet=eleves&eleve={client_page_id}")
+    except Exception as error:
+        _journaliser_alerte_impossible("push_avis_j90", error)
+
+    try:
+        notion_service.alerter_coach_onboarding(
+            f"Avis J90 de {nom or 'un élève'} : {note}/10",
+            f"{nom or 'Un élève'} a donné son avis sur ses 90 jours ({note}/10). Tu le lis dans sa fiche, Espace Coach, onglet Élèves.",
+            event="avis_j90",
+        )
+    except Exception as error:
+        _journaliser_alerte_impossible("mail_avis_j90", error)
 
 
 # --- Carnet de prospects (27/10/2026) ---------------------------------------
@@ -1532,6 +1551,17 @@ def _prevenir_question(client_page_id: str, nom: str | None, question: str) -> N
             push_service.envoyer_coach(f"Question de {prenom}", extrait, f"/coach?onglet=eleves&eleve={client_page_id}")
     except Exception as error:
         _journaliser_alerte_impossible("push_question_rony", error)
+
+    # Copie par e-mail (meme canal n8n que l'alerte « Diagnostic termine »).
+    try:
+        portail = os.getenv("PORTAL_FRONTEND_URL", "https://portail.rl-evolution.fr").rstrip("/")
+        notion_service.alerter_coach_onboarding(
+            f"Question de {nom or 'un élève'} dans le portail",
+            f"{nom or 'Un élève'} t'a écrit dans son espace :\n\n{question}\n\nPour répondre : {portail}/coach?onglet=eleves&eleve={client_page_id}",
+            event="question_pour_rony",
+        )
+    except Exception as error:
+        _journaliser_alerte_impossible("mail_question_rony", error)
 
 
 @app.post("/coach/eleves/{client_page_id}/questions/{question_id}/reponse")

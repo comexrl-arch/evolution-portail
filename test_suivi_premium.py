@@ -13,7 +13,7 @@ from fastapi import BackgroundTasks, HTTPException
 os.environ["COACH_ONBOARD_KEY"] = "cle-coach-test"
 
 import portal_main
-from backend.services import eleves_service, notion_service, push_service
+from backend.services import eleves_service, fidelite_service, notion_service, push_service
 from backend.services import questions_rony_service as qrs
 from backend.services import suivi_coach_service as scs
 
@@ -264,6 +264,25 @@ print("\n11. Activite de l'eleve : la reponse de Rony ne compte pas")
 question = entree("Marie — Question pour Rony — x", iso(10), {"question": "Q"})
 question["last_edited_time"] = iso(0)
 check("question : comptee a la date ou l'eleve l'a posee", eleves_service._quand_saisi(question) == iso(10))
+
+print("\n12. E-mail a Rony quand un eleve lui ecrit, avis J90 dans l'Espace Coach")
+with patch.object(push_service, "enabled", return_value=False), patch.object(notion_service, "alerter_coach_onboarding") as mail:
+    portal_main._prevenir_question("marie", "Marie Test", "Je fais une remise ?")
+check("question : e-mail avec le nom, la question entiere et le lien", mail.called and "Marie Test" in mail.call_args[0][0] and "Je fais une remise ?" in mail.call_args[0][1] and "eleve=marie" in mail.call_args[0][1] and mail.call_args[1]["event"] == "question_pour_rony")
+with patch.object(push_service, "enabled", return_value=True), patch.object(push_service, "envoyer_coach", side_effect=RuntimeError("x")), patch.object(notion_service, "alerter_coach_onboarding") as mail:
+    portal_main._prevenir_question("marie", "Marie Test", "Q")
+check("push en panne : l'e-mail part quand meme", mail.called)
+with patch.object(push_service, "enabled", return_value=True), patch.object(push_service, "envoyer_coach") as envoi, patch.object(notion_service, "alerter_coach_onboarding") as mail:
+    portal_main._prevenir_avis("marie", "Marie Test", 9)
+check("avis J90 : notification + e-mail avec la note", "9/10" in envoi.call_args[0][1] and "9/10" in mail.call_args[0][0])
+
+avis_page = {"id": "a1", "created_time": iso(1), "properties": {}}
+with patch.object(notion_service, "_query_data_source", return_value=[avis_page]), \
+     patch.object(notion_service, "_prop_value", return_value=json.dumps({"note_sur_10": 8, "avis": "Top", "accord_publication": True, "signature_souhaitee": "Marie"})):
+    lu = fidelite_service.dernier_avis("marie")
+check("dernier avis lu : note, texte, accord, signature", lu["note"] == 8 and lu["avis"] == "Top" and lu["accord_publication"] and lu["signature"] == "Marie")
+with patch.object(notion_service, "_query_data_source", return_value=[]):
+    check("pas d'avis : None", fidelite_service.dernier_avis("marie") is None)
 
 print(f"\nRESULTAT : {passed}/{passed + failed} assertions reussies")
 sys.exit(1 if failed else 0)
