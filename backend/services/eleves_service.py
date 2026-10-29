@@ -86,9 +86,11 @@ def _ligne_eleve(row: dict, maintenant: datetime) -> dict:
         filter_={"property": "Client", "relation": {"contains": client_id}},
         sorts=[{"timestamp": "last_edited_time", "direction": "descending"}],
     )
-    # Ce que Rony ecrit lui-meme (comptes rendus de point) n'est pas une saisie de l'eleve.
+    # Ce que Rony ecrit lui-meme (comptes rendus de point) n'est pas une saisie de
+    # l'eleve ; seuls comptent les engagements que l'eleve y coche.
+    coches = [comptes_rendus_service.derniere_coche(e) for e in entrees if comptes_rendus_service.est_compte_rendu(e)]
     entrees = [e for e in entrees if not comptes_rendus_service.est_compte_rendu(e)]
-    derniere_saisie = max((_quand_saisi(e) for e in entrees), default="") or None
+    derniere_saisie = max([_quand_saisi(e) for e in entrees] + coches, default="") or None
     carnet = next(
         (e for e in entrees if prospects_service.NOM_CARNET in str(ns._prop_value(ns._prop(e.get("properties", {}), "Nom")) or "")),
         None,
@@ -197,12 +199,18 @@ def activite(jours: int = 30, maintenant: datetime | None = None) -> dict[str, s
     dernieres = {}
 
     for entree in entrees:
-        if comptes_rendus_service.est_compte_rendu(entree) or _signe_par_coach(entree):
+        if comptes_rendus_service.est_compte_rendu(entree):
+            # Un compte rendu ne compte que si l'eleve y a coche un engagement.
+            quand = comptes_rendus_service.derniere_coche(entree)
+        elif _signe_par_coach(entree):
+            continue
+        else:
+            quand = _quand_saisi(entree)
+
+        if not quand:
             continue
 
         for lien in (entree.get("properties", {}).get("Client") or {}).get("relation") or []:
-            quand = _quand_saisi(entree)
-
             if quand > dernieres.get(lien["id"], ""):
                 dernieres[lien["id"]] = quand
 

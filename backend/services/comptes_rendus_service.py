@@ -62,7 +62,7 @@ def _lire(page: dict) -> dict:
         donnees = {}
 
     engagements = [
-        {"id": str(e.get("id")), "texte": str(e.get("texte") or ""), "fait": bool(e.get("fait"))}
+        {"id": str(e.get("id")), "texte": str(e.get("texte") or ""), "fait": bool(e.get("fait")), "coche_le": e.get("coche_le")}
         for e in donnees.get("engagements") or [] if isinstance(e, dict) and e.get("id")
     ]
     return {
@@ -174,10 +174,18 @@ def cocher(client_page_id: str, compte_rendu_id: str, engagement_id: str, fait: 
         raise CompteRenduNonAutorise("Engagement introuvable.")
 
     cible["fait"] = bool(fait)
+    # Cocher compte comme une activite de l'eleve (derniere saisie, alerte « inactif »).
+    cible["coche_le"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     compte_rendu = {**compte_rendu, "engagements": engagements}
     _enregistrer(compte_rendu["id"], compte_rendu)
     notion_service._cache_clear(f"comptes_rendus:{client_page_id}")
     return compte_rendu
+
+
+def derniere_coche(page: dict) -> str:
+    """Derniere fois que l'eleve a coche ou decoche un engagement de ce compte
+    rendu (ISO), ou "" s'il n'y a jamais touche."""
+    return max((e.get("coche_le") or "" for e in _lire(page)["engagements"]), default="")
 
 
 # --- Mise en forme par Idris ------------------------------------------------------

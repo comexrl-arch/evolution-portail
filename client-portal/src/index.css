@@ -7482,3 +7482,54 @@ p.question-rony-attente { margin: 0.35rem 0 0; color: var(--text-tertiary); font
     flex-basis: 100%;
   }
 }
+
+/* Retours des saisies precedentes (fiche eleve) */
+.retours-precedents {
+  margin-top: 1.25rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.retours-precedents > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+}
+
+.retours-precedents > summary::-webkit-details-marker {
+  display: none;
+}
+
+.retours-precedents-chevron {
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+
+.retours-precedents[open] .retours-precedents-chevron {
+  transform: rotate(180deg);
+}
+
+.retours-precedents-item {
+  padding: 0.25rem 1.1rem 1.1rem;
+  border-top: var(--border-subtle);
+}
+
+.retours-precedents-date {
+  margin: 0.85rem 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.retours-precedents-item .retour-valide-rony {
+  margin-left: 0;
+}
