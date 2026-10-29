@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, ClipboardList, Copy, MessageCircle, MessageSquare, NotebookPen, Plus, RefreshCw, Search, Send, Sparkles, Star, Upload, X } from 'lucide-react'
 import { FormulaireRdv, appelAgenda, dateLongue, heureFr, nouveauRdv } from './CoachAgenda.jsx'
 import { ListePoints, rdvPourPoint } from './PointsRythme.jsx'
+import Discussion, { messagesDepuisQuestions } from './Discussion.jsx'
 import { CapParcours, DicteeVocale, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
@@ -723,72 +724,73 @@ function PreparationPoint({ eleve, coachKey, onAuthFailure, onFerme }) {
 
 function QuestionsRony({ eleve, questions, coachKey, onAuthFailure }) {
   const [liste, setListe] = useState(questions)
-  const [reponses, setReponses] = useState({})
-  const [envoi, setEnvoi] = useState('')
+  const [reponse, setReponse] = useState('')
+  const [cible, setCible] = useState(null)
+  const [envoi, setEnvoi] = useState(false)
   const [message, setMessage] = useState('')
 
   useEffect(() => { setListe(questions) }, [questions])
 
-  async function repondre(q) {
-    setEnvoi(q.id)
+  // Plus ancienne question sans reponse d'abord, comme on lit un fil.
+  const attente = [...liste].filter((q) => !q.reponse).sort((a, b) => String(a.posee_le).localeCompare(String(b.posee_le)))
+  const visee = attente.find((q) => q.id === cible) || attente[0]
+  const prenom = (eleve.nom || '').split(' ')[0] || "L'élève"
+
+  async function repondre(event) {
+    event.preventDefault()
+    if (!visee) return
+    setEnvoi(true)
     setMessage('')
-    const r = await appelAgenda(`/coach/eleves/${eleve.client_page_id}/questions/${q.id}/reponse`, coachKey, onAuthFailure, {
+    const r = await appelAgenda(`/coach/eleves/${eleve.client_page_id}/questions/${visee.id}/reponse`, coachKey, onAuthFailure, {
       method: 'POST',
-      body: JSON.stringify({ reponse: reponses[q.id] || '' }),
+      body: JSON.stringify({ reponse }),
     })
-    setEnvoi('')
+    setEnvoi(false)
     if (r.erreur !== undefined) return setMessage(r.erreur)
-    setListe((l) => l.map((x) => (x.id === q.id ? r.data : x)))
+    setListe((l) => l.map((x) => (x.id === visee.id ? r.data : x)))
+    setReponse('')
+    setCible(null)
     setMessage("Réponse envoyée. L'élève est prévenu sur son téléphone.")
   }
 
-  const attente = liste.filter((q) => !q.reponse).length
-  const repondues = liste.length - attente
-  const resume = [
-    attente && `${attente} en attente`,
-    repondues && `${repondues} répondue${repondues > 1 ? 's' : ''}`,
-  ].filter(Boolean).join(' · ') || 'Aucune question'
-
   return (
-    <SectionRepliable titre="Ses questions pour vous" resume={resume}>
-      {message && <p className="agenda-message" role="status">{message}</p>}
-      {liste.length ? (
-        <div className="space-y-3">
-          {liste.slice(0, 8).map((q) => (
-            <div key={q.id} className={`energie-carte question-rony${q.reponse ? '' : ' question-rony-attente'}`}>
-              <div className="coach-signature-entete">
-                <p className="energie-surtitre">Posée le {dateFr(q.posee_le)}</p>
-                <span className={`coach-puce ${q.reponse ? 'coach-puce-ok' : 'coach-puce-attente'}`}>{q.reponse ? 'Répondu' : 'En attente'}</span>
-              </div>
-              <p className="question-rony-texte">{q.question}</p>
-              {q.reponse ? (
-                <div className="coach-mot">
-                  <p className="coach-signature-label">Votre réponse · {dateFr(q.repondu_le)}</p>
-                  <p className="text-sm whitespace-pre-wrap">{q.reponse}</p>
-                </div>
-              ) : (
-                <>
-                  <textarea
-                    className="field-input"
-                    rows={4}
-                    value={reponses[q.id] || ''}
-                    onChange={(e) => setReponses((r) => ({ ...r, [q.id]: e.target.value }))}
-                    placeholder="Votre réponse…"
-                    aria-label="Votre réponse"
-                  />
-                  <div className="compte-rendu-outils">
-                    <DicteeVocale value={reponses[q.id] || ''} onChange={(v) => setReponses((r) => ({ ...r, [q.id]: v }))} libelle="Dicter votre réponse" />
-                    <button type="button" className="fiche-bouton" disabled={envoi === q.id || !(reponses[q.id] || '').trim()} onClick={() => repondre(q)}>
-                      <Send size={14} aria-hidden="true" /> {envoi === q.id ? 'Envoi…' : 'Répondre'}
-                    </button>
-                  </div>
-                </>
-              )}
+    <section className="coach-section discussion-section">
+      <div className="resultats-entete">
+        <h3 className="resultats-titre">Discussion avec {prenom}</h3>
+        {attente.length > 0 && <span className="coach-puce coach-puce-attente">{attente.length} en attente</span>}
+      </div>
+      <div className="discussion-cadre">
+        <Discussion
+          messages={messagesDepuisQuestions(liste)}
+          moi="coach"
+          noms={{ eleve: prenom }}
+          enAttente={attente.length}
+          cible={visee?.id}
+          onCibler={setCible}
+          vide="Aucune question pour l'instant. L'élève peut vous écrire depuis son tableau de bord."
+        />
+        {visee && (
+          <form className="discussion-saisie" onSubmit={repondre}>
+            {attente.length > 1 && <p className="discussion-citation">Réponse à : « {visee.question.slice(0, 90)}{visee.question.length > 90 ? '…' : ''} »</p>}
+            <div className="discussion-saisie-ligne">
+              <textarea
+                className="field-input"
+                rows={2}
+                value={reponse}
+                onChange={(e) => setReponse(e.target.value)}
+                placeholder="Votre réponse…"
+                aria-label="Votre réponse"
+              />
+              <DicteeVocale value={reponse} onChange={setReponse} libelle="Dicter votre réponse" compact />
+              <button type="submit" className="discussion-envoyer" disabled={envoi || !reponse.trim()} aria-label="Envoyer la réponse">
+                <Send size={18} aria-hidden="true" />
+              </button>
             </div>
-          ))}
-        </div>
-      ) : <Vide>Aucune question pour l'instant. L'élève peut vous écrire depuis son tableau de bord.</Vide>}
-    </SectionRepliable>
+          </form>
+        )}
+      </div>
+      {message && <p className="agenda-message" role="status">{message}</p>}
+    </section>
   )
 }
 
