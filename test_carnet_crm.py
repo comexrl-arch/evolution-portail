@@ -7,6 +7,7 @@
 # Lancer : python test_carnet_crm.py
 
 import base64
+import os
 import csv
 import io
 import json
@@ -23,6 +24,7 @@ from backend.services import notion_service as ns
 from backend.services import portal_auth_service, prospects_service as carnet
 
 portal_auth_service.SECRET_KEY = "cle-de-test-crm"
+os.environ["COACH_ONBOARD_KEY"] = "cle-coach-crm"
 
 passed = 0
 failed = 0
@@ -233,6 +235,66 @@ code, _ = statut(portal_main.portal_prospects_export, format="csv", authorizatio
 check("export sans session : refusé", code == 401)
 code, _ = statut(portal_main.portal_prospects_import, portal_main.ProspectsImportRequest(nom_fichier="l.csv", contenu="eA=="), authorization="Bearer faux")
 check("import sans session valide : refusé", code == 401)
+
+print("\n=== Historique des échanges ===")
+faux = FauxNotion([dict(x) for x in ANCIEN])
+patches = avec(faux)
+try:
+    v = carnet.vue_client(carnet.appliquer(CLIENT, "Marie Test", DASHBOARD, "noter", "a2", {"texte": "  Appelée, rappeler mardi ", "date": "2026-10-20", "relance": "2026-11-04"}))
+    jean = next(x for x in v["prospects"] if x["id"] == "a2")
+    check("échange noté, texte nettoyé, date gardée", jean["journal"][0]["texte"] == "Appelée, rappeler mardi" and jean["journal"][0]["date"] == "2026-10-20")
+    check("la prochaine relance suit l'échange", jean["relance"] == "2026-11-04")
+    v = carnet.vue_client(carnet.appliquer(CLIENT, "Marie Test", DASHBOARD, "noter", "a2", {"texte": "Devis envoyé", "date": "2026-10-10"}))
+    jean = next(x for x in v["prospects"] if x["id"] == "a2")
+    check("historique trié par date", [e["texte"] for e in jean["journal"]] == ["Devis envoyé", "Appelée, rappeler mardi"])
+    v = carnet.vue_client(carnet.appliquer(CLIENT, "Marie Test", DASHBOARD, "oublier", "a2", {"echange_id": jean["journal"][0]["id"]}))
+    check("effacer un échange", [e["texte"] for e in next(x for x in v["prospects"] if x["id"] == "a2")["journal"]] == ["Appelée, rappeler mardi"])
+
+    for label, action, donnees, erreur in [
+        ("échange vide refusé", "noter", {"texte": "  "}, carnet.CarnetInvalide),
+        ("échange daté dans le futur refusé", "noter", {"texte": "x", "date": "2099-01-01"}, carnet.CarnetInvalide),
+        ("échange inconnu : LookupError", "oublier", {"echange_id": "zzz"}, LookupError),
+    ]:
+        try:
+            carnet.appliquer(CLIENT, "Marie Test", DASHBOARD, action, "a2", donnees)
+            check(label, False)
+        except erreur:
+            check(label, True)
+
+    lignes = list(csv.reader(io.StringIO(fichiers.export_csv(faux.prospects()).decode("utf-8-sig")), delimiter=";"))
+    check("export : colonne historique", lignes[0][-1] == "Historique des échanges" and "Appelée, rappeler mardi" in lignes[2][-1])
+finally:
+    fin(patches)
+
+print("\n=== Entonnoir ===")
+e = carnet.entonnoir([
+    {"statut": "À contacter"}, {"statut": "À contacter"},
+    {"statut": "Contacté"}, {"statut": "Contacté"},
+    {"statut": "RDV"},
+    {"statut": "À contacter", "evenements": [{"statut": "RDV"}]},  # revenu en arrière : compte quand même
+    {"statut": "Client", "evenements": []},  # client direct
+    {"statut": "Client", "evenements": [{"statut": "Contacté"}, {"statut": "RDV"}, {"statut": "Client"}]},
+])
+check("comptes par étape atteinte", (e["prospects"], e["contactes"], e["rdv"], e["clients"]) == (8, 6, 4, 2))
+check("taux", (e["taux_contact"], e["taux_rdv"], e["taux_signature"], e["taux_global"]) == (75, 67, 50, 33))
+check("carnet vide : pas de taux", carnet.entonnoir([])["taux_rdv"] is None)
+ligne = carnet.resume_pour_idris([{"statut": "Client", "montant": 900, "evenements": []}, {"statut": "Contacté"}])
+check("ligne pour Idris", ligne == "Son carnet de prospects : 2 prospects, 2 contactés, 1 RDV obtenus, 1 clients signés (taux contact → RDV 50 %, RDV → client 100 %), 900 € signés.")
+check("pas de ligne si carnet vide", carnet.resume_pour_idris([]) is None)
+check("vue_client donne l'entonnoir", carnet.vue_client({"prospects": ANCIEN})["entonnoir"]["clients"] == 1)
+
+print("\n=== Export côté coach ===")
+faux = FauxNotion([dict(x) for x in ANCIEN])
+patches = avec(faux)
+try:
+    code, _ = statut(portal_main.coach_eleve_prospects_export, CLIENT, format="csv", x_coach_key="mauvaise")
+    check("sans la clé coach : 401", code == 401)
+    reponse = portal_main.coach_eleve_prospects_export(CLIENT, format="xlsx", x_coach_key="cle-coach-crm")
+    check("avec la clé : fichier Excel", reponse.media_type.endswith("spreadsheetml.sheet") and load_workbook(io.BytesIO(reponse.body)).active["A2"].value == "Garage Lubin")
+    code, _ = statut(portal_main.coach_eleve_prospects_export, CLIENT, format="pdf", x_coach_key="cle-coach-crm")
+    check("format inconnu : 422", code == 422)
+finally:
+    fin(patches)
 
 print(f"\n{passed} PASS, {failed} FAIL")
 sys.exit(1 if failed else 0)

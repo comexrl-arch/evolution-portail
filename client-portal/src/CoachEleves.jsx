@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, ClipboardList, Copy, MessageCircle, MessageSquare, NotebookPen, Plus, RefreshCw, Search, Send, Sparkles, Star, X } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, ClipboardList, Copy, MessageCircle, MessageSquare, NotebookPen, Plus, RefreshCw, Search, Send, Sparkles, Star, Upload, X } from 'lucide-react'
 import { FormulaireRdv, appelAgenda, dateLongue, heureFr, nouveauRdv } from './CoachAgenda.jsx'
 import { ListePoints, rdvPourPoint } from './PointsRythme.jsx'
 import { CapParcours, DicteeVocale, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
@@ -976,6 +976,78 @@ function ComptesRendus({ eleve, comptesRendus, coachKey, onAuthFailure, onAjoute
   )
 }
 
+// Carnet de l'eleve vu par Rony (29/10/2026) : entonnoir, coordonnees, dernier
+// echange, et export du carnet en Excel ou CSV.
+function CarnetEleve({ carnet, eleve, coachKey, onAuthFailure }) {
+  const [tout, setTout] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const e = carnet.entonnoir
+  const liste = tout ? carnet.prospects : carnet.prospects.slice(0, 15)
+
+  async function exporter(format) {
+    setErreur('')
+    try {
+      const res = await fetch(`${API_BASE}/coach/eleves/${eleve.client_page_id}/prospects/export?format=${format}`, { headers: { 'X-Coach-Key': coachKey } })
+      if (res.status === 401) return onAuthFailure()
+      if (!res.ok) throw new Error('export')
+      const url = URL.createObjectURL(await res.blob())
+      const lien = document.createElement('a')
+      lien.href = url
+      lien.download = `carnet-${(eleve.nom || 'eleve').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.${format}`
+      document.body.appendChild(lien)
+      lien.click()
+      lien.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch {
+      setErreur(MESSAGE_SERVICE_INDISPONIBLE)
+    }
+  }
+
+  return (
+    <>
+      {e && (
+        <p className="coach-entonnoir">
+          {e.prospects} prospect{e.prospects > 1 ? 's' : ''} → {e.contactes} contacté{e.contactes > 1 ? 's' : ''}{e.taux_contact !== null ? ` (${e.taux_contact} %)` : ''} → {e.rdv} RDV{e.taux_rdv !== null ? ` (${e.taux_rdv} %)` : ''} → {e.clients} client{e.clients > 1 ? 's' : ''}{e.taux_signature !== null ? ` (${e.taux_signature} %)` : ''}
+          {carnet.ventes?.ca > 0 ? ` · ${carnet.ventes.ca.toLocaleString('fr-FR')} € signés` : ''}
+        </p>
+      )}
+      <div className="coach-statuts">
+        {carnet.statuts.map((s) => (
+          <span key={s} className="coach-puce coach-puce-neutre">{s} <strong>{carnet.par_statut[s] || 0}</strong></span>
+        ))}
+        {carnet.a_relancer?.length > 0 && (
+          <span className="coach-puce coach-puce-attente">À relancer <strong>{carnet.a_relancer.length}</strong></span>
+        )}
+      </div>
+      <ul className="coach-prospects">
+        {liste.map((p) => {
+          const dernier = (p.journal || []).at(-1)
+          return (
+            <li key={p.id}>
+              <span>
+                {p.nom}
+                {(p.telephone || p.email) && <small className="coach-prospect-contact">{[p.telephone, p.email].filter(Boolean).join(' · ')}</small>}
+                {dernier && <small className="coach-prospect-contact">Dernier échange ({dateFr(dernier.date)}) : {dernier.texte}</small>}
+              </span>
+              <small>{p.statut}{p.relance ? ` · relance ${dateFr(p.relance)}` : ''}{p.montant ? ` · ${p.montant.toLocaleString('fr-FR')} €` : ''}</small>
+            </li>
+          )
+        })}
+      </ul>
+      <div className="coach-carnet-actions">
+        {carnet.prospects.length > 15 && (
+          <button type="button" className="coach-lien-ajout" onClick={() => setTout((v) => !v)}>
+            {tout ? 'Voir moins' : `Voir les ${carnet.prospects.length} prospects`}
+          </button>
+        )}
+        <button type="button" className="coach-lien-ajout" onClick={() => exporter('xlsx')}><Upload size={13} /> Excel</button>
+        <button type="button" className="coach-lien-ajout" onClick={() => exporter('csv')}><Upload size={13} /> CSV</button>
+      </div>
+      {erreur && <p className="text-sm" style={{ color: 'var(--danger)' }}>{erreur}</p>}
+    </>
+  )
+}
+
 function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRetour, onRdv }) {
   const [etat, setEtat] = useState({ chargement: true })
   const [detailKpi, setDetailKpi] = useState(false)
@@ -1198,24 +1270,7 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
             <div className="energie-carte">
               <p className="energie-surtitre">Carnet de prospects</p>
               {carnet?.prospects?.length ? (
-                <>
-                  <div className="coach-statuts">
-                    {carnet.statuts.map((s) => (
-                      <span key={s} className="coach-puce coach-puce-neutre">{s} <strong>{carnet.par_statut[s] || 0}</strong></span>
-                    ))}
-                    {carnet.a_relancer?.length > 0 && (
-                      <span className="coach-puce coach-puce-attente">À relancer <strong>{carnet.a_relancer.length}</strong></span>
-                    )}
-                  </div>
-                  <ul className="coach-prospects">
-                    {carnet.prospects.slice(0, 30).map((p) => (
-                      <li key={p.id}>
-                        <span>{p.nom}</span>
-                        <small>{p.statut}{p.relance ? ` · relance ${dateFr(p.relance)}` : ''}</small>
-                      </li>
-                    ))}
-                  </ul>
-                </>
+                <CarnetEleve carnet={carnet} eleve={eleve} coachKey={coachKey} onAuthFailure={onAuthFailure} />
               ) : <Vide>Carnet vide.</Vide>}
             </div>
           </div>

@@ -1364,13 +1364,17 @@ def portal_prospects_export(format: str = "xlsx", authorization: str = Header(de
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_prospects_export", error)
 
+    return _fichier_carnet(prospects, dashboard.get("nom") or "", format)
+
+
+def _fichier_carnet(prospects: list[dict], nom_client: str, format: str) -> Response:
     if format == "csv":
         contenu, type_mime = carnet_fichiers_service.export_csv(prospects), "text/csv; charset=utf-8"
     else:
         contenu = carnet_fichiers_service.export_xlsx(prospects)
         type_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    nom = carnet_fichiers_service.nom_fichier(dashboard.get("nom") or "", format)
+    nom = carnet_fichiers_service.nom_fichier(nom_client, format)
     return Response(content=contenu, media_type=type_mime, headers={
         "Content-Disposition": f'attachment; filename="{nom}"',
         "Cache-Control": "no-store",
@@ -1896,6 +1900,24 @@ def coach_eleves_activite(x_coach_key: str = Header(default="")):
     except Exception as error:
         _journaliser_erreur_portail("coach_eleves_activite", error)
         return {"activite": {}}
+
+
+@app.get("/coach/eleves/{client_page_id}/prospects/export")
+def coach_eleve_prospects_export(client_page_id: str, format: str = "xlsx", x_coach_key: str = Header(default="")):
+    # Le carnet d'un eleve, exporte par Rony depuis l'onglet Eleves (29/10/2026).
+    _require_coach_key(x_coach_key)
+
+    if format not in ("xlsx", "csv"):
+        raise HTTPException(status_code=422, detail="Format inconnu.")
+
+    try:
+        dashboard = notion_service.get_client_dashboard(client_page_id)
+        prospects = prospects_service.lire(client_page_id, dashboard)["prospects"]
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_eleve_prospects_export", error)
+
+    return _fichier_carnet(prospects, dashboard.get("nom") or "", format)
 
 
 @app.get("/coach/eleves/{client_page_id}")

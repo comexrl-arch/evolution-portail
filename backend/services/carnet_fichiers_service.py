@@ -30,6 +30,7 @@ COLONNES_EXPORT = [
     ("Dernier contact", "dernier_contact"),
     ("Date du RDV", "date_rdv"),
     ("Devenu client le", "date_client"),
+    ("Historique des échanges", "historique"),
 ]
 
 # En-tetes reconnus a l'import, une fois sans accents ni ponctuation. Couvre
@@ -78,6 +79,7 @@ def lignes_export(prospects: list[dict]) -> list[list]:
             "dernier_contact": _date_statut(p, "Contacté"),
             "date_rdv": _date_statut(p, "RDV"),
             "date_client": _date_statut(p, "Client"),
+            "historique": " | ".join(f"{e.get('date', '')} : {e.get('texte', '')}" for e in p.get("journal") or []),
         }
         lignes.append(["" if valeurs.get(cle) is None else valeurs[cle] for _, cle in COLONNES_EXPORT])
 
@@ -132,7 +134,7 @@ def export_xlsx(prospects: list[dict]) -> bytes:
 
     for i, (titre, cle) in enumerate(COLONNES_EXPORT, start=1):
         lettre = feuille.cell(row=1, column=i).column_letter
-        feuille.column_dimensions[lettre].width = {"nom": 28, "note": 45, "email": 28}.get(cle, max(14, len(titre) + 2))
+        feuille.column_dimensions[lettre].width = {"nom": 28, "note": 45, "email": 28, "historique": 60}.get(cle, max(14, len(titre) + 2))
 
         if i - 1 in colonnes_dates:
             for (cellule,) in feuille.iter_rows(min_row=2, min_col=i, max_col=i):
