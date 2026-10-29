@@ -230,6 +230,8 @@ def _vers_portail(evt: dict, agenda: str | None = None) -> dict:
         "eleve_nom": prive.get("eleve_nom") or None,
         # Point collectif : la formule concernee (Atelier, Autonome...).
         "parcours": prive.get("parcours") or None,
+        # "eleve" : RDV reserve par l'eleve lui-meme depuis son espace.
+        "reserve_par": prive.get("reserve_par") or None,
         "agenda": agenda,
         # "Disponible" dans Google : ne bloque pas un creneau.
         "libre": evt.get("transparency") == "transparent",
@@ -266,6 +268,7 @@ def _corps(donnees: dict) -> dict:
             "eleve_id": donnees.get("eleve_id") or "",
             "eleve_nom": donnees.get("eleve_nom") or "",
             "parcours": donnees.get("parcours") or "",
+            "reserve_par": donnees.get("reserve_par") or "",
         }},
     }
 
@@ -458,6 +461,7 @@ def modifier(evenement_id: str, donnees: dict) -> dict:
     complet = {
         "type": prive.get("type", "rdv"),
         "parcours": prive.get("parcours"),
+        "reserve_par": prive.get("reserve_par"),
         "eleve_id": prive.get("eleve_id"),
         "eleve_nom": prive.get("eleve_nom"),
         "titre": brut.get("summary"),

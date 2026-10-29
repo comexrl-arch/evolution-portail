@@ -118,7 +118,7 @@ export function useNouveautesEleve(actif) {
     })
   }, [retours])
 
-  return { points, rdvNouveaux, idrisNouveaux, marquerRdvVus, marquerFicheVue }
+  return { points, rdvNouveaux, idrisNouveaux, marquerRdvVus, marquerFicheVue, relire }
 }
 
 // Espace Coach : eleves qui ont saisi quelque chose depuis la derniere fois

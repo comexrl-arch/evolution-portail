@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { formaterMaj } from './dates'
-import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks, Users, Menu, X, CalendarDays } from 'lucide-react'
+import { Lock, Search, UserPlus, CheckCircle2, AlertCircle, ClipboardCheck, ChevronDown, ListChecks, Users, Menu, X, CalendarDays, Bell, BellOff } from 'lucide-react'
 import logo from './assets/logo.svg'
 import BoutonInstaller from './BoutonInstaller.jsx'
 import CoachSuiviClients from './CoachSuiviClients.jsx'
@@ -51,7 +51,11 @@ export default function CoachOnboarding() {
   const [coachKey, setCoachKey] = useState(() => localStorage.getItem(COACH_KEY_STORAGE) || '')
   const [pinInput, setPinInput] = useState('')
   const [unlockError, setUnlockError] = useState('')
-  const [tab, setTab] = useState('eleves')
+  // ?onglet=agenda : ouverture depuis une notification (reservation d'un eleve).
+  const [tab, setTab] = useState(() => {
+    const demande = new URLSearchParams(window.location.search).get('onglet')
+    return ONGLETS_COACH.some((o) => o.cle === demande) ? demande : 'eleves'
+  })
   const [menuOuvert, setMenuOuvert] = useState(false)
   const [eleveOuvert, setEleveOuvert] = useState(false)
   // Badge « nouveau » : eleves qui ont saisi quelque chose depuis votre derniere visite.
@@ -364,6 +368,7 @@ export default function CoachOnboarding() {
           })}
         </nav>
         <BoutonInstaller />
+        <NotificationsCoach coachKey={coachKey} />
       </aside>
       {menuOuvert && <div className="espace-voile" onClick={() => setMenuOuvert(false)} />}
 
@@ -651,5 +656,96 @@ export default function CoachOnboarding() {
       </div>)}
       </main>
     </div>
+  )
+}
+
+// --- Notifications de l'appli Coach (29/10/2026) : Rony est prevenu quand un
+// eleve reserve ou annule un RDV depuis son espace. ---
+function cleVapid(base64) {
+  const remplissage = '='.repeat((4 - (base64.length % 4)) % 4)
+  const brut = window.atob((base64 + remplissage).replace(/-/g, '+').replace(/_/g, '/'))
+  return Uint8Array.from([...brut].map((c) => c.charCodeAt(0)))
+}
+
+function NotificationsCoach({ coachKey }) {
+  const compatible = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  const iphone = /iphone|ipad|ipod/i.test(navigator.userAgent || '')
+  const installee = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+  const [cle, setCle] = useState(null)
+  const [abonne, setAbonne] = useState(false)
+  const [attente, setAttente] = useState(false)
+  const [message, setMessage] = useState('')
+
+  const appel = (chemin, corps) => fetch(`${API_BASE}${chemin}`, {
+    method: corps ? 'POST' : 'GET',
+    headers: { 'X-Coach-Key': coachKey, ...(corps ? { 'Content-Type': 'application/json' } : {}) },
+    ...(corps ? { body: JSON.stringify(corps) } : {}),
+  }).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json() })
+
+  useEffect(() => {
+    let actif = true
+    appel('/coach/push/cle').then((d) => actif && setCle(d.cle || null)).catch(() => {})
+    if (compatible) {
+      navigator.serviceWorker.getRegistration('/sw.js')
+        .then((reg) => reg?.pushManager.getSubscription())
+        .then((sub) => actif && setAbonne(Boolean(sub)))
+        .catch(() => {})
+    }
+    return () => { actif = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachKey, compatible])
+
+  if (!cle) return null
+
+  if (!compatible || (iphone && !installee)) {
+    return <p className="coach-notif-aide">{iphone ? "Notifications : installez d'abord l'appli Coach sur l'écran d'accueil." : 'Ce navigateur ne gère pas les notifications.'}</p>
+  }
+
+  const activer = async () => {
+    setMessage('')
+    setAttente(true)
+    try {
+      if (await Notification.requestPermission() !== 'granted') {
+        setMessage('Notifications bloquées pour ce site : autorisez-les dans les réglages.')
+        return
+      }
+      const reg = await navigator.serviceWorker.register('/sw.js')
+      await navigator.serviceWorker.ready
+      const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cleVapid(cle) }))
+      await appel('/coach/push/abonnement', { abonnement: sub.toJSON() })
+      setAbonne(true)
+      setMessage('Activé : vous serez prévenu quand un élève réserve ou annule un RDV.')
+    } catch {
+      setMessage("L'activation n'a pas marché. Réessayez dans un instant.")
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  const desactiver = async () => {
+    setMessage('')
+    setAttente(true)
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/sw.js')
+      const sub = await reg?.pushManager.getSubscription()
+      if (sub) {
+        await appel('/coach/push/desabonnement', { endpoint: sub.endpoint }).catch(() => {})
+        await sub.unsubscribe()
+      }
+      setAbonne(false)
+      setMessage('Notifications désactivées sur cet appareil.')
+    } finally {
+      setAttente(false)
+    }
+  }
+
+  return (
+    <>
+      <button type="button" className="espace-menu-lien espace-menu-installer" onClick={abonne ? desactiver : activer} disabled={attente}>
+        {abonne ? <BellOff size={17} aria-hidden="true" /> : <Bell size={17} aria-hidden="true" />}
+        {attente ? 'Un instant…' : abonne ? 'Couper les notifications' : 'Activer les notifications'}
+      </button>
+      {message && <p className="coach-notif-aide">{message}</p>}
+    </>
   )
 }

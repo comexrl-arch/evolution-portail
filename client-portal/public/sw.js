@@ -15,10 +15,12 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil((async () => {
+    // Notifications de l'appli Coach (29/10/2026) : icone dorée COACH.
+    const icone = String(donnees.url || '').startsWith('/coach') ? '/coach-192.png' : '/icone-192.png'
     await self.registration.showNotification(donnees.titre || 'eVolution 2.0', {
       body: donnees.texte || '',
-      icon: '/icone-192.png',
-      badge: '/icone-192.png',
+      icon: icone,
+      badge: icone,
       data: { url: donnees.url || '/' },
     })
     // Badges (28/10/2026) : pastille sur l'icone de l'application, et l'espace

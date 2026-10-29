@@ -25,7 +25,7 @@ from backend.services import cockpit_service
 from backend.services import eleves_service
 from backend.services import docuseal_service
 from backend.services import bibliotheque_service, brouillon_service, entrainement_service, fidelite_service, idris_service
-from backend.services import prospects_service, push_service
+from backend.services import prospects_service, push_service, reservation_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -444,13 +444,8 @@ def portal_points(authorization: str = Header(default="")):
         return {"points": []}
 
     try:
-        props = notion_service._get_page(session["client_page_id"]).get("properties", {})
-        debut = notion_service._prop_value(notion_service._prop(props, "Date de demarrage")) or notion_service._prop_value(notion_service._prop(props, "Date de démarrage"))
-        eleve = {
-            "client_page_id": session["client_page_id"],
-            "parcours": notion_service._nom_parcours(notion_service._prop_value(notion_service._prop(props, "Parcours"))),
-            "date_demarrage": str(debut)[:10] if debut else None,
-        }
+        eleve = _eleve_agenda(session)
+        debut = eleve["date_demarrage"]
         maintenant = _maintenant_agenda()
         evenements = agenda_service.evenements_portail(*_fenetre_points([eleve["date_demarrage"] or maintenant[:10]]))
         points = _points_eleve(eleve, rythme_service.lire(), evenements, maintenant) if debut else []
@@ -464,10 +459,106 @@ def portal_points(authorization: str = Header(default="")):
         return {"points": []}
 
     # Rien sur les autres eleves : seulement date, heure, lieu et lien de visio.
-    return {"points": [
-        {**p, "evenement": {k: p["evenement"][k] for k in ("debut", "fin", "lieu")} if p["evenement"] else None}
-        for p in points
-    ]}
+    # L'identifiant n'est donne que pour un RDV que l'eleve peut annuler.
+    par_id = {e["id"]: e for e in evenements}
+
+    def _visible(evt: dict | None) -> dict | None:
+        if not evt:
+            return None
+        complet = par_id.get(evt["id"]) or {}
+        annulable = reservation_service.annulable(complet, eleve["client_page_id"], maintenant) if complet else False
+        return {**{k: evt[k] for k in ("debut", "fin", "lieu")}, "annulable": annulable, **({"id": evt["id"]} if annulable else {})}
+
+    return {"points": [{**p, "evenement": _visible(p["evenement"])} for p in points]}
+
+
+def _eleve_agenda(session: dict) -> dict:
+    page = notion_service._get_page(session["client_page_id"])
+    props = page.get("properties", {})
+    debut = notion_service._prop_value(notion_service._prop(props, "Date de demarrage")) or notion_service._prop_value(notion_service._prop(props, "Date de démarrage"))
+    return {
+        "client_page_id": session["client_page_id"],
+        "nom": notion_service._prop_value(notion_service._prop(props, "Nom")) or "",
+        "parcours": notion_service._nom_parcours(notion_service._prop_value(notion_service._prop(props, "Parcours"))),
+        "date_demarrage": str(debut)[:10] if debut else None,
+    }
+
+
+# --- Reservation d'un RDV par l'eleve (29/10/2026) : creneaux libres de Rony,
+# reservation et annulation de ses propres reservations. ---
+
+class ReservationRdv(BaseModel):
+    debut: str
+
+
+@app.get("/portal/creneaux")
+def portal_creneaux(authorization: str = Header(default="")):
+    # Simple bloc du tableau de bord : jamais d'erreur, au pire rien a reserver.
+    session = _session_from_header(authorization)
+
+    if not agenda_service.enabled():
+        return {"possible": False, "raison": "indisponible", "creneaux": []}
+
+    try:
+        return reservation_service.situation(_eleve_agenda(session), _maintenant_agenda())
+
+    except Exception as error:
+        _journaliser_erreur_portail("portal_creneaux", error)
+        return {"possible": False, "raison": "indisponible", "creneaux": []}
+
+
+def _prevenir_coach(changement: str, nom: str, debut: str) -> None:
+    # Best-effort, apres la reponse : jamais d'erreur pour l'eleve.
+    try:
+        titre, texte = push_service.message_reservation(changement, nom, debut)
+        push_service.envoyer_coach(titre, texte, "/coach?onglet=agenda")
+
+    except Exception as error:
+        _journaliser_alerte_impossible("push_coach", error)
+
+
+@app.post("/portal/creneaux")
+def portal_reserver(reservation: ReservationRdv, background_tasks: BackgroundTasks = None, authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$", reservation.debut):
+        raise HTTPException(status_code=422, detail="Créneau invalide.")
+
+    if not agenda_service.enabled():
+        raise HTTPException(status_code=503, detail="La réservation est momentanément indisponible.")
+
+    try:
+        eleve = _eleve_agenda(session)
+        cree = reservation_service.reserver(eleve, reservation.debut, _maintenant_agenda())
+
+    except reservation_service.ReservationRefusee as error:
+        raise HTTPException(status_code=409, detail=error.message)
+
+    except Exception as error:
+        raise _erreur_service_indisponible("portal_reserver", error)
+
+    _en_fond(background_tasks, _prevenir_coach, "reserve", eleve["nom"], cree["debut"])
+    return {k: cree[k] for k in ("debut", "fin", "lieu")}
+
+
+@app.delete("/portal/creneaux/{evenement_id}")
+def portal_annuler_reservation(evenement_id: str, background_tasks: BackgroundTasks = None, authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    if not agenda_service.enabled():
+        raise HTTPException(status_code=503, detail="L'annulation est momentanément indisponible.")
+
+    try:
+        annule = reservation_service.annuler(evenement_id, session["client_page_id"], _maintenant_agenda())
+
+    except reservation_service.ReservationRefusee as error:
+        raise HTTPException(status_code=409, detail=error.message)
+
+    except Exception as error:
+        raise _erreur_service_indisponible("portal_annuler_reservation", error)
+
+    _en_fond(background_tasks, _prevenir_coach, "annule", annule.get("eleve_nom") or "", annule["debut"])
+    return {"annule": True}
 
 
 @app.get("/portal/nouveautes")
@@ -1256,6 +1347,46 @@ def portal_push_desabonner(request: PushDesabonnementRequest, authorization: str
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_push_desabonner", error)
+
+    return {"status": "desabonne"}
+
+
+@app.get("/coach/push/cle")
+def coach_push_cle(x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+    # Les abonnements de Rony vivent dans son agenda : sans agenda, pas de notifications.
+    disponible = push_service.enabled() and agenda_service.enabled()
+    return {"cle": push_service.cle_publique() if disponible else None}
+
+
+@app.post("/coach/push/abonnement")
+def coach_push_abonner(request: PushAbonnementRequest, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not push_service.enabled() or not agenda_service.enabled():
+        raise HTTPException(status_code=404, detail="Notifications indisponibles.")
+
+    try:
+        push_service.abonner_coach(request.abonnement)
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Abonnement invalide.")
+
+    except RuntimeError as error:
+        raise _agenda_erreur("coach_push_abonner", error)
+
+    return {"status": "abonne"}
+
+
+@app.post("/coach/push/desabonnement")
+def coach_push_desabonner(request: PushDesabonnementRequest, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        push_service.desabonner_coach(request.endpoint)
+
+    except RuntimeError as error:
+        raise _agenda_erreur("coach_push_desabonner", error)
 
     return {"status": "desabonne"}
 

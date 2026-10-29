@@ -182,7 +182,7 @@ with patch.object(portal_main, "_session_from_header", return_value={"client_pag
     code, rep = statut(portal_main.portal_points, authorization="Bearer x")
 premier = rep["points"][0]
 check("eleve : ses points, avec date et lieu du RDV", code == 200 and premier["statut"] == "fait" and premier["evenement"]["lieu"] == "Meet")
-check("eleve : jamais le lien de l'agenda de Rony ni d'identifiant", set(premier["evenement"]) == {"debut", "fin", "lieu"})
+check("eleve : jamais le lien de l'agenda de Rony ni d'identifiant (RDV non annulable)", set(premier["evenement"]) == {"debut", "fin", "lieu", "annulable"} and premier["evenement"]["annulable"] is False)
 
 agenda_service._session = None
 with patch.object(portal_main, "_session_from_header", return_value={"client_page_id": "marie"}), \
