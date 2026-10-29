@@ -2330,13 +2330,16 @@ function ReserverRdv({ points, onReserve }) {
     )
   }
 
-  // Formule sans RDV individuel, RDV deja pose ou agenda indisponible : rien a montrer.
-  if (!etat || !(etat.possible || etat.raison === 'complet')) return null
+  // Formule sans RDV individuel ou agenda indisponible : rien a montrer. RDV
+  // deja pose ou plus de creneau : le bloc reste, avec la raison (29/10/2026).
+  if (!etat || !(etat.possible || ['complet', 'deja'].includes(etat.raison))) return null
 
   return (
     <section className="panel reserver-rdv">
       <p className="panel-eyebrow"><CalendarDays size={14} /> Réserver un RDV avec Rony</p>
-      {etat.raison === 'complet' ? (
+      {etat.raison === 'deja' ? (
+        <p className="reserver-texte">Ton prochain RDV avec Rony est déjà posé (voir « Mes prochains points »). Tu pourras réserver le suivant une fois ce RDV passé.</p>
+      ) : etat.raison === 'complet' ? (
         <p className="reserver-texte">Pas de créneau libre dans les 3 prochaines semaines. Écris à Rony pour trouver un moment.</p>
       ) : !ouvert ? (
         <>
