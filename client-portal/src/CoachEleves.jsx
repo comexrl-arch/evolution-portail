@@ -86,6 +86,18 @@ function Section({ titre, action, children }) {
   )
 }
 
+function SousSection({ titre, action, children }) {
+  return (
+    <div className="coach-sous-section">
+      <div className="resultats-entete">
+        <h4 className="coach-sous-titre">{titre}</h4>
+        {action}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 // Section repliee par defaut (« Ses points », « Ses fiches ») : le resume
 // reste visible, le detail s'ouvre au clic.
 function SectionRepliable({ titre, resume, children }) {
@@ -102,14 +114,16 @@ function SectionRepliable({ titre, resume, children }) {
   )
 }
 
-function resumePoints(points) {
+function resumePoints(points, comptesRendus) {
   const liste = points || []
-  if (!liste.length) return 'Aucun point prévu'
   const n = (statut) => liste.filter((p) => p.statut === statut).length
+  const cr = comptesRendus ? `${comptesRendus} compte${comptesRendus > 1 ? 's' : ''} rendu${comptesRendus > 1 ? 's' : ''}` : null
+  if (!liste.length) return ['Aucun point prévu', cr].filter(Boolean).join(' · ')
   return [
     n('fait') && `${n('fait')} fait${n('fait') > 1 ? 's' : ''}`,
     n('planifie') && `${n('planifie')} planifié${n('planifie') > 1 ? 's' : ''}`,
     n('a_planifier') && `${n('a_planifier')} à planifier`,
+    cr,
   ].filter(Boolean).join(' · ')
 }
 
@@ -916,12 +930,15 @@ function FormulaireCompteRendu({ eleve, coachKey, onAuthFailure, onFerme, onEnvo
   )
 }
 
-function ComptesRendus({ eleve, comptesRendus, coachKey, onAuthFailure, onAjoute }) {
+// integre : affiche dans « Ses points » (demande de Rony du 29/10/2026)
+// plutot qu'en section a part.
+function ComptesRendus({ eleve, comptesRendus, coachKey, onAuthFailure, onAjoute, integre }) {
   const [ouvert, setOuvert] = useState(false)
   const [message, setMessage] = useState('')
+  const Cadre = integre ? SousSection : Section
 
   return (
-    <Section
+    <Cadre
       titre="Comptes rendus de points"
       action={!ouvert && (
         <button type="button" className="resultats-bouton" onClick={() => { setOuvert(true); setMessage('') }}>
@@ -974,7 +991,7 @@ function ComptesRendus({ eleve, comptesRendus, coachKey, onAuthFailure, onAjoute
           })}
         </div>
       ) : !ouvert && <Vide>Aucun compte rendu pour l'instant. Après chaque point, écrivez-en un : l'élève retrouve ses engagements sur son tableau de bord.</Vide>}
-    </Section>
+    </Cadre>
   )
 }
 
@@ -1078,6 +1095,16 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
   const autonome = eleve.parcours === 'Autonome'
   const [comptesRendusAjoutes, setComptesRendusAjoutes] = useState([])
   const comptesRendus = [...comptesRendusAjoutes, ...(etat.data?.comptes_rendus || []).filter((c) => !comptesRendusAjoutes.some((a) => a.id === c.id))]
+  const blocComptesRendus = (integre) => d && !autonome && (
+    <ComptesRendus
+      integre={integre}
+      eleve={eleve}
+      comptesRendus={comptesRendus}
+      coachKey={coachKey}
+      onAuthFailure={onAuthFailure}
+      onAjoute={(cr) => setComptesRendusAjoutes((l) => [cr, ...l])}
+    />
+  )
 
   return (
     <div>
@@ -1140,12 +1167,13 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
       )}
 
       {points && (
-        <SectionRepliable titre="Ses points" resume={resumePoints(points.points)}>
+        <SectionRepliable titre="Ses points" resume={resumePoints(points.points, d && !autonome ? comptesRendus.length : null)}>
           <ListePoints
             coach
             points={points.points}
             onPlanifier={onRdv ? (p) => setPlanifier(rdvPourPoint(p, { ...eleve, parcours: points.parcours })) : null}
           />
+          {blocComptesRendus(true)}
         </SectionRepliable>
       )}
 
@@ -1153,15 +1181,7 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
         <QuestionsRony eleve={eleve} questions={etat.data?.questions_rony || []} coachKey={coachKey} onAuthFailure={onAuthFailure} />
       )}
 
-      {d && !autonome && (
-        <ComptesRendus
-          eleve={eleve}
-          comptesRendus={comptesRendus}
-          coachKey={coachKey}
-          onAuthFailure={onAuthFailure}
-          onAjoute={(cr) => setComptesRendusAjoutes((l) => [cr, ...l])}
-        />
-      )}
+      {!points && blocComptesRendus(false)}
 
       {etat.chargement && !d && <Vide>Chargement...</Vide>}
       {etat.erreur && <p className="text-sm" style={{ color: 'var(--danger)' }}>{etat.erreur}</p>}
