@@ -12,7 +12,7 @@ import json
 import threading
 from datetime import datetime, timezone
 
-from backend.services import ia_service, notion_service
+from backend.services import ia_service, notion_service, prospects_service
 from backend.services.brouillon_service import _lire_json
 from backend.services.entrainement_service import _contexte_client
 
@@ -193,6 +193,14 @@ def _contexte(client_page_id: str, dashboard: dict, avec_chiffres: bool = True) 
 
             if historique:
                 lignes.extend(notion_service._lignes_historique_bilans(historique))
+
+        try:
+            carnet = prospects_service.resume_pour_idris(prospects_service.lire(client_page_id, dashboard)["prospects"])
+        except Exception:
+            carnet = None
+
+        if carnet:
+            lignes.append(carnet)
 
         noms = [f["nom"].split(" - ", 1)[-1] for f in fiches if f.get("nom") and "Bloqué" not in str(f.get("acces") or "")]
 

@@ -2926,6 +2926,10 @@ function formaterEuros(montant) {
   return `${Number(montant).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €`
 }
 
+function normaliserRecherche(texte) {
+  return String(texte || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
 // « Téléphone ou e-mail » saisi d'un bloc : range au bon endroit.
 function separerContact(texte) {
   const valeur = String(texte || '').trim()
@@ -3078,10 +3082,90 @@ function MessagePretProspect({ prospect, categorie, modeles }) {
   )
 }
 
+// Historique des echanges d'un prospect (29/10/2026) : ce que l'eleve note a
+// chaque echange, melange aux changements de statut, du plus recent au plus ancien.
+function HistoriqueProspect({ prospect, onAction }) {
+  const [texte, setTexte] = useState('')
+  const [quand, setQuand] = useState(isoDuJour())
+  const [relance, setRelance] = useState('')
+  const lignes = [
+    ...(prospect.journal || []).map((e) => ({ ...e, type: 'echange' })),
+    ...(prospect.evenements || []).map((e, i) => ({ id: `s${i}`, date: e.date, texte: `Passé en « ${e.statut} »`, type: 'statut' })),
+  ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.type === 'statut' ? 1 : -1))
+
+  const noter = async (event) => {
+    event.preventDefault()
+    const donnees = { texte, date: quand }
+    if (relance) donnees.relance = relance
+    if (await onAction('noter', prospect.id, donnees)) {
+      setTexte('')
+      setRelance('')
+    }
+  }
+
+  return (
+    <div className="carnet-historique">
+      <form className="carnet-historique-ajout" onSubmit={noter}>
+        <textarea className="field-input" rows={2} maxLength={300} required value={texte} placeholder="Ce qui s'est passé (appel, message, rencontre…)" aria-label="Nouvel échange" onChange={(e) => setTexte(e.target.value)} />
+        <div className="carnet-historique-dates">
+          <label><span>Le</span><input type="date" className="field-input" value={quand} max={isoDuJour()} required onChange={(e) => setQuand(e.target.value)} /></label>
+          <label><span>Prochaine relance</span><input type="date" className="field-input" value={relance} onChange={(e) => setRelance(e.target.value)} /></label>
+          <button type="submit" className="fiche-bouton">Noter</button>
+        </div>
+      </form>
+      {lignes.length ? (
+        <ol className="carnet-historique-liste">
+          {lignes.map((l) => (
+            <li key={l.id} className={l.type === 'statut' ? 'carnet-historique-statut' : ''}>
+              <time>{dateRelance(l.date)}</time>
+              <span>{l.texte}</span>
+              {l.type === 'echange' && (
+                <button type="button" className="carnet-historique-oublier" aria-label="Effacer cet échange" onClick={() => onAction('oublier', prospect.id, { echange_id: l.id })}>
+                  <X size={13} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="carnet-aide">Aucun échange noté pour l'instant.</p>
+      )}
+    </div>
+  )
+}
+
+// Entonnoir (29/10/2026) : combien passent d'une etape a la suivante.
+function EntonnoirCarnet({ entonnoir }) {
+  if (!entonnoir?.prospects) return null
+  const etapes = [
+    ['Prospects', entonnoir.prospects, null],
+    ['Contactés', entonnoir.contactes, entonnoir.taux_contact],
+    ['RDV', entonnoir.rdv, entonnoir.taux_rdv],
+    ['Clients', entonnoir.clients, entonnoir.taux_signature],
+  ]
+  // L'etape ou l'on perd le plus de monde, une fois qu'il y a assez de recul.
+  const faible = entonnoir.contactes >= 5
+    ? [['RDV', entonnoir.taux_rdv], ['Clients', entonnoir.taux_signature]].filter(([, t]) => t !== null).sort((a, b) => a[1] - b[1])[0]?.[0]
+    : null
+
+  return (
+    <div className="carnet-entonnoir" aria-label="Mon entonnoir de conversion">
+      {etapes.map(([libelle, nombre, taux]) => (
+        <div key={libelle} className={`carnet-entonnoir-etape${faible === libelle ? ' carnet-entonnoir-faible' : ''}`}>
+          <strong>{nombre}</strong>
+          <span>{libelle}</span>
+          {taux !== null && <small>{taux} %</small>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function LigneProspect({ prospect, statuts, categories, sources, aRelancer, modeles, onModeles, onAction }) {
   const [edition, setEdition] = useState(false)
   const [message, setMessage] = useState(false)
   const [suppression, setSuppression] = useState(false)
+  const [historique, setHistorique] = useState(false)
   const [brouillon, setBrouillon] = useState({
     nom: prospect.nom,
     telephone: prospect.telephone || '',
@@ -3180,6 +3264,9 @@ function LigneProspect({ prospect, statuts, categories, sources, aRelancer, mode
             <button type="button" className="idris-copier" onClick={() => { setMessage((v) => !v); onModeles() }}>
               <Sparkles size={14} /> Message prêt
             </button>
+            <button type="button" className="idris-copier" aria-expanded={historique} onClick={() => setHistorique((v) => !v)}>
+              <BookOpen size={14} /> Historique{prospect.journal?.length ? ` (${prospect.journal.length})` : ''}
+            </button>
             <button type="button" className="idris-copier" onClick={() => setEdition(true)}>Modifier</button>
             {suppression ? (
               <button type="button" className="idris-copier carnet-supprimer" onClick={() => onAction('supprimer', prospect.id)}>Confirmer la suppression</button>
@@ -3188,6 +3275,7 @@ function LigneProspect({ prospect, statuts, categories, sources, aRelancer, mode
             )}
           </div>
           {message && <MessagePretProspect prospect={prospect} categorie={categories[prospect.statut]} modeles={modeles} />}
+          {historique && <HistoriqueProspect prospect={prospect} onAction={onAction} />}
         </>
       )}
     </li>
@@ -3201,6 +3289,7 @@ function CarnetProspects() {
   const [filtre, setFiltre] = useState('tous')
   const [nouveau, setNouveau] = useState({ nom: '', contact: '', relance: '' })
   const [importe, setImporte] = useState(0)
+  const [recherche, setRecherche] = useState('')
   const [modeles, setModeles] = useState(null)
   const [enCours, setEnCours] = useState(false)
 
@@ -3248,7 +3337,10 @@ function CarnetProspects() {
   if (!carnet) return <section className="panel"><p className="espace-vide">{erreur}</p></section>
 
   const aRelancer = new Set(carnet.a_relancer)
-  const visibles = carnet.prospects.filter((p) => (filtre === 'tous' ? true : filtre === 'relancer' ? aRelancer.has(p.id) : p.statut === filtre))
+  const cherche = normaliserRecherche(recherche)
+  const visibles = carnet.prospects
+    .filter((p) => (filtre === 'tous' ? true : filtre === 'relancer' ? aRelancer.has(p.id) : p.statut === filtre))
+    .filter((p) => !cherche || normaliserRecherche([p.nom, p.telephone, p.email, p.source, p.note].join(' ')).includes(cherche))
   const semaine = carnet.semaine
   const ventes = carnet.ventes
 
@@ -3274,6 +3366,8 @@ function CarnetProspects() {
         )}
       </p>
 
+      <EntonnoirCarnet entonnoir={carnet.entonnoir} />
+
       <OutilsCarnet total={carnet.prospects.length} maximum={carnet.max_prospects || 300} onImporte={apresImport} />
       {importe > 0 && <p className="carnet-aide carnet-importe">{importe} prospect{importe > 1 ? 's' : ''} ajouté{importe > 1 ? 's' : ''} à ton carnet, en « À contacter » sauf si ton fichier disait autre chose.</p>}
 
@@ -3288,6 +3382,17 @@ function CarnetProspects() {
       </form>
 
       {erreur && <p className="idris-erreur">{erreur}</p>}
+
+      {carnet.prospects.length > 8 && (
+        <input
+          type="search"
+          className="field-input carnet-recherche"
+          value={recherche}
+          placeholder="Chercher un prospect (nom, téléphone, e-mail, note…)"
+          aria-label="Chercher un prospect"
+          onChange={(e) => setRecherche(e.target.value)}
+        />
+      )}
 
       <div className="idris-suggestions" role="tablist" aria-label="Filtrer mon carnet">
         {[
@@ -3319,7 +3424,7 @@ function CarnetProspects() {
         </ul>
       ) : (
         <p className="espace-vide">
-          {carnet.prospects.length ? 'Personne dans cette liste pour le moment.' : 'Ton carnet est vide. Commence par les 5 personnes de ton réseau que tu veux contacter cette semaine.'}
+          {cherche ? `Aucun prospect ne correspond à « ${recherche} ».` : carnet.prospects.length ? 'Personne dans cette liste pour le moment.' : 'Ton carnet est vide. Commence par les 5 personnes de ton réseau que tu veux contacter cette semaine.'}
         </p>
       )}
     </section>

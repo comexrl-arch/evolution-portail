@@ -5618,6 +5618,120 @@ ul.idris-rdv-liste {
   margin-top: 0.6rem;
 }
 
+.carnet-entonnoir {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+}
+
+.carnet-entonnoir-etape {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.1rem;
+  padding: 0.6rem 0.3rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.carnet-entonnoir-etape strong {
+  font-size: 1.3rem;
+  line-height: 1.1;
+}
+
+.carnet-entonnoir-etape span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.carnet-entonnoir-etape small {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--brand-gold);
+}
+
+.carnet-entonnoir-faible {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.carnet-entonnoir-faible small {
+  color: var(--warning);
+}
+
+.carnet-recherche {
+  margin: 0 0 0.75rem;
+}
+
+.carnet-historique {
+  margin: 0.8rem 0 0;
+  padding: 0.8rem 0 0;
+  border-top: var(--border-subtle);
+}
+
+.carnet-historique-ajout {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.carnet-historique-dates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.carnet-historique-dates label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.carnet-historique-dates input {
+  width: auto;
+  padding: 0.3rem 0.5rem;
+}
+
+.carnet-historique-liste {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.carnet-historique-liste li {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr auto;
+  gap: 0.5rem;
+  align-items: start;
+  font-size: 0.88rem;
+}
+
+.carnet-historique-liste time {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.carnet-historique-statut span {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.carnet-historique-oublier {
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0.1rem;
+}
+
 .carnet-importe {
   color: var(--success);
   font-weight: 600;
@@ -5690,6 +5804,14 @@ ul.idris-rdv-liste {
 
   .carnet-edition-duo {
     grid-template-columns: 1fr;
+  }
+
+  .carnet-historique-liste li {
+    grid-template-columns: 1fr auto;
+  }
+
+  .carnet-historique-liste time {
+    grid-column: 1 / -1;
   }
 }
 
@@ -6101,6 +6223,35 @@ button.eleve-carte:hover {
   border-top: var(--border-subtle);
   font-size: 0.86rem;
   color: var(--text-primary);
+}
+
+.coach-entonnoir {
+  margin: 0 0 0.6rem;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+
+.coach-prospects li > span {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.coach-prospects .coach-prospect-contact {
+  font-size: 0.74rem;
+  color: var(--text-tertiary);
+}
+
+.coach-carnet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.coach-carnet-actions .coach-lien-ajout {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .coach-prospects small {

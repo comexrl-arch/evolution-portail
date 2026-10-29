@@ -37,6 +37,8 @@ _MAX_MONTANT = 10_000_000
 # Origine du contact, proposee dans la liste deroulante (texte libre accepte).
 SOURCES = ["Réseau", "Bouche-à-oreille", "Recommandation", "Réseaux sociaux", "Google", "Salon / événement", "Prospection directe", "Autre"]
 _MAX_EVENEMENTS = 30
+_MAX_JOURNAL = 40
+_MAX_ECHANGE = 300
 _TTL = 300
 
 
@@ -293,6 +295,7 @@ def completer(prospect: dict) -> dict:
     prospect.setdefault("email", "")
     prospect.setdefault("source", "")
     prospect.setdefault("montant", None)
+    prospect.setdefault("journal", [])
     return prospect
 
 
@@ -341,6 +344,27 @@ def appliquer(client_page_id: str, nom_client: str, dashboard: dict, action: str
             if champs.get("statut") == "Client" and "relance" not in champs:
                 champs["relance"] = None
             prospect.update(champs)
+        elif action == "noter":
+            # Historique des echanges (29/10/2026) : une ligne datee par echange.
+            texte = _texte(donnees.get("texte"), _MAX_ECHANGE)
+
+            if not texte:
+                raise CarnetInvalide("Écris ce qui s'est passé avant d'enregistrer.")
+            quand = _date_iso(donnees.get("date")) or aujourd_hui
+
+            if quand > aujourd_hui:
+                raise CarnetInvalide("Un échange ne peut pas être daté dans le futur.")
+            journal = (prospect.get("journal") or []) + [{"id": secrets.token_hex(4), "date": quand, "texte": texte}]
+            prospect["journal"] = sorted(journal, key=lambda e: e["date"])[-_MAX_JOURNAL:]
+
+            if "relance" in donnees:
+                prospect.update(_champs_valides({"relance": donnees.get("relance")}, partiel=True))
+        elif action == "oublier":
+            avant = len(prospect.get("journal") or [])
+            prospect["journal"] = [e for e in prospect.get("journal") or [] if e.get("id") != donnees.get("echange_id")]
+
+            if len(prospect["journal"]) == avant:
+                raise LookupError("Échange introuvable")
         elif action == "relance":
             champs = _champs_valides({k: v for k, v in donnees.items() if k == "relance"}, partiel=True)
 
@@ -390,6 +414,52 @@ def totaux_semaine(prospects: list[dict], lundi: date) -> dict:
     return totaux
 
 
+def _a_atteint(prospect: dict, statuts: set[str]) -> bool:
+    return prospect.get("statut") in statuts or any(e.get("statut") in statuts for e in prospect.get("evenements") or [])
+
+
+def _taux(numerateur: int, denominateur: int) -> int | None:
+    return round(100 * numerateur / denominateur) if denominateur else None
+
+
+def entonnoir(prospects: list[dict]) -> dict:
+    """Ou en est chaque prospect, etape par etape. Un prospect compte dans une
+    etape s'il l'a atteinte un jour, meme s'il en est sorti depuis."""
+    contactes = [p for p in prospects if _a_atteint(p, {"Contacté", "RDV", "Client"})]
+    rdv = [p for p in prospects if _a_atteint(p, {"RDV", "Client"})]
+    clients = [p for p in prospects if _a_atteint(p, {"Client"})]
+
+    return {
+        "prospects": len(prospects),
+        "contactes": len(contactes),
+        "rdv": len(rdv),
+        "clients": len(clients),
+        "taux_contact": _taux(len(contactes), len(prospects)),
+        "taux_rdv": _taux(len(rdv), len(contactes)),
+        "taux_signature": _taux(len(clients), len(rdv)),
+        "taux_global": _taux(len(clients), len(contactes)),
+    }
+
+
+def resume_pour_idris(prospects: list[dict]) -> str | None:
+    """Une ligne pour le contexte d'Idris : ou la prospection coince."""
+    if not prospects:
+        return None
+
+    e = entonnoir(prospects)
+    morceaux = [f"{e['prospects']} prospects", f"{e['contactes']} contactés", f"{e['rdv']} RDV obtenus", f"{e['clients']} clients signés"]
+    taux = [f"{nom} {valeur} %" for nom, valeur in (("contact → RDV", e["taux_rdv"]), ("RDV → client", e["taux_signature"])) if valeur is not None]
+    ligne = "Son carnet de prospects : " + ", ".join(morceaux)
+
+    if taux:
+        ligne += " (taux " + ", ".join(taux) + ")"
+    montants = [p["montant"] for p in prospects if p.get("statut") == "Client" and isinstance(p.get("montant"), (int, float))]
+
+    if montants:
+        ligne += f", {sum(montants):g} € signés"
+    return ligne + "."
+
+
 def vue_client(carnet: dict, jour: date | None = None) -> dict:
     jour = jour or _aujourd_hui()
     prospects = [completer(p) for p in carnet["prospects"]]
@@ -399,6 +469,7 @@ def vue_client(carnet: dict, jour: date | None = None) -> dict:
 
     return {
         "prospects": prospects,
+        "entonnoir": entonnoir(prospects),
         "sources": SOURCES,
         "max_prospects": MAX_PROSPECTS,
         "ventes": {
