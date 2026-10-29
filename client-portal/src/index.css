@@ -5572,6 +5572,57 @@ ul.idris-rdv-liste {
   gap: 0.5rem;
 }
 
+.carnet-edition-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.carnet-source {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.carnet-relance input.carnet-montant {
+  width: 6.5rem;
+}
+
+.carnet-outils {
+  margin: 0 0 1rem;
+}
+
+.carnet-outils .idris-copier:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.carnet-apercu {
+  margin: 0.75rem 0 0;
+  padding: 0.8rem 1rem;
+  border: var(--border-accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 0.9rem;
+}
+
+.carnet-apercu p {
+  margin: 0 0 0.4rem;
+}
+
+.carnet-apercu .biblio-actions {
+  margin-top: 0.6rem;
+}
+
+.carnet-importe {
+  color: var(--success);
+  font-weight: 600;
+}
+
 .carnet-modeles {
   display: grid;
   gap: 0.75rem;
@@ -5635,6 +5686,10 @@ ul.idris-rdv-liste {
 
   .carnet-ajout .fiche-bouton {
     width: 100%;
+  }
+
+  .carnet-edition-duo {
+    grid-template-columns: 1fr;
   }
 }
 

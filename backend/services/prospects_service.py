@@ -32,6 +32,10 @@ MAX_PROSPECTS = 300
 _MAX_NOM = 80
 _MAX_CONTACT = 80
 _MAX_NOTE = 300
+_MAX_SOURCE = 40
+_MAX_MONTANT = 10_000_000
+# Origine du contact, proposee dans la liste deroulante (texte libre accepte).
+SOURCES = ["Réseau", "Bouche-à-oreille", "Recommandation", "Réseaux sociaux", "Google", "Salon / événement", "Prospection directe", "Autre"]
 _MAX_EVENEMENTS = 30
 _TTL = 300
 
@@ -211,6 +215,27 @@ def _champs_valides(donnees: dict, partiel: bool) -> dict:
     if "note" in donnees:
         propres["note"] = _texte(donnees.get("note"), _MAX_NOTE)
 
+    # Champs CRM du 29/10/2026. « contact » reste le champ d'origine (un seul
+    # texte) : il suit le telephone, ou a defaut l'e-mail.
+    if "telephone" in donnees:
+        propres["telephone"] = _texte(donnees.get("telephone"), _MAX_CONTACT)
+
+    if "email" in donnees:
+        email = _texte(donnees.get("email"), _MAX_CONTACT).replace(" ", "")
+
+        if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise CarnetInvalide("Cette adresse e-mail ne semble pas valide.")
+        propres["email"] = email
+
+    if "telephone" in propres or "email" in propres:
+        propres["contact"] = propres.get("telephone") or propres.get("email") or ""
+
+    if "source" in donnees:
+        propres["source"] = _texte(donnees.get("source"), _MAX_SOURCE)
+
+    if "montant" in donnees:
+        propres["montant"] = montant(donnees.get("montant"))
+
     if "statut" in donnees or not partiel:
         statut = donnees.get("statut") or "À contacter"
 
@@ -233,6 +258,59 @@ def _champs_valides(donnees: dict, partiel: bool) -> dict:
     return propres
 
 
+def montant(valeur) -> float | None:
+    """Montant d'une vente en euros (« 1 200 € », « 1200,50 ») ; vide = None."""
+    if valeur in (None, ""):
+        return None
+
+    if isinstance(valeur, (int, float)) and not isinstance(valeur, bool):
+        nombre = float(valeur)
+    else:
+        texte = re.sub(r"[\s\u00a0\u202f€]|eur(os?)?", "", str(valeur), flags=re.I).replace(",", ".")
+
+        try:
+            nombre = float(texte)
+        except ValueError:
+            raise CarnetInvalide("Le montant doit être un nombre (par exemple 450).")
+
+    if nombre < 0 or nombre > _MAX_MONTANT:
+        raise CarnetInvalide("Ce montant ne semble pas correct.")
+    return round(nombre, 2)
+
+
+def completer(prospect: dict) -> dict:
+    """Ajoute les champs CRM a un prospect enregistre avant le 29/10/2026 :
+    l'ancien « contact » est range en telephone ou en e-mail."""
+    prospect = dict(prospect)
+    contact = prospect.get("contact") or ""
+
+    if "telephone" not in prospect and "email" not in prospect:
+        est_email = "@" in contact
+        prospect["email"] = contact if est_email else ""
+        prospect["telephone"] = "" if est_email else contact
+
+    prospect.setdefault("telephone", "")
+    prospect.setdefault("email", "")
+    prospect.setdefault("source", "")
+    prospect.setdefault("montant", None)
+    return prospect
+
+
+def nouveau_prospect(champs: dict, aujourd_hui: str) -> dict:
+    nouveau = completer({
+        "id": secrets.token_hex(6), "contact": "", "note": "", "relance": None,
+        **champs, "cree_le": aujourd_hui, "evenements": [],
+    })
+
+    if nouveau["statut"] != "À contacter":
+        _evenement(nouveau, nouveau["statut"], aujourd_hui)
+    return nouveau
+
+
+def enregistrer_liste(client_page_id: str, nom_client: str, carnet: dict, prospects: list[dict]) -> dict:
+    return _enregistrer(client_page_id, nom_client, {**carnet, "prospects": prospects})
+
+
 def appliquer(client_page_id: str, nom_client: str, dashboard: dict, action: str, prospect_id: str | None, donnees: dict | None) -> dict:
     """Une action du client sur son carnet : ajouter, modifier, relance
     (« j'ai relance », compte comme un contact), supprimer."""
@@ -245,12 +323,7 @@ def appliquer(client_page_id: str, nom_client: str, dashboard: dict, action: str
         if len(prospects) >= MAX_PROSPECTS:
             raise CarnetInvalide(f"Ton carnet est plein ({MAX_PROSPECTS} prospects). Supprime ceux qui ne sont plus d'actualité.")
 
-        champs = _champs_valides(donnees, partiel=False)
-        nouveau = {"id": secrets.token_hex(6), "contact": "", "note": "", "relance": None, **champs, "cree_le": aujourd_hui, "evenements": []}
-
-        if nouveau["statut"] != "À contacter":
-            _evenement(nouveau, nouveau["statut"], aujourd_hui)
-        prospects.insert(0, nouveau)
+        prospects.insert(0, nouveau_prospect(_champs_valides(donnees, partiel=False), aujourd_hui))
     else:
         prospect = next((p for p in prospects if p.get("id") == prospect_id), None)
 
@@ -296,26 +369,43 @@ def totaux_semaine(prospects: list[dict], lundi: date) -> dict:
     """Ce que le carnet a vu passer du lundi au dimanche : un contact par
     passage a « Contacté » ou relance faite, un RDV, une vente (« Client »)."""
     fin = lundi + timedelta(days=6)
-    totaux = {"contacts": 0, "rdv": 0, "ventes": 0}
+    totaux = {"contacts": 0, "rdv": 0, "ventes": 0, "ca": 0.0}
     cle = {"Contacté": "contacts", "RDV": "rdv", "Client": "ventes"}
 
     for prospect in prospects:
+        vendu = False
+
         for evenement in prospect.get("evenements") or []:
             quand = _date_iso(evenement.get("date"))
 
             if quand and lundi.isoformat() <= quand <= fin.isoformat() and evenement.get("statut") in cle:
                 totaux[cle[evenement["statut"]]] += 1
+                vendu = vendu or evenement["statut"] == "Client"
 
+        # Le montant compte une fois, la semaine ou le prospect est devenu client.
+        if vendu and prospect.get("statut") == "Client" and isinstance(prospect.get("montant"), (int, float)):
+            totaux["ca"] += prospect["montant"]
+
+    totaux["ca"] = round(totaux["ca"], 2)
     return totaux
 
 
 def vue_client(carnet: dict, jour: date | None = None) -> dict:
     jour = jour or _aujourd_hui()
-    prospects = carnet["prospects"]
+    prospects = [completer(p) for p in carnet["prospects"]]
     lundi = jour - timedelta(days=jour.weekday())
+    clients = [p for p in prospects if p.get("statut") == "Client"]
+    montants = [p["montant"] for p in clients if isinstance(p.get("montant"), (int, float))]
 
     return {
         "prospects": prospects,
+        "sources": SOURCES,
+        "max_prospects": MAX_PROSPECTS,
+        "ventes": {
+            "ca": round(sum(montants), 2),
+            "panier_moyen": round(sum(montants) / len(montants), 2) if montants else None,
+            "clients": len(clients),
+        },
         "importe": carnet.get("importe", False),
         "statuts": STATUTS,
         "categories": CATEGORIE_DU_STATUT,

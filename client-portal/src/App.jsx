@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Download, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, Upload, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import { installer, useInstallation } from './installation.js'
 import BoutonInstaller from './BoutonInstaller.jsx'
@@ -2921,9 +2921,139 @@ async function actionCarnet(action, id, prospect) {
   return appelPortail('/prospects', { action, id, prospect })
 }
 
+// Export et import du carnet, comme dans un CRM (29/10/2026).
+function formaterEuros(montant) {
+  return `${Number(montant).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} €`
+}
+
+// « Téléphone ou e-mail » saisi d'un bloc : range au bon endroit.
+function separerContact(texte) {
+  const valeur = String(texte || '').trim()
+  return valeur.includes('@') ? { telephone: '', email: valeur } : { telephone: valeur, email: '' }
+}
+
+async function telechargerCarnet(format) {
+  const response = await fetch(`${API_BASE}/portal/prospects/export?format=${format}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` },
+  })
+  if (!response.ok) throw new Error('export')
+  const url = URL.createObjectURL(await response.blob())
+  const lien = document.createElement('a')
+  lien.href = url
+  lien.download = `mon-carnet-de-prospects-${isoDuJour()}.${format}`
+  document.body.appendChild(lien)
+  lien.click()
+  lien.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function lireEnBase64(fichier) {
+  return new Promise((resolve, reject) => {
+    const lecteur = new FileReader()
+    lecteur.onload = () => resolve(String(lecteur.result).split(',')[1] || '')
+    lecteur.onerror = () => reject(lecteur.error)
+    lecteur.readAsDataURL(fichier)
+  })
+}
+
+function OutilsCarnet({ total, maximum, onImporte }) {
+  const [attente, setAttente] = useState('')
+  const [erreur, setErreur] = useState('')
+  const [apercu, setApercu] = useState(null)
+  const [fichier, setFichier] = useState(null)
+  const champFichier = useRef(null)
+
+  const exporter = async (format) => {
+    setErreur('')
+    setAttente(format)
+    try {
+      await telechargerCarnet(format)
+    } catch {
+      setErreur("Le téléchargement n'a pas marché. Réessaie dans un instant.")
+    } finally {
+      setAttente('')
+    }
+  }
+
+  const envoyer = async (choix, confirmer) => {
+    setErreur('')
+    setAttente(confirmer ? 'confirmer' : 'lecture')
+    try {
+      const reponse = await appelPortail('/prospects/import', { nom_fichier: choix.name, contenu: await lireEnBase64(choix), confirmer })
+      if (reponse.confirme) {
+        onImporte(reponse.carnet, reponse.apercu.a_ajouter)
+        setApercu(null)
+        setFichier(null)
+      } else {
+        setApercu(reponse.apercu)
+        setFichier(choix)
+      }
+    } catch (err) {
+      setErreur(err.detail || "L'import n'a pas marché. Réessaie dans un instant.")
+    } finally {
+      setAttente('')
+    }
+  }
+
+  const choisir = (event) => {
+    const choix = event.target.files?.[0]
+    event.target.value = ''
+    if (choix) envoyer(choix, false)
+  }
+
+  const annuler = () => {
+    setApercu(null)
+    setFichier(null)
+  }
+
+  return (
+    <div className="carnet-outils">
+      <div className="biblio-actions">
+        <button type="button" className="idris-copier" disabled={!total || !!attente} onClick={() => exporter('xlsx')}>
+          {attente === 'xlsx' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Exporter en Excel
+        </button>
+        <button type="button" className="idris-copier" disabled={!total || !!attente} onClick={() => exporter('csv')}>
+          {attente === 'csv' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} CSV
+        </button>
+        <button type="button" className="idris-copier" disabled={!!attente || total >= maximum} onClick={() => champFichier.current?.click()}>
+          {attente === 'lecture' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Importer une liste
+        </button>
+        <input ref={champFichier} type="file" hidden accept=".xlsx,.csv,.txt,.vcf,text/csv,text/vcard" onChange={choisir} />
+      </div>
+      {!apercu && !erreur && (
+        <p className="carnet-aide">Importe un fichier Excel ou CSV (une colonne « Nom », « Téléphone » ou « E-mail » suffit) ou les contacts exportés de ton téléphone (.vcf). Les doublons sont écartés.</p>
+      )}
+      {erreur && <p className="idris-erreur">{erreur}</p>}
+      {apercu && (
+        <div className="carnet-apercu" role="status">
+          {apercu.a_ajouter ? (
+            <p>
+              <strong>{apercu.a_ajouter}</strong> prospect{apercu.a_ajouter > 1 ? 's' : ''} à ajouter depuis « {fichier?.name} »
+              {apercu.exemples.length ? ` : ${apercu.exemples.join(', ')}${apercu.a_ajouter > apercu.exemples.length ? '…' : '.'}` : '.'}
+            </p>
+          ) : (
+            <p>Rien de nouveau à ajouter depuis « {fichier?.name} ».</p>
+          )}
+          {apercu.doublons > 0 && <p className="carnet-aide">{apercu.doublons} déjà dans ton carnet, je ne les ajoute pas ({apercu.exemples_doublons.join(', ')}{apercu.doublons > apercu.exemples_doublons.length ? '…' : ''}).</p>}
+          {apercu.ignores > 0 && <p className="carnet-aide">{apercu.ignores} ligne{apercu.ignores > 1 ? 's' : ''} sans nom ni contact, laissée{apercu.ignores > 1 ? 's' : ''} de côté.</p>}
+          {apercu.hors_place > 0 && <p className="carnet-aide">{apercu.hors_place} de plus ne rentrent pas : ton carnet est limité à {maximum} prospects.</p>}
+          <div className="biblio-actions">
+            {apercu.a_ajouter > 0 && (
+              <button type="button" className="fiche-bouton" disabled={!!attente} onClick={() => envoyer(fichier, true)}>
+                {attente === 'confirmer' ? <Loader2 size={14} className="animate-spin" /> : null} Ajouter à mon carnet
+              </button>
+            )}
+            <button type="button" className="idris-copier" onClick={annuler}>{apercu.a_ajouter ? 'Annuler' : 'Fermer'}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MessagePretProspect({ prospect, categorie, modeles }) {
   const choix = (modeles || []).filter((m) => m.categorie === categorie).slice(0, 2)
-  const numero = numeroWhatsApp(prospect.contact)
+  const numero = numeroWhatsApp(prospect.telephone || prospect.contact)
 
   if (!modeles) return <p className="carnet-aide"><Loader2 size={14} className="animate-spin" /> Je prépare tes modèles…</p>
   if (!choix.length) return <p className="carnet-aide">Pas encore de modèle pour cette étape dans ta bibliothèque.</p>
@@ -2948,24 +3078,46 @@ function MessagePretProspect({ prospect, categorie, modeles }) {
   )
 }
 
-function LigneProspect({ prospect, statuts, categories, aRelancer, modeles, onModeles, onAction }) {
+function LigneProspect({ prospect, statuts, categories, sources, aRelancer, modeles, onModeles, onAction }) {
   const [edition, setEdition] = useState(false)
   const [message, setMessage] = useState(false)
   const [suppression, setSuppression] = useState(false)
-  const [brouillon, setBrouillon] = useState({ nom: prospect.nom, contact: prospect.contact || '', note: prospect.note || '' })
+  const [brouillon, setBrouillon] = useState({
+    nom: prospect.nom,
+    telephone: prospect.telephone || '',
+    email: prospect.email || '',
+    source: prospect.source || '',
+    montant: prospect.montant ?? '',
+    note: prospect.note || '',
+  })
+  const [montant, setMontant] = useState(prospect.montant ?? '')
+  const changer = (cle) => (e) => setBrouillon((b) => ({ ...b, [cle]: e.target.value }))
+  const coordonnees = [prospect.telephone, prospect.email].filter(Boolean)
 
   const enregistrer = async (event) => {
     event.preventDefault()
     if (await onAction('modifier', prospect.id, brouillon)) setEdition(false)
   }
 
+  const enregistrerMontant = () => {
+    if (String(montant) !== String(prospect.montant ?? '')) onAction('modifier', prospect.id, { montant })
+  }
+
   return (
     <li className={`carnet-ligne${aRelancer ? ' carnet-ligne-relance' : ''}`}>
       {edition ? (
         <form className="carnet-edition" onSubmit={enregistrer}>
-          <input className="field-input" value={brouillon.nom} maxLength={80} required aria-label="Nom" onChange={(e) => setBrouillon((b) => ({ ...b, nom: e.target.value }))} />
-          <input className="field-input" value={brouillon.contact} maxLength={80} placeholder="Téléphone ou e-mail" aria-label="Contact" onChange={(e) => setBrouillon((b) => ({ ...b, contact: e.target.value }))} />
-          <textarea className="field-input" value={brouillon.note} maxLength={300} rows={2} placeholder="Note (ce qu'il t'a dit, ce que tu dois lui envoyer…)" aria-label="Note" onChange={(e) => setBrouillon((b) => ({ ...b, note: e.target.value }))} />
+          <input className="field-input" value={brouillon.nom} maxLength={80} required aria-label="Nom" onChange={changer('nom')} />
+          <div className="carnet-edition-duo">
+            <input className="field-input" type="tel" value={brouillon.telephone} maxLength={80} placeholder="Téléphone" aria-label="Téléphone" onChange={changer('telephone')} />
+            <input className="field-input" type="email" value={brouillon.email} maxLength={80} placeholder="E-mail" aria-label="E-mail" onChange={changer('email')} />
+          </div>
+          <div className="carnet-edition-duo">
+            <input className="field-input" list="carnet-sources" value={brouillon.source} maxLength={40} placeholder="Source (réseau, recommandation…)" aria-label="Source" onChange={changer('source')} />
+            <input className="field-input" inputMode="decimal" value={brouillon.montant} maxLength={12} placeholder="Montant de la vente (€)" aria-label="Montant de la vente en euros" onChange={changer('montant')} />
+          </div>
+          <datalist id="carnet-sources">{(sources || []).map((s) => <option key={s} value={s} />)}</datalist>
+          <textarea className="field-input" value={brouillon.note} maxLength={300} rows={2} placeholder="Note (ce qu'il t'a dit, ce que tu dois lui envoyer…)" aria-label="Note" onChange={changer('note')} />
           <div className="biblio-actions">
             <button type="submit" className="fiche-bouton">Enregistrer</button>
             <button type="button" className="idris-copier" onClick={() => setEdition(false)}>Annuler</button>
@@ -2976,7 +3128,8 @@ function LigneProspect({ prospect, statuts, categories, aRelancer, modeles, onMo
           <header className="carnet-ligne-entete">
             <div>
               <strong className="carnet-nom">{prospect.nom}</strong>
-              {prospect.contact && <span className="carnet-contact">{prospect.contact}</span>}
+              {coordonnees.length > 0 && <span className="carnet-contact">{coordonnees.join(' · ')}</span>}
+              {prospect.source && <span className="carnet-source">{prospect.source}</span>}
             </div>
             <select
               className={`carnet-statut carnet-statut-${CLASSE_STATUT[prospect.statut] || 'a-contacter'}`}
@@ -3000,6 +3153,23 @@ function LigneProspect({ prospect, statuts, categories, aRelancer, modeles, onMo
               />
             </label>
             {prospect.relance && <span className={aRelancer ? 'carnet-echeance carnet-echeance-due' : 'carnet-echeance'}>{aRelancer ? `À faire (${dateRelance(prospect.relance)})` : dateRelance(prospect.relance)}</span>}
+            {prospect.statut === 'Client' && (
+              <label>
+                <span>Montant de la vente</span>
+                <input
+                  className="field-input carnet-montant"
+                  inputMode="decimal"
+                  value={montant}
+                  maxLength={12}
+                  placeholder="€"
+                  aria-label={`Montant de la vente avec ${prospect.nom}`}
+                  onChange={(e) => setMontant(e.target.value)}
+                  onBlur={enregistrerMontant}
+                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                />
+                <span>€</span>
+              </label>
+            )}
           </div>
           <div className="biblio-actions">
             {prospect.statut !== 'Client' && (
@@ -3030,6 +3200,7 @@ function CarnetProspects() {
   const [chargement, setChargement] = useState(true)
   const [filtre, setFiltre] = useState('tous')
   const [nouveau, setNouveau] = useState({ nom: '', contact: '', relance: '' })
+  const [importe, setImporte] = useState(0)
   const [modeles, setModeles] = useState(null)
   const [enCours, setEnCours] = useState(false)
 
@@ -3067,7 +3238,7 @@ function CarnetProspects() {
 
   const ajouter = async (event) => {
     event.preventDefault()
-    if (await agir('ajouter', null, { nom: nouveau.nom, contact: nouveau.contact, relance: nouveau.relance || null, statut: 'À contacter' })) {
+    if (await agir('ajouter', null, { nom: nouveau.nom, ...separerContact(nouveau.contact), relance: nouveau.relance || null, statut: 'À contacter' })) {
       setNouveau({ nom: '', contact: '', relance: '' })
       setFiltre('tous')
     }
@@ -3079,6 +3250,13 @@ function CarnetProspects() {
   const aRelancer = new Set(carnet.a_relancer)
   const visibles = carnet.prospects.filter((p) => (filtre === 'tous' ? true : filtre === 'relancer' ? aRelancer.has(p.id) : p.statut === filtre))
   const semaine = carnet.semaine
+  const ventes = carnet.ventes
+
+  const apresImport = (nouveauCarnet, nombre) => {
+    setCarnet(nouveauCarnet)
+    setImporte(nombre)
+    setFiltre('tous')
+  }
 
   return (
     <section className="panel carnet">
@@ -3090,8 +3268,14 @@ function CarnetProspects() {
       )}
 
       <p className="carnet-semaine">
-        Cette semaine : <strong>{semaine.contacts}</strong> contact{semaine.contacts > 1 ? 's' : ''}, <strong>{semaine.rdv}</strong> RDV, <strong>{semaine.ventes}</strong> client{semaine.ventes > 1 ? 's' : ''} gagné{semaine.ventes > 1 ? 's' : ''}.
+        Cette semaine : <strong>{semaine.contacts}</strong> contact{semaine.contacts > 1 ? 's' : ''}, <strong>{semaine.rdv}</strong> RDV, <strong>{semaine.ventes}</strong> client{semaine.ventes > 1 ? 's' : ''} gagné{semaine.ventes > 1 ? 's' : ''}{semaine.ca > 0 ? <>, <strong>{formaterEuros(semaine.ca)}</strong> signés</> : null}.
+        {ventes?.ca > 0 && (
+          <> Depuis le début : <strong>{formaterEuros(ventes.ca)}</strong>{ventes.panier_moyen ? <>, panier moyen <strong>{formaterEuros(ventes.panier_moyen)}</strong></> : null}.</>
+        )}
       </p>
+
+      <OutilsCarnet total={carnet.prospects.length} maximum={carnet.max_prospects || 300} onImporte={apresImport} />
+      {importe > 0 && <p className="carnet-aide carnet-importe">{importe} prospect{importe > 1 ? 's' : ''} ajouté{importe > 1 ? 's' : ''} à ton carnet, en « À contacter » sauf si ton fichier disait autre chose.</p>}
 
       <form className="carnet-ajout" onSubmit={ajouter}>
         <input className="field-input" placeholder="Nom du prospect" value={nouveau.nom} maxLength={80} required aria-label="Nom du prospect" onChange={(e) => setNouveau((n) => ({ ...n, nom: e.target.value }))} />
@@ -3121,10 +3305,11 @@ function CarnetProspects() {
         <ul className="carnet-liste">
           {visibles.map((p) => (
             <LigneProspect
-              key={`${p.id}-${p.statut}-${p.relance}-${p.nom}-${p.contact}-${p.note}`}
+              key={`${p.id}-${p.statut}-${p.relance}-${p.nom}-${p.telephone}-${p.email}-${p.source}-${p.montant}-${p.note}`}
               prospect={p}
               statuts={carnet.statuts}
               categories={carnet.categories}
+              sources={carnet.sources}
               aRelancer={aRelancer.has(p.id)}
               modeles={modeles}
               onModeles={chargerModeles}

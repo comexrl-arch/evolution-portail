@@ -191,7 +191,7 @@ prospects = [{"id": "a", "evenements": [
     {"date": "2026-10-25", "statut": "RDV"},
     {"date": "2026-10-26", "statut": "Client"},
 ]}]
-check("du lundi au dimanche inclus", carnet.totaux_semaine(prospects, lundi) == {"contacts": 1, "rdv": 1, "ventes": 0})
+check("du lundi au dimanche inclus", carnet.totaux_semaine(prospects, lundi) == {"contacts": 1, "rdv": 1, "ventes": 0, "ca": 0.0})
 
 print("\n=== Carnet : endpoints ===")
 faux = FauxNotion()

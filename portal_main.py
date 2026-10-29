@@ -17,7 +17,7 @@ import re
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from backend.services import agenda_service
@@ -25,7 +25,7 @@ from backend.services import cockpit_service
 from backend.services import eleves_service
 from backend.services import docuseal_service
 from backend.services import bibliotheque_service, brouillon_service, entrainement_service, fidelite_service, idris_service
-from backend.services import comptes_rendus_service, prospects_service, push_service, reservation_service
+from backend.services import carnet_fichiers_service, comptes_rendus_service, prospects_service, push_service, reservation_service
 from backend.services import questions_rony_service, suivi_coach_service
 from backend.services import login_guard
 from backend.services import notion_service
@@ -1348,6 +1348,59 @@ def portal_prospects_action(request: ProspectRequest, authorization: str = Heade
         raise _erreur_service_indisponible("portal_prospects_action", error)
 
     return prospects_service.vue_client(carnet)
+
+
+# Export et import du carnet, comme dans un CRM (29/10/2026).
+@app.get("/portal/prospects/export")
+def portal_prospects_export(format: str = "xlsx", authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    if format not in ("xlsx", "csv"):
+        raise HTTPException(status_code=422, detail="Format inconnu.")
+
+    try:
+        prospects = prospects_service.lire(session["client_page_id"], dashboard)["prospects"]
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_prospects_export", error)
+
+    if format == "csv":
+        contenu, type_mime = carnet_fichiers_service.export_csv(prospects), "text/csv; charset=utf-8"
+    else:
+        contenu = carnet_fichiers_service.export_xlsx(prospects)
+        type_mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    nom = carnet_fichiers_service.nom_fichier(dashboard.get("nom") or "", format)
+    return Response(content=contenu, media_type=type_mime, headers={
+        "Content-Disposition": f'attachment; filename="{nom}"',
+        "Cache-Control": "no-store",
+    })
+
+
+class ProspectsImportRequest(BaseModel):
+    nom_fichier: str
+    contenu: str
+    confirmer: bool = False
+
+
+@app.post("/portal/prospects/import")
+def portal_prospects_import(request: ProspectsImportRequest, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    if len(request.contenu) > carnet_fichiers_service.MAX_OCTETS * 4 // 3 + 8:
+        raise HTTPException(status_code=422, detail="Ce fichier est trop lourd (2 Mo maximum).")
+
+    try:
+        return carnet_fichiers_service.importer(
+            session["client_page_id"], dashboard.get("nom"), dashboard,
+            request.nom_fichier, request.contenu, request.confirmer,
+        )
+
+    except (carnet_fichiers_service.ImportInvalide, prospects_service.CarnetInvalide) as error:
+        raise HTTPException(status_code=422, detail=error.message_client)
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_prospects_import", error)
 
 
 # --- Compte rendu apres chaque point (29/10/2026) -------------------------------
