@@ -46,7 +46,7 @@ const SpeechRecognitionNavigateur =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : undefined
 const CHAMP_ORAL = /pitch|oral|pr[ée]sentation|pr[ée]sente|script|positionnement|elevator|accroche|discours/i
 
-export function DicteeVocale({ value, onChange, libelle = 'Dicter à voix haute' }) {
+export function DicteeVocale({ value, onChange, libelle = 'Dicter à voix haute', compact = false }) {
   const [ecoute, setEcoute] = useState(false)
   const [erreur, setErreur] = useState('')
   const reconnaissance = useRef(null)
@@ -96,12 +96,14 @@ export function DicteeVocale({ value, onChange, libelle = 'Dicter à voix haute'
     <div className="dictee">
       <button
         type="button"
-        className={`dictee-bouton${ecoute ? ' dictee-active' : ''}`}
+        className={`dictee-bouton${compact ? ' dictee-compacte' : ''}${ecoute ? ' dictee-active' : ''}`}
         onClick={ecoute ? arreter : demarrer}
         aria-pressed={ecoute}
       >
-        <Mic size={14} aria-hidden="true" />
-        {ecoute ? 'J’écoute… touche pour arrêter' : libelle}
+        <Mic size={compact ? 18 : 14} aria-hidden="true" />
+        {compact
+          ? <span className="sr-only">{ecoute ? 'J’écoute… touche pour arrêter' : libelle}</span>
+          : ecoute ? 'J’écoute… touche pour arrêter' : libelle}
       </button>
       {erreur && <p className="dictee-erreur">{erreur}</p>}
     </div>
