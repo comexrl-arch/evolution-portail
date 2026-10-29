@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
-import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Download, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, Upload, UserRound, Users, X } from 'lucide-react'
+import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Download, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Send, Sparkles, Star, Target, Upload, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
 import { installer, useInstallation } from './installation.js'
 import BoutonInstaller from './BoutonInstaller.jsx'
 import { ListePoints, libellePoint } from './PointsRythme.jsx'
 import { cleRdv, useNouveautesEleve } from './Nouveautes.js'
 import monogramme from './assets/monogramme.svg'
+import Discussion, { messagesDepuisQuestions } from './Discussion.jsx'
 import illustrationModule0 from './assets/modules/module-0.jpg'
 import illustrationModule1 from './assets/modules/module-1.jpg'
 import illustrationModule2 from './assets/modules/module-2.jpg'
@@ -1416,7 +1417,6 @@ function RetoursPrecedents({ entrees, actif }) {
 // Separe d'Idris : c'est Rony qui repond, l'eleve est prevenu.
 function QuestionPourRony() {
   const [etat, setEtat] = useState(null)
-  const [ouvert, setOuvert] = useState(false)
   const [question, setQuestion] = useState('')
   const [envoi, setEnvoi] = useState(false)
   const [message, setMessage] = useState('')
@@ -1432,8 +1432,10 @@ function QuestionPourRony() {
 
   if (!etat?.ouvert) return null
   const questions = etat.questions || []
+  const attente = questions.some((q) => !q.reponse)
 
-  const envoyer = async () => {
+  const envoyer = async (event) => {
+    event.preventDefault()
     setEnvoi(true)
     setMessage('')
     try {
@@ -1446,8 +1448,6 @@ function QuestionPourRony() {
       if (r.ok && data?.id) {
         setEtat((e) => ({ ...e, questions: [data, ...(e.questions || [])] }))
         setQuestion('')
-        setOuvert(false)
-        setMessage('Envoyé. Rony est prévenu et te répond ici.')
       } else {
         setMessage(typeof data?.detail === 'string' ? data.detail : "Ta question n'est pas partie. Réessaie.")
       }
@@ -1457,48 +1457,40 @@ function QuestionPourRony() {
     setEnvoi(false)
   }
 
+  // Meme presentation que l'Espace Coach (29/10/2026) : fil facon WhatsApp,
+  // dernier echange visible, le reste se deplie.
   return (
     <section className="panel question-pour-rony">
       <div className="engagements-entete">
-        <p className="panel-eyebrow"><MessageCircle size={14} /> Une question pour Rony</p>
+        <p className="panel-eyebrow"><MessageCircle size={14} /> Ma discussion avec Rony</p>
       </div>
       <p className="question-rony-intro">Pour ce qu'Idris ne peut pas trancher : une situation délicate, un client, un doute. Rony te répond personnellement.</p>
-
-      {ouvert ? (
-        <>
-          <textarea
-            className="field-input"
-            rows={4}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ex. : Un prospect me demande une remise de 20 %, je fais quoi ?"
-            aria-label="Ta question pour Rony"
-          />
-          <DicteeVocale value={question} onChange={setQuestion} />
-          <div className="question-rony-actions">
-            <button type="button" className="fiche-bouton" disabled={envoi || question.trim().length < 5} onClick={envoyer}>
-              {envoi ? 'Envoi…' : 'Envoyer à Rony'}
+      <div className="discussion-cadre">
+        <Discussion
+          messages={messagesDepuisQuestions(questions)}
+          moi="eleve"
+          noms={{ coach: 'Rony' }}
+          vide="Pas encore de message. Écris ta première question à Rony juste en dessous."
+        />
+        {attente && <p className="discussion-statut">Rony a bien reçu ta question, il te répond très vite.</p>}
+        <form className="discussion-saisie" onSubmit={envoyer}>
+          <div className="discussion-saisie-ligne">
+            <textarea
+              className="field-input"
+              rows={2}
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder="Écris ta question à Rony…"
+              aria-label="Ta question pour Rony"
+            />
+            <DicteeVocale value={question} onChange={setQuestion} libelle="Dicter ta question" compact />
+            <button type="submit" className="discussion-envoyer" disabled={envoi || question.trim().length < 5} aria-label="Envoyer à Rony">
+              <Send size={18} aria-hidden="true" />
             </button>
-            <button type="button" className="resultats-bouton" onClick={() => setOuvert(false)}>Annuler</button>
           </div>
-        </>
-      ) : (
-        <button type="button" className="resultats-bouton" onClick={() => { setOuvert(true); setMessage('') }}>Écrire à Rony</button>
-      )}
+        </form>
+      </div>
       {message && <p className="engagements-aide" role="status">{message}</p>}
-
-      {questions.length > 0 && (
-        <ul className="questions-rony-liste">
-          {questions.slice(0, 3).map((q) => (
-            <li key={q.id}>
-              <p className="question-rony-moi"><strong>Toi :</strong> {q.question}</p>
-              {q.reponse
-                ? <MotDeRony mot={q.reponse} date={q.repondu_le} />
-                : <p className="question-rony-attente">Rony a bien reçu ta question, il te répond très vite.</p>}
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   )
 }
