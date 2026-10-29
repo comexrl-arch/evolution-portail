@@ -26,6 +26,7 @@ from backend.services import eleves_service
 from backend.services import docuseal_service
 from backend.services import bibliotheque_service, brouillon_service, entrainement_service, fidelite_service, idris_service
 from backend.services import comptes_rendus_service, prospects_service, push_service, reservation_service
+from backend.services import questions_rony_service, suivi_coach_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -1426,6 +1427,143 @@ def portal_cocher_engagement(
         raise _erreur_service_indisponible("portal_cocher_engagement", error)
 
 
+# --- Preparation des points et alertes d'intervention (29/10/2026) -----------------
+
+@app.get("/coach/alertes")
+def coach_alertes(frais: bool = False, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return {"eleves": suivi_coach_service.alertes(frais=frais)}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_alertes", error)
+
+
+@app.get("/coach/eleves/{client_page_id}/preparation")
+def coach_preparation(client_page_id: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        return suivi_coach_service.preparation(client_page_id)
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_preparation", error)
+
+
+@app.post("/coach/eleves/{client_page_id}/preparation/idris")
+def coach_preparation_idris(client_page_id: str, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not suivi_coach_service.ia_service.enabled():
+        raise HTTPException(status_code=503, detail="Idris n'est pas branché (GEMINI_API_KEY).")
+
+    try:
+        return suivi_coach_service.preparation_idris(suivi_coach_service.preparation(client_page_id))
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_preparation_idris", error)
+
+
+def _alerter_coach_du_matin() -> dict:
+    try:
+        resume = suivi_coach_service.resume_du_matin(suivi_coach_service.alertes(frais=True))
+
+        if resume:
+            return {"eleves_a_surveiller": True, "envoyees": push_service.envoyer_coach(*resume, "/coach?onglet=eleves")}
+    except Exception as error:
+        _journaliser_alerte_impossible("alertes_coach_matin", error)
+
+    return {"eleves_a_surveiller": False}
+
+
+# --- Question pour Rony (29/10/2026) : canal direct de l'eleve Coaching ----------------
+
+class QuestionRonyRequest(BaseModel):
+    question: str
+
+
+class ReponseRonyRequest(BaseModel):
+    reponse: str
+
+
+@app.get("/portal/questions-rony")
+def portal_questions_rony(authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    if not questions_rony_service.ouvert_a(dashboard.get("parcours")):
+        return {"ouvert": False, "questions": []}
+
+    try:
+        return {"ouvert": True, "max_en_attente": questions_rony_service.MAX_EN_ATTENTE, "questions": questions_rony_service.lister(session["client_page_id"])}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_questions_rony", error)
+
+
+@app.post("/portal/questions-rony")
+def portal_poser_question_rony(request: QuestionRonyRequest, background_tasks: BackgroundTasks, authorization: str = Header(default="")):
+    session, dashboard = _dashboard_idris(authorization)
+
+    try:
+        question = questions_rony_service.poser(session["client_page_id"], dashboard, request.question)
+
+    except questions_rony_service.QuestionNonAutorisee:
+        raise HTTPException(status_code=403, detail="Le canal direct avec Rony fait partie du Coaching.")
+
+    except questions_rony_service.TropDeQuestions:
+        raise HTTPException(status_code=422, detail="Rony n'a pas encore répondu à tes questions précédentes. Il revient vers toi très vite.")
+
+    except questions_rony_service.QuestionInvalide:
+        raise HTTPException(status_code=422, detail="Écris ta question en quelques mots.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_poser_question_rony", error)
+
+    background_tasks.add_task(_prevenir_question, session["client_page_id"], dashboard.get("nom"), question["question"])
+    return question
+
+
+def _prevenir_question(client_page_id: str, nom: str | None, question: str) -> None:
+    try:
+        if push_service.enabled():
+            prenom = (nom or "Un élève").split(" ")[0]
+            extrait = question if len(question) <= 110 else question[:107] + "..."
+            push_service.envoyer_coach(f"Question de {prenom}", extrait, f"/coach?onglet=eleves&eleve={client_page_id}")
+    except Exception as error:
+        _journaliser_alerte_impossible("push_question_rony", error)
+
+
+@app.post("/coach/eleves/{client_page_id}/questions/{question_id}/reponse")
+def coach_repondre_question(
+    client_page_id: str, question_id: str, request: ReponseRonyRequest, background_tasks: BackgroundTasks, x_coach_key: str = Header(default="")
+):
+    _require_coach_key(x_coach_key)
+
+    try:
+        question = questions_rony_service.repondre(client_page_id, question_id, request.reponse)
+
+    except questions_rony_service.QuestionNonAutorisee:
+        raise HTTPException(status_code=404, detail="Cette question n'existe plus.")
+
+    except questions_rony_service.QuestionInvalide:
+        raise HTTPException(status_code=422, detail="Écrivez votre réponse.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_repondre_question", error)
+
+    background_tasks.add_task(_prevenir_reponse, client_page_id)
+    return question
+
+
+def _prevenir_reponse(client_page_id: str) -> None:
+    try:
+        if push_service.enabled():
+            push_service.reponse_de_rony(client_page_id)
+    except Exception as error:
+        _journaliser_alerte_impossible("push_reponse_rony", error)
+
+
 # --- Passerelle Autonome vers Coaching (27/10/2026) ---------------------------
 
 @app.post("/portal/passerelle-coaching")
@@ -1550,10 +1688,16 @@ def automation_notifications_du_jour(authorization: str = Header(default="")):
     _require_diagnostic_api_key(authorization)
 
     try:
-        return push_service.notifications_du_jour()
+        resultat = push_service.notifications_du_jour()
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("automation_notifications_du_jour", error)
+
+    # Le meme passage du matin previent Rony des eleves a surveiller (29/10/2026).
+    if resultat.get("actif"):
+        resultat["coach"] = _alerter_coach_du_matin()
+
+    return resultat
 
 
 @app.get("/automation/recap-hebdo")

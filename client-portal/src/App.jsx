@@ -1375,6 +1375,97 @@ function RetourIA({ retour, actif }) {
   )
 }
 
+// « Question pour Rony » (29/10/2026) : canal direct, Coaching seulement.
+// Separe d'Idris : c'est Rony qui repond, l'eleve est prevenu.
+function QuestionPourRony() {
+  const [etat, setEtat] = useState(null)
+  const [ouvert, setOuvert] = useState(false)
+  const [question, setQuestion] = useState('')
+  const [envoi, setEnvoi] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    let actif = true
+    fetch(`${API_BASE}/portal/questions-rony`, { headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (actif && data) setEtat(data) })
+      .catch(() => {})
+    return () => { actif = false }
+  }, [])
+
+  if (!etat?.ouvert) return null
+  const questions = etat.questions || []
+
+  const envoyer = async () => {
+    setEnvoi(true)
+    setMessage('')
+    try {
+      const r = await fetch(`${API_BASE}/portal/questions-rony`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      })
+      const data = await r.json().catch(() => null)
+      if (r.ok && data?.id) {
+        setEtat((e) => ({ ...e, questions: [data, ...(e.questions || [])] }))
+        setQuestion('')
+        setOuvert(false)
+        setMessage('Envoyé. Rony est prévenu et te répond ici.')
+      } else {
+        setMessage(typeof data?.detail === 'string' ? data.detail : "Ta question n'est pas partie. Réessaie.")
+      }
+    } catch {
+      setMessage('Connexion impossible. Réessaie dans un instant.')
+    }
+    setEnvoi(false)
+  }
+
+  return (
+    <section className="panel question-pour-rony">
+      <div className="engagements-entete">
+        <p className="panel-eyebrow"><MessageCircle size={14} /> Une question pour Rony</p>
+      </div>
+      <p className="question-rony-intro">Pour ce qu'Idris ne peut pas trancher : une situation délicate, un client, un doute. Rony te répond personnellement.</p>
+
+      {ouvert ? (
+        <>
+          <textarea
+            className="field-input"
+            rows={4}
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="Ex. : Un prospect me demande une remise de 20 %, je fais quoi ?"
+            aria-label="Ta question pour Rony"
+          />
+          <DicteeVocale value={question} onChange={setQuestion} />
+          <div className="question-rony-actions">
+            <button type="button" className="fiche-bouton" disabled={envoi || question.trim().length < 5} onClick={envoyer}>
+              {envoi ? 'Envoi…' : 'Envoyer à Rony'}
+            </button>
+            <button type="button" className="resultats-bouton" onClick={() => setOuvert(false)}>Annuler</button>
+          </div>
+        </>
+      ) : (
+        <button type="button" className="resultats-bouton" onClick={() => { setOuvert(true); setMessage('') }}>Écrire à Rony</button>
+      )}
+      {message && <p className="engagements-aide" role="status">{message}</p>}
+
+      {questions.length > 0 && (
+        <ul className="questions-rony-liste">
+          {questions.slice(0, 3).map((q) => (
+            <li key={q.id}>
+              <p className="question-rony-moi"><strong>Toi :</strong> {q.question}</p>
+              {q.reponse
+                ? <MotDeRony mot={q.reponse} date={q.repondu_le} />
+                : <p className="question-rony-attente">Rony a bien reçu ta question, il te répond très vite.</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 // Engagements pris au dernier point avec Rony (compte rendu, 29/10/2026).
 // L'eleve les coche quand il les a tenus ; son bilan de la semaine les reprend.
 function MesEngagements() {
@@ -4993,6 +5084,7 @@ function Portail() {
               <MesPoints points={nouveautes.points} nouveaux={nouveautes.rdvNouveaux} onVu={nouveautes.marquerRdvVus} onChange={nouveautes.relire} />
               <ReserverRdv points={nouveautes.points} onReserve={nouveautes.relire} />
               <MesEngagements />
+              <QuestionPourRony />
 
               <ProchaineEtape
                 module={moduleEnCours}

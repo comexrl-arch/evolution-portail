@@ -151,6 +151,10 @@ def compte_rendu_pret(client_page_id: str, nb_engagements: int) -> None:
     envoyer(client_page_id, "Compte rendu de ton point", texte, "/")
 
 
+def reponse_de_rony(client_page_id: str) -> None:
+    envoyer(client_page_id, "Rony t'a répondu", "Ta réponse t'attend sur ton tableau de bord.", "/")
+
+
 def diagnostic_valide(client_page_id: str) -> None:
     envoyer(
         client_page_id, "Ton diagnostic est validé",
