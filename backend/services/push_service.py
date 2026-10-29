@@ -137,6 +137,27 @@ def retour_idris_pret(client_page_id: str, fiche_id: str) -> None:
     envoyer(client_page_id, "Idris t'a répondu", "Ton retour sur la fiche que tu viens d'enregistrer est prêt.", f"/?ouvrir=fiche:{fiche_id}")
 
 
+# Retours signes (29/10/2026) : Rony a relu le retour d'Idris ou valide le diagnostic.
+def retour_signe(client_page_id: str, fiche_id: str | None, mot: bool) -> None:
+    texte = "Rony a relu ta fiche et t'a laissé un mot." if mot else "Rony a relu et validé ton retour."
+    envoyer(client_page_id, "Rony a relu ta fiche", texte, f"/?ouvrir=fiche:{fiche_id}" if fiche_id else "/")
+
+
+def compte_rendu_pret(client_page_id: str, nb_engagements: int) -> None:
+    texte = (
+        f"Rony a écrit le compte rendu de votre point : {nb_engagements} engagement{'s' if nb_engagements > 1 else ''} à tenir."
+        if nb_engagements else "Rony a écrit le compte rendu de votre point."
+    )
+    envoyer(client_page_id, "Compte rendu de ton point", texte, "/")
+
+
+def diagnostic_valide(client_page_id: str) -> None:
+    envoyer(
+        client_page_id, "Ton diagnostic est validé",
+        "Rony a validé ton diagnostic. La suite de ton parcours est ouverte.", "/?ouvrir=parcours",
+    )
+
+
 # --- Appli Coach (29/10/2026) : Rony est prevenu quand un eleve reserve ou annule ---------
 # Ses abonnements sont gardes dans les reglages de l'Espace Coach (evenement
 # prive de son agenda, agenda_service.ecrire_reglage) : pas de stockage en plus.

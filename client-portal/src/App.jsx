@@ -46,7 +46,7 @@ const SpeechRecognitionNavigateur =
   typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : undefined
 const CHAMP_ORAL = /pitch|oral|pr[ée]sentation|pr[ée]sente|script|positionnement|elevator|accroche|discours/i
 
-function DicteeVocale({ value, onChange }) {
+export function DicteeVocale({ value, onChange, libelle = 'Dicter à voix haute' }) {
   const [ecoute, setEcoute] = useState(false)
   const [erreur, setErreur] = useState('')
   const reconnaissance = useRef(null)
@@ -101,7 +101,7 @@ function DicteeVocale({ value, onChange }) {
         aria-pressed={ecoute}
       >
         <Mic size={14} aria-hidden="true" />
-        {ecoute ? 'J’écoute… touche pour arrêter' : 'Dicter à voix haute'}
+        {ecoute ? 'J’écoute… touche pour arrêter' : libelle}
       </button>
       {erreur && <p className="dictee-erreur">{erreur}</p>}
     </div>
@@ -1326,26 +1326,121 @@ function ParagraphesIdris({ texte }) {
   ))
 }
 
+// Le mot que Rony laisse sous le retour d'Idris (« Idris prepare, Rony signe »,
+// 29/10/2026). Volontairement distinct de la bulle d'Idris : c'est un humain.
+function MotDeRony({ mot, date }) {
+  if (!mot) return null
+  return (
+    <figure className="mot-rony">
+      <span className="mot-rony-avatar" aria-hidden="true">R</span>
+      <div className="mot-rony-corps">
+        <p className="mot-rony-surtitre">Le mot de Rony</p>
+        <blockquote className="mot-rony-texte">{mot}</blockquote>
+        <figcaption className="mot-rony-signature">Rony, ton coach{date ? ` · ${formaterMaj(date)}` : ''}</figcaption>
+      </div>
+    </figure>
+  )
+}
+
 function RetourIA({ retour, actif }) {
   if (!actif || !retour) return null
+  const signe = retour.statut === 'publie' && retour.valide_par_coach
 
   return (
     <section className="retour-ia" aria-label="Le retour d'Idris">
-      <IdrisSeparateur />
-      <IdrisMessage
-        titre="Ton retour"
-        meta={retour.statut === 'publie' && retour.date ? `Rédigé par Idris le ${formaterMaj(retour.date)}` : null}
-      >
-        {retour.statut === 'publie' ? (
-          <ParagraphesIdris texte={retour.texte} />
-        ) : retour.statut === 'relecture' ? (
-          <p className="retour-ia-attente">J'ai rédigé ton retour, Rony le relit. Il apparaîtra ici d'ici quelques heures.</p>
-        ) : (
-          <p className="retour-ia-attente">
-            <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Je rédige ton retour personnalisé, il arrive dans un instant.
-          </p>
-        )}
-      </IdrisMessage>
+      <IdrisSeparateur>{signe ? 'Ton retour, relu par Rony' : undefined}</IdrisSeparateur>
+      {(retour.statut !== 'publie' || retour.texte) && (
+        <IdrisMessage
+          titre="Ton retour"
+          meta={retour.statut === 'publie' && retour.date
+            ? (signe ? `Rédigé par Idris, relu et validé par Rony le ${formaterMaj(retour.date)}` : `Rédigé par Idris le ${formaterMaj(retour.date)}`)
+            : null}
+        >
+          {retour.statut === 'publie' ? (
+            <ParagraphesIdris texte={retour.texte} />
+          ) : retour.statut === 'relecture' ? (
+            <p className="retour-ia-attente">J'ai rédigé ton retour, Rony le relit. Il apparaîtra ici d'ici quelques heures.</p>
+          ) : (
+            <p className="retour-ia-attente">
+              <Loader2 size={14} className="animate-spin" aria-hidden="true" /> Je rédige ton retour personnalisé, il arrive dans un instant.
+            </p>
+          )}
+        </IdrisMessage>
+      )}
+      {signe && retour.texte && (
+        <p className="retour-valide-rony"><CheckCircle2 size={15} aria-hidden="true" /> Validé par Rony</p>
+      )}
+      {retour.statut === 'publie' && <MotDeRony mot={retour.mot_coach} date={retour.valide_par_coach ? retour.date : null} />}
+    </section>
+  )
+}
+
+// Engagements pris au dernier point avec Rony (compte rendu, 29/10/2026).
+// L'eleve les coche quand il les a tenus ; son bilan de la semaine les reprend.
+function MesEngagements() {
+  const [compteRendu, setCompteRendu] = useState(null)
+  const [enCours, setEnCours] = useState('')
+  const [erreur, setErreur] = useState('')
+
+  useEffect(() => {
+    let actif = true
+    fetch(`${API_BASE}/portal/engagements`, { headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => { if (actif && data) setCompteRendu(data.compte_rendu || null) })
+      .catch(() => {})
+    return () => { actif = false }
+  }, [])
+
+  if (!compteRendu) return null
+  const engagements = compteRendu.engagements || []
+  const tenus = engagements.filter((e) => e.fait).length
+
+  const cocher = async (engagement) => {
+    setEnCours(engagement.id)
+    setErreur('')
+    try {
+      const r = await fetch(`${API_BASE}/portal/engagements/${compteRendu.id}/${engagement.id}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fait: !engagement.fait }),
+      })
+      const data = r.ok ? await r.json() : null
+      if (data?.compte_rendu) setCompteRendu(data.compte_rendu)
+      else setErreur("Ton engagement n'a pas pu être enregistré. Réessaie.")
+    } catch {
+      setErreur("Connexion impossible. Réessaie dans un instant.")
+    }
+    setEnCours('')
+  }
+
+  return (
+    <section className="panel engagements">
+      <div className="engagements-entete">
+        <p className="panel-eyebrow"><ListChecks size={14} /> Mes engagements avec Rony</p>
+        {engagements.length > 0 && <span className="engagements-compteur">{tenus}/{engagements.length} tenus</span>}
+      </div>
+      <p className="engagements-date">Point du {String(compteRendu.date_point || '').slice(0, 10).split('-').reverse().join('/')}</p>
+      {compteRendu.resume && <MotDeRony mot={compteRendu.resume} />}
+      {engagements.length > 0 && (
+        <ul className="engagements-liste">
+          {engagements.map((e) => (
+            <li key={e.id}>
+              <button
+                type="button"
+                className={`engagement${e.fait ? ' engagement-fait' : ''}`}
+                onClick={() => cocher(e)}
+                disabled={enCours === e.id}
+                aria-pressed={e.fait}
+              >
+                <span className="engagement-case" aria-hidden="true">{e.fait && <CheckCircle2 size={16} />}</span>
+                <span>{e.texte}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {engagements.length > 0 && <p className="engagements-aide">Coche ce que tu as fait. Idris en reparle dans ton bilan de la semaine.</p>}
+      {erreur && <p className="text-sm" style={{ color: 'var(--danger)' }}>{erreur}</p>}
     </section>
   )
 }
@@ -4897,6 +4992,7 @@ function Portail() {
               {/* RDV avec Rony juste sous le cap 90 jours (demande de Rony, 28/10/2026). */}
               <MesPoints points={nouveautes.points} nouveaux={nouveautes.rdvNouveaux} onVu={nouveautes.marquerRdvVus} onChange={nouveautes.relire} />
               <ReserverRdv points={nouveautes.points} onReserve={nouveautes.relire} />
+              <MesEngagements />
 
               <ProchaineEtape
                 module={moduleEnCours}

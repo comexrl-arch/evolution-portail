@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CalendarClock, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react'
+import { CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, NotebookPen, Plus, RefreshCw, Search, Sparkles, X } from 'lucide-react'
 import { FormulaireRdv, appelAgenda, dateLongue, heureFr, nouveauRdv } from './CoachAgenda.jsx'
 import { ListePoints, rdvPourPoint } from './PointsRythme.jsx'
-import { CapParcours, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
+import { CapParcours, DicteeVocale, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8013'
 
@@ -205,7 +205,113 @@ function CarteEleve({ eleve, rdv, onOuvrir, nouveau = false }) {
   )
 }
 
-function ReponsesFiche({ fiche, clientPageId, coachKey, onAuthFailure }) {
+// --- Retours signes (29/10/2026) : « Idris prepare, Rony signe » ------------------
+// Rony relit le retour d'Idris, le corrige si besoin, le publie ou le bloque,
+// et peut y ajouter son mot. En Autonome, Idris publie seul.
+
+function libelleRetour(retour) {
+  if (retour.statut === 'bloque') return { classe: 'coach-puce-alerte', texte: retour.mot_coach ? 'Idris bloqué · votre mot publié' : "Bloqué, l'élève ne le voit pas" }
+  if (retour.valide_le) return { classe: 'coach-puce-ok', texte: `Validé par vous le ${dateFr(retour.valide_le)}` }
+  if (retour.statut === 'a_relire') return { classe: 'coach-puce-attente', texte: retour.visible_eleve ? 'À relire · déjà visible (12 h passées)' : "À relire · l'élève attend" }
+  return { classe: 'coach-puce-neutre', texte: 'Publié sans relecture' }
+}
+
+function RetourASigner({ entree, clientPageId, autonome, coachKey, onAuthFailure, onSigne }) {
+  const [retour, setRetour] = useState(entree.retour_ia)
+  const [edition, setEdition] = useState(() => entree.retour_ia?.statut === 'a_relire')
+  const [texte, setTexte] = useState(entree.retour_ia?.texte || '')
+  const [mot, setMot] = useState(entree.retour_ia?.mot_coach || '')
+  const [envoi, setEnvoi] = useState('')
+  const [message, setMessage] = useState('')
+
+  if (!retour) return null
+  if (retour.statut === 'en_cours') return <p className="coach-signature-attente">Idris rédige son retour…</p>
+
+  if (autonome) {
+    return retour.texte ? (
+      <div className="coach-retour-idris">
+        <p className="energie-surtitre">Retour d'Idris · publié seul (formule Autonome)</p>
+        <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{retour.texte}</p>
+      </div>
+    ) : null
+  }
+
+  async function signer(action) {
+    setEnvoi(action)
+    setMessage('')
+    const r = await appelAgenda(`/coach/entrees/${entree.id}/signature`, coachKey, onAuthFailure, {
+      method: 'POST',
+      body: JSON.stringify({ client_page_id: clientPageId, action, texte, mot }),
+    })
+    setEnvoi('')
+    if (r.erreur !== undefined) return setMessage(r.erreur)
+    const maintenant = new Date().toISOString()
+    const suivant = r.data?.retour_ia || {
+      ...retour,
+      statut: action === 'publier' ? 'publie' : 'bloque',
+      texte,
+      mot_coach: mot.trim() || null,
+      valide_le: action === 'publier' || mot.trim() ? maintenant : null,
+      visible_eleve: action === 'publier' || Boolean(mot.trim()),
+    }
+    setRetour(suivant)
+    setEdition(false)
+    setMessage(action === 'publier' ? "Publié. L'élève est prévenu sur son téléphone." : mot.trim() ? "Retour d'Idris bloqué, votre mot est publié." : "Retour d'Idris bloqué.")
+    onSigne?.()
+  }
+
+  const puce = libelleRetour(retour)
+
+  return (
+    <div className="coach-signature">
+      <div className="coach-signature-entete">
+        <p className="energie-surtitre">Retour d'Idris</p>
+        <span className={`coach-puce ${puce.classe}`}>{puce.texte}</span>
+      </div>
+
+      {edition ? (
+        <>
+          <label className="coach-signature-label" htmlFor={`retour-${entree.id}`}>Texte d'Idris (vous pouvez le corriger)</label>
+          <textarea id={`retour-${entree.id}`} className="field-input coach-signature-texte" rows={7} value={texte} onChange={(e) => setTexte(e.target.value)} />
+          <label className="coach-signature-label" htmlFor={`mot-${entree.id}`}>Votre mot à l'élève (facultatif)</label>
+          <textarea
+            id={`mot-${entree.id}`}
+            className="field-input"
+            rows={3}
+            value={mot}
+            onChange={(e) => setMot(e.target.value)}
+            placeholder="Ex. : Très bon travail sur ta cible, on creuse ton prix au prochain point."
+          />
+          <DicteeVocale value={mot} onChange={setMot} libelle="Dicter votre mot" />
+          <div className="coach-signature-actions">
+            <button type="button" className="fiche-bouton" disabled={Boolean(envoi) || (!texte.trim() && !mot.trim())} onClick={() => signer('publier')}>
+              {envoi === 'publier' ? 'Publication…' : 'Valider et publier'}
+            </button>
+            <button type="button" className="resultats-bouton" disabled={Boolean(envoi)} onClick={() => signer('bloquer')}>
+              {envoi === 'bloquer' ? 'Envoi…' : mot.trim() ? "Bloquer Idris, garder mon mot" : "Bloquer le retour d'Idris"}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {retour.texte && retour.statut !== 'bloque' && <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{retour.texte}</p>}
+          {retour.mot_coach && (
+            <div className="coach-mot">
+              <p className="coach-signature-label">Votre mot</p>
+              <p className="text-sm whitespace-pre-wrap">{retour.mot_coach}</p>
+            </div>
+          )}
+          <button type="button" className="resultats-bouton coach-signature-modifier" onClick={() => setEdition(true)}>
+            {retour.valide_le ? 'Modifier' : retour.statut === 'a_relire' ? 'Relire et valider' : 'Valider ou ajouter mon mot'}
+          </button>
+        </>
+      )}
+      {message && <p className="agenda-message" role="status">{message}</p>}
+    </div>
+  )
+}
+
+function ReponsesFiche({ fiche, clientPageId, autonome, coachKey, onAuthFailure, onSigne }) {
   const [etat, setEtat] = useState({ chargement: true })
 
   useEffect(() => {
@@ -242,12 +348,14 @@ function ReponsesFiche({ fiche, clientPageId, coachKey, onAuthFailure }) {
                 </div>
               ))}
             </dl>
-            {entree.retour_ia?.texte && (
-              <div className="coach-retour-idris">
-                <p className="energie-surtitre">Retour d'Idris</p>
-                <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{entree.retour_ia.texte}</p>
-              </div>
-            )}
+            <RetourASigner
+              entree={entree}
+              clientPageId={clientPageId}
+              autonome={autonome}
+              coachKey={coachKey}
+              onAuthFailure={onAuthFailure}
+              onSigne={onSigne}
+            />
           </div>
         )
       })}
@@ -256,7 +364,7 @@ function ReponsesFiche({ fiche, clientPageId, coachKey, onAuthFailure }) {
 }
 
 // Fiches regroupees par module, comme « Mon parcours » cote client.
-function FichesParModule({ fiches, clientPageId, coachKey, onAuthFailure }) {
+function FichesParModule({ fiches, clientPageId, autonome, aRelire = [], coachKey, onAuthFailure, onSigne }) {
   const [ouverte, setOuverte] = useState(null)
   const modules = []
   for (const fiche of fiches) {
@@ -304,6 +412,7 @@ function FichesParModule({ fiches, clientPageId, coachKey, onAuthFailure }) {
                       <span className="module-fiche-titre">
                         {titreFiche}
                         {fiche.priorite?.type === 'prioritaire' && <span className="coach-prioritaire"> · prioritaire</span>}
+                        {!autonome && aRelire.includes(fiche.id) && <span className="coach-puce coach-puce-attente coach-fiche-relire">À relire</span>}
                       </span>
                       <span className="coach-fiche-etat" style={{ color: STATUT_COULEURS[fiche.etat] || 'var(--text-tertiary)' }}>
                         {bloquee ? 'Pas encore ouverte' : fiche.etat || 'Pas commencé'}
@@ -311,7 +420,7 @@ function FichesParModule({ fiches, clientPageId, coachKey, onAuthFailure }) {
                     </button>
                     {estOuverte && (
                       <div className="coach-fiche-reponses">
-                        <ReponsesFiche fiche={fiche} clientPageId={clientPageId} coachKey={coachKey} onAuthFailure={onAuthFailure} />
+                        <ReponsesFiche fiche={fiche} clientPageId={clientPageId} autonome={autonome} coachKey={coachKey} onAuthFailure={onAuthFailure} onSigne={onSigne} />
                       </div>
                     )}
                   </li>
@@ -348,6 +457,190 @@ function TableauKpi({ kpis }) {
   )
 }
 
+// --- Compte rendu apres chaque point (29/10/2026) ----------------------------------
+// Rony dicte ou tape ses notes, Idris peut les mettre en forme, l'eleve
+// retrouve le resume et ses engagements sur son tableau de bord.
+
+function aujourdhuiIso() {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+function FormulaireCompteRendu({ eleve, coachKey, onAuthFailure, onFerme, onEnvoye }) {
+  const [datePoint, setDatePoint] = useState(aujourdhuiIso())
+  const [notes, setNotes] = useState('')
+  const [resume, setResume] = useState('')
+  const [engagements, setEngagements] = useState([''])
+  const [envoi, setEnvoi] = useState('')
+  const [message, setMessage] = useState('')
+  const prenom = (eleve.nom || '').split(' ')[0]
+
+  async function mettreEnForme() {
+    setEnvoi('forme')
+    setMessage('')
+    const r = await appelAgenda('/coach/comptes-rendus/mise-en-forme', coachKey, onAuthFailure, {
+      method: 'POST',
+      body: JSON.stringify({ notes, prenom }),
+    })
+    setEnvoi('')
+    if (r.erreur !== undefined) return setMessage(r.erreur || "Idris n'a pas pu mettre vos notes en forme. Écrivez le résumé vous-même.")
+    setResume(r.data.resume || '')
+    setEngagements(r.data.engagements?.length ? r.data.engagements : [''])
+  }
+
+  async function envoyer() {
+    setEnvoi('envoi')
+    setMessage('')
+    const r = await appelAgenda(`/coach/eleves/${eleve.client_page_id}/comptes-rendus`, coachKey, onAuthFailure, {
+      method: 'POST',
+      body: JSON.stringify({ resume: resume || notes, engagements: engagements.filter((e) => e.trim()), date_point: datePoint }),
+    })
+    setEnvoi('')
+    if (r.erreur !== undefined) return setMessage(r.erreur)
+    onEnvoye(r.data)
+  }
+
+  const changerEngagement = (i, valeur) => setEngagements((liste) => liste.map((e, j) => (j === i ? valeur : e)))
+
+  return (
+    <div className="energie-carte compte-rendu-formulaire">
+      <div className="coach-signature-entete">
+        <p className="energie-surtitre">Compte rendu du point avec {prenom || "l'élève"}</p>
+        <button type="button" className="coach-bouton-icone" onClick={onFerme} aria-label="Fermer" title="Fermer"><X size={15} /></button>
+      </div>
+
+      <label className="coach-signature-label" htmlFor="cr-date">Date du point</label>
+      <input id="cr-date" type="date" className="field-input compte-rendu-date" value={datePoint} onChange={(e) => setDatePoint(e.target.value)} />
+
+      <label className="coach-signature-label" htmlFor="cr-notes">Vos notes (dictées ou tapées, en vrac)</label>
+      <textarea
+        id="cr-notes"
+        className="field-input"
+        rows={5}
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Ce qu'on a vu, ce qui bloque, ce qu'il s'engage à faire d'ici le prochain point…"
+      />
+      <div className="compte-rendu-outils">
+        <DicteeVocale value={notes} onChange={setNotes} libelle="Dicter vos notes" />
+        <button type="button" className="resultats-bouton" disabled={!notes.trim() || Boolean(envoi)} onClick={mettreEnForme}>
+          <Sparkles size={14} aria-hidden="true" /> {envoi === 'forme' ? 'Idris met en forme…' : 'Mettre en forme avec Idris'}
+        </button>
+      </div>
+
+      <label className="coach-signature-label" htmlFor="cr-resume">Résumé pour l'élève</label>
+      <textarea
+        id="cr-resume"
+        className="field-input"
+        rows={4}
+        value={resume}
+        onChange={(e) => setResume(e.target.value)}
+        placeholder="Laissé vide, vos notes sont envoyées telles quelles."
+      />
+
+      <p className="coach-signature-label">Ses engagements d'ici le prochain point</p>
+      <ul className="compte-rendu-engagements">
+        {engagements.map((e, i) => (
+          <li key={i}>
+            <input
+              type="text"
+              className="field-input"
+              value={e}
+              maxLength={200}
+              onChange={(ev) => changerEngagement(i, ev.target.value)}
+              placeholder={i === 0 ? 'Ex. : Appeler 5 prospects d’ici mercredi' : 'Autre engagement'}
+              aria-label={`Engagement ${i + 1}`}
+            />
+            {engagements.length > 1 && (
+              <button type="button" className="coach-bouton-icone" onClick={() => setEngagements((l) => l.filter((_, j) => j !== i))} aria-label="Retirer" title="Retirer"><X size={14} /></button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {engagements.length < 5 && (
+        <button type="button" className="coach-lien-ajout" onClick={() => setEngagements((l) => [...l, ''])}>
+          <Plus size={14} aria-hidden="true" /> Ajouter un engagement
+        </button>
+      )}
+
+      <div className="coach-signature-actions">
+        <button
+          type="button"
+          className="fiche-bouton"
+          disabled={Boolean(envoi) || (!resume.trim() && !notes.trim() && !engagements.some((e) => e.trim()))}
+          onClick={envoyer}
+        >
+          {envoi === 'envoi' ? 'Envoi…' : "Envoyer à l'élève"}
+        </button>
+      </div>
+      {message && <p className="agenda-message" role="status">{message}</p>}
+    </div>
+  )
+}
+
+function ComptesRendus({ eleve, comptesRendus, coachKey, onAuthFailure, onAjoute }) {
+  const [ouvert, setOuvert] = useState(false)
+  const [message, setMessage] = useState('')
+
+  return (
+    <Section
+      titre="Comptes rendus de points"
+      action={!ouvert && (
+        <button type="button" className="resultats-bouton" onClick={() => { setOuvert(true); setMessage('') }}>
+          <NotebookPen size={15} aria-hidden="true" /> Écrire le compte rendu
+        </button>
+      )}
+    >
+      {ouvert && (
+        <FormulaireCompteRendu
+          eleve={eleve}
+          coachKey={coachKey}
+          onAuthFailure={onAuthFailure}
+          onFerme={() => setOuvert(false)}
+          onEnvoye={(cr) => {
+            setOuvert(false)
+            setMessage("Envoyé. L'élève le retrouve sur son tableau de bord.")
+            onAjoute(cr)
+          }}
+        />
+      )}
+      {message && <p className="agenda-message" role="status">{message}</p>}
+      {comptesRendus.length ? (
+        <div className="space-y-3">
+          {comptesRendus.slice(0, 6).map((cr) => {
+            const tenus = cr.engagements.filter((e) => e.fait).length
+            return (
+              <div key={cr.id} className="energie-carte compte-rendu">
+                <div className="coach-signature-entete">
+                  <p className="energie-surtitre">Point du {dateFr(cr.date_point)}</p>
+                  {cr.engagements.length > 0 && (
+                    <span className={`coach-puce ${tenus === cr.engagements.length ? 'coach-puce-ok' : 'coach-puce-neutre'}`}>
+                      {tenus}/{cr.engagements.length} tenus
+                    </span>
+                  )}
+                </div>
+                {cr.resume && <p className="text-sm whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>{cr.resume}</p>}
+                {cr.engagements.length > 0 && (
+                  <ul className="compte-rendu-suivi">
+                    {cr.engagements.map((e) => (
+                      <li key={e.id} className={e.fait ? 'compte-rendu-tenu' : undefined}>
+                        {e.fait ? <CheckCircle2 size={15} aria-hidden="true" /> : <Circle size={15} aria-hidden="true" />}
+                        <span>{e.texte}</span>
+                        <small>{e.fait ? 'tenu' : 'pas encore'}</small>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ) : !ouvert && <Vide>Aucun compte rendu pour l'instant. Après chaque point, écrivez-en un : l'élève retrouve ses engagements sur son tableau de bord.</Vide>}
+    </Section>
+  )
+}
+
 function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRetour, onRdv }) {
   const [etat, setEtat] = useState({ chargement: true })
   const [detailKpi, setDetailKpi] = useState(false)
@@ -372,6 +665,9 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
   const kpis = Array.isArray(d?.kpi) ? d.kpi : []
   const jour = d?.rythme ? d.rythme.jour : null
   const fichesFaites = d ? d.fiches.filter((f) => f.etat === 'Terminé').length : 0
+  const autonome = eleve.parcours === 'Autonome'
+  const [comptesRendusAjoutes, setComptesRendusAjoutes] = useState([])
+  const comptesRendus = [...comptesRendusAjoutes, ...(etat.data?.comptes_rendus || []).filter((c) => !comptesRendusAjoutes.some((a) => a.id === c.id))]
 
   return (
     <div>
@@ -434,6 +730,16 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
             onPlanifier={onRdv ? (p) => setPlanifier(rdvPourPoint(p, { ...eleve, parcours: points.parcours })) : null}
           />
         </Section>
+      )}
+
+      {d && !autonome && (
+        <ComptesRendus
+          eleve={eleve}
+          comptesRendus={comptesRendus}
+          coachKey={coachKey}
+          onAuthFailure={onAuthFailure}
+          onAjoute={(cr) => setComptesRendusAjoutes((l) => [cr, ...l])}
+        />
       )}
 
       {etat.chargement && !d && <Vide>Chargement...</Vide>}
@@ -501,7 +807,14 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
           </Section>
 
           <Section titre="Ses fiches">
-            <FichesParModule fiches={d.fiches} clientPageId={eleve.client_page_id} coachKey={coachKey} onAuthFailure={onAuthFailure} />
+            <FichesParModule
+              fiches={d.fiches}
+              clientPageId={eleve.client_page_id}
+              autonome={autonome}
+              aRelire={eleve.fiches_a_relire || []}
+              coachKey={coachKey}
+              onAuthFailure={onAuthFailure}
+            />
           </Section>
 
           <div className="energie-grille coach-section">

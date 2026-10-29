@@ -1693,7 +1693,7 @@ def _donnees_vers_cles(donnees: dict, champs: list[dict]) -> dict:
     return resultat
 
 
-def _parse_entry(page: dict, champs: list[dict]) -> dict:
+def _parse_entry(page: dict, champs: list[dict], pour_coach: bool = False) -> dict:
     props = page.get("properties", {})
     donnees_raw = _prop_value(_prop(props, "Donnees (JSON)")) or _prop_value(_prop(props, "Données (JSON)")) or "{}"
 
@@ -1706,7 +1706,7 @@ def _parse_entry(page: dict, champs: list[dict]) -> dict:
         "id": page["id"],
         "date": _prop_value(_prop(props, "Date")),
         "donnees": _donnees_vers_cles(donnees, champs),
-        "retour_ia": _retour_ia_visible(props),
+        "retour_ia": _retour_ia_coach(props) if pour_coach else _retour_ia_visible(props),
     }
 
 
@@ -1943,7 +1943,7 @@ def _segments_recurrents(master_id: str, schema: dict) -> list[dict] | None:
     return resultat
 
 
-def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
+def get_fiche(fiche_client_id: str, client_page_id: str, pour_coach: bool = False) -> dict:
     schema, nom, master_id = _fiche_schema_for(fiche_client_id)
     mode = schema["mode"]
 
@@ -2019,7 +2019,7 @@ def get_fiche(fiche_client_id: str, client_page_id: str) -> dict:
     champs = _champs_for(schema, master_id, segments)
 
     entries_raw = entries_future.result()
-    entries = [_parse_entry(page, champs) for page in entries_raw]
+    entries = [_parse_entry(page, champs, pour_coach) for page in entries_raw]
     entries.sort(key=lambda entry: entry.get("date") or "")
 
     # L'etat des cases a cocher est memorise dans une entree speciale : elle
@@ -3160,6 +3160,8 @@ def reporter_bilans_dans_kpi(client_page_id: str, fiche_client_id: str) -> bool:
 # texte. Autonome : publie tout de suite. Coaching : "A relire", visible par le
 # client apres _DELAI_RELECTURE_RETOUR_IA sauf si Rony le passe a "Bloque".
 _DELAI_RELECTURE_RETOUR_IA_H = 12
+# Meme libelle que comptes_rendus_service.NOM_COMPTE_RENDU (pas d'import circulaire).
+_NOM_COMPTE_RENDU = "Compte rendu de point"
 _FICHES_SANS_RETOUR_IA = _DIAGNOSTIC_ZONE_IDS | {_DIAGNOSTIC_FICHE8_MASTER_ID} | {
     master_id for master_id, schema in FICHE_SCHEMAS.items() if schema["nom"].startswith("Bonus")
 }
@@ -3212,14 +3214,28 @@ def _lignes_historique_bilans(historique: list[dict]) -> list[str]:
     return lignes
 
 
+def _signature_coach(props: dict) -> tuple[str, str | None]:
+    # Retours signes (29/10/2026) : le mot de Rony et la date ou il a valide
+    # le retour depuis l'Espace Coach.
+    mot = (_prop_value(_prop(props, "Mot du coach")) or "").strip()
+    return mot, _prop_value(_prop(props, "Retour validé le"))
+
+
 def _retour_ia_visible(props: dict) -> dict | None:
     # Ce que le client peut voir du retour IA de cette entree.
     statut = _prop_value(_prop(props, "Retour IA statut"))
     texte = (_prop_value(_prop(props, "Retour IA")) or "").strip()
     date = _prop_value(_prop(props, "Retour IA date"))
+    mot, valide_le = _signature_coach(props)
 
     if statut == "À générer":
         return {"statut": "en_cours"}
+
+    if statut == "Bloqué":
+        # Retour d'Idris ecarte par Rony : l'eleve ne lit que son mot, s'il en a laisse un.
+        if not mot or not valide_le:
+            return None
+        return {"statut": "publie", "texte": None, "date": valide_le, "mot_coach": mot, "valide_par_coach": True}
 
     if not texte or statut not in ("Publié", "À relire"):
         return None
@@ -3236,7 +3252,98 @@ def _retour_ia_visible(props: dict) -> dict | None:
         if (datetime.now(timezone.utc) - ecrit).total_seconds() < _DELAI_RELECTURE_RETOUR_IA_H * 3600:
             return {"statut": "relecture"}
 
-    return {"statut": "publie", "texte": texte, "date": date}
+    return {
+        "statut": "publie", "texte": texte, "date": valide_le or date,
+        "mot_coach": mot or None, "valide_par_coach": bool(valide_le),
+    }
+
+
+def _retour_ia_coach(props: dict) -> dict | None:
+    """Ce que Rony voit dans l'Espace Coach : le texte complet, meme pendant la
+    relecture, et ce que l'eleve en voit deja."""
+    statut = _prop_value(_prop(props, "Retour IA statut"))
+    texte = (_prop_value(_prop(props, "Retour IA")) or "").strip()
+    mot, valide_le = _signature_coach(props)
+
+    if statut == "À générer":
+        return {"statut": "en_cours"}
+
+    if statut not in ("À relire", "Publié", "Bloqué") or (not texte and not mot):
+        return None
+
+    visible = _retour_ia_visible(props) or {}
+    return {
+        "statut": {"À relire": "a_relire", "Publié": "publie", "Bloqué": "bloque"}[statut],
+        "texte": texte,
+        "date": _prop_value(_prop(props, "Retour IA date")),
+        "mot_coach": mot or None,
+        "valide_le": valide_le,
+        "visible_eleve": visible.get("statut") == "publie",
+    }
+
+
+def client_de_fiche(fiche_client_id: str) -> tuple[str | None, str | None]:
+    """(client_page_id, master_id) d'une fiche client : sert a prevenir
+    l'eleve quand Rony valide sa fiche depuis l'Espace Coach."""
+    props = _get_page(fiche_client_id).get("properties", {})
+    return _relation_id(props, "\u2060[DB] Clients\u2060"), _resolve_master_id(props)
+
+
+class RetourNonAutorise(LookupError):
+    pass
+
+
+def _textes_riches(texte: str, maximum: int) -> list[dict]:
+    texte = (texte or "")[:maximum]
+    return [{"text": {"content": texte[i:i + 2000]}} for i in range(0, len(texte), 2000)]
+
+
+def signer_retour(entry_id: str, client_page_id: str, action: str, texte: str | None = None, mot: str | None = None) -> dict:
+    """Espace Coach : Rony publie (avec ou sans correction) ou bloque le retour
+    d'Idris, et peut y ajouter son mot. Coaching et Atelier seulement : en
+    Autonome, Idris publie seul (decision de Rony du 29/10/2026)."""
+    if action not in ("publier", "bloquer"):
+        raise ValueError("Action inconnue")
+
+    page = _get_page(entry_id)
+    props = page.get("properties", {})
+    clients = [c.replace("-", "") for c in (_prop_value(_prop(props, "Client")) or [])]
+
+    if client_page_id.replace("-", "") not in clients:
+        raise RetourNonAutorise("Entrée d'un autre élève")
+
+    client = _get_page(client_page_id)
+
+    if _est_parcours_autonome(_prop_value(_prop(client.get("properties", {}), "Parcours"))):
+        raise RetourNonAutorise("Formule Autonome : Idris publie seul")
+
+    mot = (mot or "").strip()
+    texte = ia_service.humaniser((texte or "").strip()) if texte is not None else None
+    actuel = (_prop_value(_prop(props, "Retour IA")) or "").strip()
+
+    if action == "publier" and not (texte or actuel or mot):
+        raise ValueError("Rien à publier")
+
+    if action == "bloquer" and not mot:
+        valide_le = None
+    else:
+        valide_le = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    proprietes = {
+        "Retour IA statut": {"select": {"name": "Publié" if action == "publier" else "Bloqué"}},
+        "Mot du coach": {"rich_text": _textes_riches(mot, 2000)},
+        "Retour validé le": {"date": {"start": valide_le} if valide_le else None},
+    }
+
+    if action == "publier" and texte is not None and texte != actuel:
+        proprietes["Retour IA"] = {"rich_text": _textes_riches(texte, 4000)}
+
+    mise_a_jour = _update_page(entry_id, proprietes)
+    _cache_clear(f"retours_idris:{client_page_id}")
+    _cache_clear("dashboard:")
+    fiche_id = _relation_id(props, "Fiche Client")
+    nouveau = {**props, **((mise_a_jour or {}).get("properties") or {})}
+    return {"fiche_id": fiche_id, "retour_ia": _retour_ia_coach(nouveau) if (mise_a_jour or {}).get("properties") else None}
 
 
 def _relation_id(props: dict, nom: str) -> str | None:
@@ -3260,6 +3367,7 @@ def retours_idris_publies(client_page_id: str) -> list[dict]:
             {"or": [
                 {"property": "Retour IA statut", "select": {"equals": "Publié"}},
                 {"property": "Retour IA statut", "select": {"equals": "À relire"}},
+                {"property": "Retour IA statut", "select": {"equals": "Bloqué"}},
             ]},
         ]},
         sorts=[{"timestamp": "last_edited_time", "direction": "descending"}],
@@ -3273,7 +3381,9 @@ def retours_idris_publies(client_page_id: str) -> list[dict]:
         if not visible or visible.get("statut") != "publie":
             continue
 
-        retours.append({"id": entree["id"], "fiche_id": _relation_id(props, "Fiche Client"), "date": visible.get("date")})
+        # Un retour signe par Rony apres coup redevient « nouveau » pour l'eleve.
+        cle_vue = f"{entree['id']}:{visible['date']}" if visible.get("valide_par_coach") else entree["id"]
+        retours.append({"id": cle_vue, "fiche_id": _relation_id(props, "Fiche Client"), "date": visible.get("date")})
 
     return _cache_set(cle, retours, 30)
 
@@ -3353,6 +3463,19 @@ def _prompt_retour_ia(entree: dict) -> dict | None:
         if historique:
             lignes.append("")
             lignes.extend(_lignes_historique_bilans(historique))
+
+        # Engagements pris avec Rony au dernier point (29/10/2026).
+        try:
+            from backend.services import comptes_rendus_service
+
+            engagements = comptes_rendus_service.lignes_pour_bilan(client_ids[0])
+        except Exception as error:
+            logger.warning("Engagements du dernier point illisibles (%s).", error)
+            engagements = []
+
+        if engagements:
+            lignes.append("")
+            lignes.extend(engagements)
 
     lignes.append("")
     lignes.append("Ses réponses :")
@@ -3487,6 +3610,8 @@ def _relance_du_client(row: dict, maintenant: datetime) -> dict | None:
         ENTREES_PORTAIL_DATA_SOURCE_ID,
         filter_={"property": "Client", "relation": {"contains": row["id"]}},
     )
+    # Un compte rendu ecrit par Rony n'est pas une activite de l'eleve.
+    entrees = [e for e in entrees if _NOM_COMPTE_RENDU not in str(_prop_value(_prop(e.get("properties", {}), "Nom")) or "")]
     activite = [_jours_depuis_iso(e.get("last_edited_time"), maintenant) for e in entrees]
     activite = [j for j in activite if j is not None]
     inactif = min(activite) if activite else jour
