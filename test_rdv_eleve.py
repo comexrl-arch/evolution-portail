@@ -65,7 +65,7 @@ code, rep, _ = points_eleve("Autonome", "2026-09-21", [rdv])
 planifies = [p for p in rep["points"] if p["statut"] == "planifie"]
 check("Autonome (pas de points individuels au rythme) : le RDV apparait quand meme",
       code == 200 and len(planifies) == 1 and planifies[0]["type"] == "individuel"
-      and planifies[0]["evenement"] == {"debut": "2026-10-28T11:00", "fin": "2026-10-28T12:00", "lieu": "Meet"})
+      and planifies[0]["evenement"] == {"debut": "2026-10-28T11:00", "fin": "2026-10-28T12:00", "lieu": "Meet", "annulable": False})
 check("jour de parcours et duree calcules", planifies[0]["jour"] == 37 and planifies[0]["duree"] == 60)
 
 code, rep, lecture = points_eleve("Coaching 90 jours", None, [rdv])

@@ -7013,3 +7013,15 @@ button.eleve-carte:hover {
   align-items: center;
   gap: 0.4rem;
 }
+
+/* Reservation d'un RDV par l'eleve (29/10/2026). */
+.reserver-rdv { margin-top: 1rem; }
+.reserver-rdv .panel-eyebrow { display: flex; align-items: center; gap: 0.4rem; }
+.reserver-texte { margin: 0 0 0.7rem; font-size: 0.88rem; color: var(--text-secondary); }
+.reserver-jour { margin-bottom: 0.5rem; }
+.reserver-jour-nom { margin: 0 0 0.3rem; font-size: 0.8rem; font-weight: 700; color: var(--text-primary); }
+.reserver-jour-nom::first-letter { text-transform: uppercase; }
+.reserver-confirmation { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.6rem 0; font-size: 0.88rem; font-weight: 600; }
+.reserver-lien { padding: 0.3rem 0; border: 0; background: none; color: var(--accent); font-size: 0.8rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.reserver-annuler { margin-top: 0.4rem; }
+.reserver-erreur { margin: 0.5rem 0 0; font-size: 0.82rem; color: #B42318; }

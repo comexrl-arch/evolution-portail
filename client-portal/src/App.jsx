@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { formaterMaj } from './dates'
 import { ArrowLeft, Award, BookOpen, CalendarDays, CheckCircle2, ChevronDown, ChevronRight, Compass, Copy, Library, Link2, ListChecks, LayoutDashboard, Loader2, Lock, Mail, Map as IconeCarte, MapPin, Menu, MessageCircle, Mic, Phone, PlayCircle, Printer, Quote, Share2, Smartphone, Rocket, Sparkles, Star, Target, UserRound, Users, X } from 'lucide-react'
 import logo from './assets/logo.svg'
@@ -2177,7 +2177,7 @@ function ProchaineSession({ sessions, onVoir }) {
 // « Mes prochains points » (28/10/2026) : les RDV avec Rony poses dans son
 // agenda, et le point suivant suggere selon le jour de parcours. Les points
 // viennent de useNouveautesEleve ; un RDV nouveau ou deplace porte un badge.
-function MesPoints({ points, nouveaux = [], onVu }) {
+function MesPoints({ points, nouveaux = [], onVu, onChange }) {
   // Ce qui etait nouveau a l'affichage le reste a l'ecran, puis devient « vu ».
   const [marques, setMarques] = useState(() => new Set())
   useEffect(() => {
@@ -2203,6 +2203,177 @@ function MesPoints({ points, nouveaux = [], onVu }) {
       <p className="panel-eyebrow"><CalendarDays size={14} /> Mes prochains points</p>
       <ListePoints points={affiches} nouveaux={marques} />
       {suivant && !avenir.length && <p className="mes-points-note">Rony te confirme la date et l'heure.</p>}
+      {avenir.filter((p) => p.evenement.annulable && p.evenement.id).slice(0, 3).map((p) => (
+        <AnnulerReservation key={p.evenement.id} evenement={p.evenement} onAnnule={onChange} />
+      ))}
+    </section>
+  )
+}
+
+// --- Reservation d'un RDV par l'eleve (29/10/2026) : creneaux libres de Rony,
+// calcules par le serveur (reservation_service). ---
+
+const JOURS_SEMAINE = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+const MOIS_ANNEE = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+function jourCreneau(dateHeure) {
+  const [a, m, j] = dateHeure.slice(0, 10).split('-').map(Number)
+  const d = new Date(a, m - 1, j)
+  return `${JOURS_SEMAINE[d.getDay()]} ${j} ${MOIS_ANNEE[m - 1]}`
+}
+
+function heureCreneau(dateHeure) {
+  const [h, m] = dateHeure.slice(11, 16).split(':')
+  return `${Number(h)} h${m === '00' ? '' : ` ${m}`}`
+}
+
+async function appelReservation(chemin, options = {}) {
+  try {
+    const res = await fetch(`${API_BASE}${chemin}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem(SESSION_KEY)}`,
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { erreur: typeof data.detail === 'string' ? data.detail : 'Réservation momentanément indisponible. Réessaie dans quelques minutes.' }
+    return { data }
+  } catch {
+    return { erreur: 'Connexion impossible. Vérifie le réseau et réessaie.' }
+  }
+}
+
+function AnnulerReservation({ evenement, onAnnule }) {
+  const [confirmer, setConfirmer] = useState(false)
+  const [envoi, setEnvoi] = useState(false)
+  const [erreur, setErreur] = useState('')
+
+  const annuler = async () => {
+    setEnvoi(true)
+    setErreur('')
+    const r = await appelReservation(`/portal/creneaux/${encodeURIComponent(evenement.id)}`, { method: 'DELETE' })
+    setEnvoi(false)
+    if (r.erreur) { setErreur(r.erreur); return }
+    onAnnule?.()
+  }
+
+  return (
+    <div className="reserver-annuler">
+      {!confirmer ? (
+        <button type="button" className="reserver-lien" onClick={() => setConfirmer(true)}>
+          Annuler mon RDV du {jourCreneau(evenement.debut)}
+        </button>
+      ) : (
+        <p className="reserver-confirmation">
+          Annuler ton RDV du {jourCreneau(evenement.debut)} à {heureCreneau(evenement.debut)} ?
+          <button type="button" className="resultats-bouton" onClick={annuler} disabled={envoi}>{envoi ? 'Annulation…' : 'Oui, annuler'}</button>
+          <button type="button" className="reserver-lien" onClick={() => setConfirmer(false)} disabled={envoi}>Garder mon RDV</button>
+        </p>
+      )}
+      {erreur && <p className="reserver-erreur">{erreur}</p>}
+    </div>
+  )
+}
+
+function ReserverRdv({ points, onReserve }) {
+  const [etat, setEtat] = useState(null)
+  const [ouvert, setOuvert] = useState(false)
+  const [choix, setChoix] = useState(null)
+  const [envoi, setEnvoi] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const [fait, setFait] = useState(null)
+
+  const relire = useCallback(async () => {
+    const r = await appelReservation('/portal/creneaux')
+    setEtat(r.data || { possible: false, raison: 'indisponible', creneaux: [] })
+  }, [])
+
+  // Relu quand les points changent (RDV pose ou annule, par Rony ou par l'eleve).
+  useEffect(() => { if (points) relire() }, [points, relire])
+
+  const parJour = useMemo(() => {
+    const groupes = []
+    for (const c of etat?.creneaux || []) {
+      const jour = c.debut.slice(0, 10)
+      const dernier = groupes[groupes.length - 1]
+      if (dernier?.jour === jour) dernier.creneaux.push(c)
+      else groupes.push({ jour, creneaux: [c] })
+    }
+    return groupes
+  }, [etat])
+
+  const reserver = async () => {
+    setEnvoi(true)
+    setErreur('')
+    const r = await appelReservation('/portal/creneaux', { method: 'POST', body: JSON.stringify({ debut: choix.debut }) })
+    setEnvoi(false)
+    if (r.erreur) {
+      setErreur(r.erreur)
+      setChoix(null)
+      relire()
+      return
+    }
+    setFait(r.data)
+    setChoix(null)
+    setOuvert(false)
+    onReserve?.()
+  }
+
+  if (fait) {
+    return (
+      <section className="panel reserver-rdv">
+        <p className="panel-eyebrow"><CheckCircle2 size={14} /> RDV réservé</p>
+        <p className="reserver-texte">C'est noté : {jourCreneau(fait.debut)} à {heureCreneau(fait.debut)}. Rony le retrouve dans son agenda.</p>
+        <button type="button" className="reserver-lien" onClick={() => setFait(null)}>OK</button>
+      </section>
+    )
+  }
+
+  // Formule sans RDV individuel, RDV deja pose ou agenda indisponible : rien a montrer.
+  if (!etat || !(etat.possible || etat.raison === 'complet')) return null
+
+  return (
+    <section className="panel reserver-rdv">
+      <p className="panel-eyebrow"><CalendarDays size={14} /> Réserver un RDV avec Rony</p>
+      {etat.raison === 'complet' ? (
+        <p className="reserver-texte">Pas de créneau libre dans les 3 prochaines semaines. Écris à Rony pour trouver un moment.</p>
+      ) : !ouvert ? (
+        <>
+          <p className="reserver-texte">Choisis toi-même ton prochain RDV ({etat.duree} min) parmi les créneaux libres de Rony.</p>
+          <button type="button" className="resultats-bouton" onClick={() => setOuvert(true)}>Voir les créneaux</button>
+        </>
+      ) : (
+        <>
+          {parJour.map((g) => (
+            <div key={g.jour} className="reserver-jour">
+              <p className="reserver-jour-nom">{jourCreneau(g.jour)}</p>
+              <div className="agenda-libres-choix">
+                {g.creneaux.map((c) => (
+                  <button
+                    key={c.debut}
+                    type="button"
+                    className={`agenda-libre-puce${choix?.debut === c.debut ? ' agenda-libre-puce-active' : ''}`}
+                    onClick={() => { setChoix(c); setErreur('') }}
+                  >
+                    {heureCreneau(c.debut)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          {choix ? (
+            <p className="reserver-confirmation">
+              {jourCreneau(choix.debut)} à {heureCreneau(choix.debut)}, {etat.duree} min.
+              <button type="button" className="resultats-bouton" onClick={reserver} disabled={envoi}>{envoi ? 'Réservation…' : 'Confirmer ce RDV'}</button>
+            </p>
+          ) : (
+            <p className="mes-points-note">Touche un horaire pour le choisir. Tu pourras annuler jusqu'à 24 h avant.</p>
+          )}
+          <button type="button" className="reserver-lien" onClick={() => { setOuvert(false); setChoix(null) }}>Fermer</button>
+        </>
+      )}
+      {erreur && <p className="reserver-erreur">{erreur}</p>}
     </section>
   )
 }
@@ -4721,7 +4892,8 @@ function Portail() {
               />
 
               {/* RDV avec Rony juste sous le cap 90 jours (demande de Rony, 28/10/2026). */}
-              <MesPoints points={nouveautes.points} nouveaux={nouveautes.rdvNouveaux} onVu={nouveautes.marquerRdvVus} />
+              <MesPoints points={nouveautes.points} nouveaux={nouveautes.rdvNouveaux} onVu={nouveautes.marquerRdvVus} onChange={nouveautes.relire} />
+              <ReserverRdv points={nouveautes.points} onReserve={nouveautes.relire} />
 
               <ProchaineEtape
                 module={moduleEnCours}
