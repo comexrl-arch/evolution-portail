@@ -7667,6 +7667,18 @@ p.question-rony-attente { margin: 0.35rem 0 0; color: var(--text-tertiary); font
   padding: 0 1.1rem 1.1rem;
 }
 
+.coach-sous-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: var(--border-subtle);
+}
+
+.coach-sous-titre {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .coach-avis-note {
   display: flex;
   align-items: center;
