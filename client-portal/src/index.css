@@ -7026,3 +7026,278 @@ button.eleve-carte:hover {
 .reserver-annuler { margin-top: 0.4rem; }
 .reserver-erreur { margin: 0.5rem 0 0; font-size: 0.82rem; color: #B42318; }
 .coach-notif-aide { margin: 0.4rem 0.9rem 0; font-size: 0.75rem; line-height: 1.4; color: rgba(255, 255, 255, 0.7); }
+
+/* --- Retours signés et comptes rendus (29/10/2026) : « Idris prépare, Rony signe » --- */
+
+.retour-valide-rony {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0 3.25rem;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.mot-rony {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin: 0.9rem 0 0;
+  padding: 0.9rem 1rem;
+  border: var(--border-subtle);
+  border-left: 3px solid var(--brand-gold-metal);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.mot-rony-avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--brand-gold);
+  color: #FFFFFF;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.mot-rony-corps { min-width: 0; flex: 1; }
+
+.mot-rony-surtitre {
+  margin: 0 0 0.3rem;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mot-rony-texte {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.mot-rony-signature {
+  margin-top: 0.45rem;
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+}
+
+.engagements-entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.engagements-compteur {
+  padding: 0.16rem 0.6rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.engagements-date {
+  margin: 0.2rem 0 0;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.engagements .mot-rony { margin-top: 0.7rem; }
+
+.engagements-liste {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.engagement {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.engagement:hover { border-color: var(--brand-gold-metal); }
+
+.engagement-case {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.05rem;
+  border: 1.5px solid var(--brand-line-strong);
+  border-radius: 50%;
+  color: var(--success);
+}
+
+.engagement-fait { background: var(--success-soft); }
+.engagement-fait .engagement-case { border-color: transparent; }
+.engagement-fait span:last-child { color: var(--text-secondary); text-decoration: line-through; text-decoration-color: rgba(47, 107, 79, 0.45); }
+
+.engagements-aide {
+  margin: 0.6rem 0 0;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.coach-signature {
+  margin-top: 0.75rem;
+  padding: 0.8rem 0.85rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.coach-signature-entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.coach-signature-entete .energie-surtitre { margin: 0; }
+
+.coach-signature-label {
+  display: block;
+  margin: 0.7rem 0 0.3rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.coach-signature textarea,
+.compte-rendu-formulaire textarea { width: 100%; resize: vertical; font-size: 0.88rem; line-height: 1.5; }
+
+.coach-signature-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+.coach-signature-modifier { margin-top: 0.7rem; }
+
+.coach-signature-attente {
+  margin-top: 0.6rem;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.coach-mot {
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid var(--brand-gold-metal);
+  background: var(--surface-2);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.coach-mot .coach-signature-label { margin-top: 0; }
+
+.coach-fiche-relire { margin-left: 0.4rem; vertical-align: middle; }
+
+.compte-rendu-formulaire { margin-bottom: 1rem; }
+.compte-rendu-date { max-width: 12rem; }
+
+.compte-rendu-outils {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.compte-rendu-outils .dictee { margin: 0; }
+
+.compte-rendu-engagements {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compte-rendu-engagements li { display: flex; gap: 0.4rem; align-items: center; }
+.compte-rendu-engagements input { flex: 1; min-width: 0; }
+
+.coach-lien-ajout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+  color: var(--accent);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.compte-rendu-suivi {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.compte-rendu-suivi li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+}
+
+.compte-rendu-suivi li svg { flex: none; margin-top: 0.12rem; color: var(--text-tertiary); }
+.compte-rendu-suivi li span { flex: 1; }
+.compte-rendu-suivi li small { color: var(--text-tertiary); white-space: nowrap; }
+.compte-rendu-suivi .compte-rendu-tenu svg,
+.compte-rendu-suivi .compte-rendu-tenu small { color: var(--success); }
+
+@media (max-width: 640px) {
+  .retour-valide-rony { margin-left: 0; }
+  .coach-signature-actions > * { flex: 1 1 100%; text-align: center; justify-content: center; }
+}
+
+.engagements {
+  padding: 1.1rem 1.15rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.engagements-entete .panel-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.engagements .mot-rony { background: var(--surface-3); }
+.engagements .engagement { background: var(--surface-1); }
+.engagements .engagement-fait { background: var(--success-soft); }

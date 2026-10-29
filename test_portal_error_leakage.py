@@ -268,7 +268,7 @@ verifier_503("[K6] /coach/fiches/{id}/diagnostic-champs (GET)", "coach_get_diagn
 verifier_503("[K7] /coach/fiches/{id}/diagnostic-champs (POST)", "coach_update_diagnostic_champs",
              lambda: portal_main.coach_update_diagnostic_champs(FICHE_ID, MAJ, **COACH), (ns, "update_diagnostic_fiche8"))
 verifier_503("[K8] /coach/fiches/{id}/valider", "coach_valider_fiche",
-             lambda: portal_main.coach_valider_fiche(FICHE_ID, **COACH), (ns, "validate_fiche"))
+             lambda: portal_main.coach_valider_fiche(FICHE_ID, MagicMock(), **COACH), (ns, "validate_fiche"))
 verifier_503("[K9] /coach/leads/systeme-io (URL avec l'email recherche)", "coach_leads_systeme_io",
              lambda: portal_main.coach_leads_systeme_io(query=EMAIL, **COACH),
              (systeme_io_service, "search_contacts"), message=MSG_SYSTEME)

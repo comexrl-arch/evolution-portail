@@ -9,14 +9,15 @@
 # - liste() : une ligne légère par élève (3 requêtes Notion par élève).
 # - detail() : le tableau de bord exact de l'élève (get_client_dashboard, le
 #   même calcul que /portal/me) + son carnet + ses bilans hebdomadaires.
-# Lecture seule : le coach ne modifie rien depuis cet onglet.
+# Depuis le 29/10/2026, Rony y signe aussi les retours d'Idris et y écrit le
+# compte rendu de chaque point (comptes_rendus_service).
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from backend.services import notion_service as ns
-from backend.services import prospects_service
+from backend.services import comptes_rendus_service, prospects_service
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +86,15 @@ def _ligne_eleve(row: dict, maintenant: datetime) -> dict:
         filter_={"property": "Client", "relation": {"contains": client_id}},
         sorts=[{"timestamp": "last_edited_time", "direction": "descending"}],
     )
+    # Ce que Rony ecrit lui-meme (comptes rendus de point) n'est pas une saisie de l'eleve.
+    entrees = [e for e in entrees if not comptes_rendus_service.est_compte_rendu(e)]
     derniere_saisie = max((e.get("last_edited_time") or "" for e in entrees), default="") or None
     carnet = next(
         (e for e in entrees if prospects_service.NOM_CARNET in str(ns._prop_value(ns._prop(e.get("properties", {}), "Nom")) or "")),
         None,
     )
-    retours_a_relire = sum(
-        1 for e in entrees if ns._prop_value(ns._prop(e.get("properties", {}), "Retour IA statut")) == "À relire"
-    )
+    a_relire = [e for e in entrees if ns._prop_value(ns._prop(e.get("properties", {}), "Retour IA statut")) == "À relire"]
+    retours_a_relire = len(a_relire)
 
     try:
         connexion = _derniere_connexion(email)
@@ -122,6 +124,7 @@ def _ligne_eleve(row: dict, maintenant: datetime) -> dict:
             s: sum(1 for p in prospects if p.get("statut") == s) for s in prospects_service.STATUTS
         },
         "retours_ia_a_relire": retours_a_relire,
+        "fiches_a_relire": sorted({f for f in (ns._relation_id(e.get("properties", {}), "Fiche Client") for e in a_relire) if f}),
         "derniere_relance": ns._prop_value(ns._prop(props, "Dernière relance")),
         "nb_relances": ns._prop_value(ns._prop(props, "Nb relances")) or 0,
     }
@@ -157,6 +160,21 @@ def liste(maintenant: datetime | None = None) -> list[dict]:
     return eleves
 
 
+def _signe_par_coach(entree: dict) -> bool:
+    # Derniere modification = Rony qui valide le retour : pas une saisie de l'eleve.
+    valide_le = ns._prop_value(ns._prop(entree.get("properties", {}), "Retour validé le"))
+
+    try:
+        ecart = abs(
+            datetime.fromisoformat(str(entree.get("last_edited_time")).replace("Z", "+00:00"))
+            - datetime.fromisoformat(str(valide_le).replace("Z", "+00:00"))
+        )
+    except (TypeError, ValueError):
+        return False
+
+    return ecart <= timedelta(minutes=3)
+
+
 def activite(jours: int = 30, maintenant: datetime | None = None) -> dict[str, str]:
     """Derniere saisie de chaque eleve (fiche, bilan, carnet de prospects) sur
     les `jours` derniers jours : badge « nouveau » de l'Espace Coach. Une seule
@@ -171,6 +189,9 @@ def activite(jours: int = 30, maintenant: datetime | None = None) -> dict[str, s
     dernieres = {}
 
     for entree in entrees:
+        if comptes_rendus_service.est_compte_rendu(entree) or _signe_par_coach(entree):
+            continue
+
         for lien in (entree.get("properties", {}).get("Client") or {}).get("relation") or []:
             quand = entree.get("last_edited_time") or ""
 
@@ -208,6 +229,7 @@ def detail(client_page_id: str, frais: bool = False) -> dict:
     if frais:
         ns._cache_clear(f"dashboard:{client_page_id}")
         ns._cache_clear(f"carnet:{client_page_id}")
+        ns._cache_clear(f"comptes_rendus:{client_page_id}")
 
     dashboard = ns.get_client_dashboard(client_page_id)
     carnet = prospects_service.vue_client(prospects_service.lire(client_page_id, dashboard))
@@ -220,9 +242,18 @@ def detail(client_page_id: str, frais: bool = False) -> dict:
         except RuntimeError as error:
             logger.warning("Bilans illisibles (%s)", ns._resume_erreur(error))
 
+    comptes_rendus = []
+
+    if not ns._est_parcours_autonome(dashboard.get("parcours")):
+        try:
+            comptes_rendus = comptes_rendus_service.lister(client_page_id)
+        except RuntimeError as error:
+            logger.warning("Comptes rendus illisibles (%s)", ns._resume_erreur(error))
+
     return {
         "client_page_id": client_page_id,
         "dashboard": dashboard,
         "carnet": carnet,
         "bilans": bilans,
+        "comptes_rendus": comptes_rendus,
     }

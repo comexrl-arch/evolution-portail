@@ -25,7 +25,7 @@ from backend.services import cockpit_service
 from backend.services import eleves_service
 from backend.services import docuseal_service
 from backend.services import bibliotheque_service, brouillon_service, entrainement_service, fidelite_service, idris_service
-from backend.services import prospects_service, push_service, reservation_service
+from backend.services import comptes_rendus_service, prospects_service, push_service, reservation_service
 from backend.services import login_guard
 from backend.services import notion_service
 from backend.services import portal_auth_service
@@ -885,10 +885,67 @@ def coach_get_fiche(
     _require_coach_key(x_coach_key)
 
     try:
-        return notion_service.get_fiche(fiche_client_id, client_page_id)
+        return notion_service.get_fiche(fiche_client_id, client_page_id, pour_coach=True)
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("coach_get_fiche", error)
+
+
+# --- Retours signes (29/10/2026) : « Idris prepare, Rony signe ». Rony publie,
+# corrige ou bloque le retour d'Idris et peut y laisser son mot. Coaching et
+# Atelier seulement : en Autonome, Idris publie seul. ---
+
+class SignatureRetourRequest(BaseModel):
+    client_page_id: str
+    action: str
+    texte: str | None = None
+    mot: str | None = None
+
+
+@app.post("/coach/entrees/{entry_id}/signature")
+def coach_signer_retour(
+    entry_id: str, request: SignatureRetourRequest, background_tasks: BackgroundTasks, x_coach_key: str = Header(default="")
+):
+    _require_coach_key(x_coach_key)
+
+    try:
+        resultat = notion_service.signer_retour(entry_id, request.client_page_id, request.action, request.texte, request.mot)
+
+    except notion_service.RetourNonAutorise:
+        raise HTTPException(status_code=403, detail="Ce retour ne se signe pas ici (formule Autonome ou autre élève).")
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Rien à publier : écris un retour ou un mot.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_signer_retour", error)
+
+    if (resultat.get("retour_ia") or {}).get("visible_eleve") and (request.action == "publier" or request.mot):
+        background_tasks.add_task(_prevenir_signature, request.client_page_id, resultat.get("fiche_id"), bool((request.mot or "").strip()))
+
+    return resultat
+
+
+def _prevenir_signature(client_page_id: str, fiche_id: str | None, mot: bool) -> None:
+    try:
+        if push_service.enabled():
+            push_service.retour_signe(client_page_id, fiche_id, mot)
+    except Exception as error:
+        _journaliser_alerte_impossible("push_retour_signe", error)
+
+
+def _prevenir_fiche_validee(fiche_client_id: str) -> None:
+    # L'eleve apprend tout de suite que Rony a valide son diagnostic.
+    try:
+        if not push_service.enabled():
+            return
+
+        client_page_id, master_id = notion_service.client_de_fiche(fiche_client_id)
+
+        if client_page_id and master_id == notion_service._DIAGNOSTIC_FICHE8_MASTER_ID:
+            push_service.diagnostic_valide(client_page_id)
+    except Exception as error:
+        _journaliser_alerte_impossible("push_fiche_validee", error)
 
 
 @app.get("/coach/fiches/{fiche_client_id}/diagnostic-champs")
@@ -932,7 +989,7 @@ def coach_update_diagnostic_champs(
 
 
 @app.post("/coach/fiches/{fiche_client_id}/valider")
-def coach_valider_fiche(fiche_client_id: str, x_coach_key: str = Header(default="")):
+def coach_valider_fiche(fiche_client_id: str, background_tasks: BackgroundTasks, x_coach_key: str = Header(default="")):
     _require_coach_key(x_coach_key)
 
     try:
@@ -941,6 +998,7 @@ def coach_valider_fiche(fiche_client_id: str, x_coach_key: str = Header(default=
     except RuntimeError as error:
         raise _erreur_service_indisponible("coach_valider_fiche", error)
 
+    background_tasks.add_task(_prevenir_fiche_validee, fiche_client_id)
     return {"status": "validee"}
 
 
@@ -1270,6 +1328,102 @@ def portal_prospects_action(request: ProspectRequest, authorization: str = Heade
         raise _erreur_service_indisponible("portal_prospects_action", error)
 
     return prospects_service.vue_client(carnet)
+
+
+# --- Compte rendu apres chaque point (29/10/2026) -------------------------------
+# Rony l'ecrit (ou le dicte) depuis la fiche de l'eleve, Idris peut le mettre
+# en forme, l'eleve retrouve ses engagements sur son tableau de bord.
+
+class CompteRenduRequest(BaseModel):
+    resume: str = ""
+    engagements: list[str] = []
+    date_point: str | None = None
+    evenement_id: str | None = None
+
+
+class MiseEnFormeRequest(BaseModel):
+    notes: str
+    prenom: str | None = None
+
+
+class EngagementRequest(BaseModel):
+    fait: bool
+
+
+@app.post("/coach/eleves/{client_page_id}/comptes-rendus")
+def coach_creer_compte_rendu(
+    client_page_id: str, request: CompteRenduRequest, background_tasks: BackgroundTasks, x_coach_key: str = Header(default="")
+):
+    _require_coach_key(x_coach_key)
+
+    try:
+        compte_rendu = comptes_rendus_service.creer(
+            client_page_id, request.resume, request.engagements, request.date_point, request.evenement_id
+        )
+
+    except comptes_rendus_service.CompteRenduNonAutorise:
+        raise HTTPException(status_code=403, detail="Formule Autonome : pas de point individuel.")
+
+    except comptes_rendus_service.CompteRenduInvalide:
+        raise HTTPException(status_code=422, detail="Écris au moins un résumé ou un engagement.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_creer_compte_rendu", error)
+
+    background_tasks.add_task(_prevenir_compte_rendu, client_page_id, len(compte_rendu["engagements"]))
+    return compte_rendu
+
+
+def _prevenir_compte_rendu(client_page_id: str, nb_engagements: int) -> None:
+    try:
+        if push_service.enabled():
+            push_service.compte_rendu_pret(client_page_id, nb_engagements)
+    except Exception as error:
+        _journaliser_alerte_impossible("push_compte_rendu", error)
+
+
+@app.post("/coach/comptes-rendus/mise-en-forme")
+def coach_mise_en_forme(request: MiseEnFormeRequest, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not comptes_rendus_service.ia_service.enabled():
+        raise HTTPException(status_code=503, detail="Idris n'est pas branché (GEMINI_API_KEY).")
+
+    try:
+        return comptes_rendus_service.mettre_en_forme(request.notes, request.prenom)
+
+    except comptes_rendus_service.CompteRenduInvalide:
+        raise HTTPException(status_code=422, detail="Dicte ou écris d'abord tes notes.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("coach_mise_en_forme", error)
+
+
+@app.get("/portal/engagements")
+def portal_engagements(authorization: str = Header(default="")):
+    session = _session_from_header(authorization)
+
+    try:
+        return {"compte_rendu": comptes_rendus_service.dernier(session["client_page_id"])}
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_engagements", error)
+
+
+@app.post("/portal/engagements/{compte_rendu_id}/{engagement_id}")
+def portal_cocher_engagement(
+    compte_rendu_id: str, engagement_id: str, request: EngagementRequest, authorization: str = Header(default="")
+):
+    session = _session_from_header(authorization)
+
+    try:
+        return {"compte_rendu": comptes_rendus_service.cocher(session["client_page_id"], compte_rendu_id, engagement_id, request.fait)}
+
+    except comptes_rendus_service.CompteRenduNonAutorise:
+        raise HTTPException(status_code=404, detail="Cet engagement n'existe plus.")
+
+    except RuntimeError as error:
+        raise _erreur_service_indisponible("portal_cocher_engagement", error)
 
 
 # --- Passerelle Autonome vers Coaching (27/10/2026) ---------------------------
