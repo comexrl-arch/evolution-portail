@@ -4677,7 +4677,7 @@ function LivrablesSection({ livrables, onOpen }) {
     <section className="card-glass p-6 mb-6" style={{ borderRadius: 'var(--radius-md)' }}>
       <h2 className="font-semibold mb-4 flex items-center gap-2" style={{ color: 'var(--text-pure)' }}>
         <CheckCircle2 size={16} color="var(--gold)" />
-        Livrables
+        Tes outils pour avancer
       </h2>
       <div className="space-y-2">
         {livrables.map((livrable) => (
@@ -4987,7 +4987,7 @@ function Portail() {
         headers: { Authorization: `Bearer ${token}` },
       })
 
-      if (!response.ok) throw new Error('Impossible de charger ce livrable.')
+      if (!response.ok) throw new Error('Impossible de charger cet outil.')
 
       setLivrableData(await response.json())
     } catch (err) {
@@ -5681,7 +5681,7 @@ function Portail() {
         {!livrableData ? (
           <Loader2 className="animate-spin" color="var(--gold)" size={28} />
         ) : (
-          <FicheContent texte={livrableData.contenu} surtitre="Livrable" />
+          <FicheContent texte={livrableData.contenu} surtitre="Outil" />
         )}
 
         {error && <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>}
