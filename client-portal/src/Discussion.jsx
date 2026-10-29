@@ -60,7 +60,7 @@ export default function Discussion({ messages, moi, noms, enAttente, cible, onCi
   const caches = coupe
 
   return (
-    <div className="discussion" role="log" aria-label="Discussion" ref={fil}>
+    <div className={`discussion${tout ? ' discussion-deplie' : ''}`} role="log" aria-label="Discussion" ref={fil}>
       {caches > 0 && (
         <button type="button" className="discussion-plus" onClick={() => setTout(true)}>
           Voir {caches} message{caches > 1 ? 's' : ''} précédent{caches > 1 ? 's' : ''}
