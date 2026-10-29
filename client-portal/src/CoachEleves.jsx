@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, NotebookPen, Plus, RefreshCw, Search, Sparkles, X } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CalendarPlus, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Circle, ClipboardList, Copy, MessageCircle, MessageSquare, NotebookPen, Plus, RefreshCw, Search, Send, Sparkles, X } from 'lucide-react'
 import { FormulaireRdv, appelAgenda, dateLongue, heureFr, nouveauRdv } from './CoachAgenda.jsx'
 import { ListePoints, rdvPourPoint } from './PointsRythme.jsx'
 import { CapParcours, DicteeVocale, ScoreCommercial, TuileResultat, kpiRenseignes, lireFiche, lireModule } from './App.jsx'
@@ -111,7 +111,7 @@ function inactif(eleve) {
 
 // Eleve a regarder en premier : decroche ou retours d'Idris en attente.
 function aSurveiller(eleve) {
-  return !eleve.illisible && (inactif(eleve) || eleve.retours_ia_a_relire > 0)
+  return !eleve.illisible && (inactif(eleve) || eleve.retours_ia_a_relire > 0 || eleve.questions_en_attente > 0)
 }
 
 function EtatEleve({ eleve }) {
@@ -180,6 +180,12 @@ function CarteEleve({ eleve, rdv, onOuvrir, nouveau = false }) {
         </div>
         <EtatEleve eleve={eleve} />
       </div>
+
+      {eleve.questions_en_attente > 0 && (
+        <p className="eleve-carte-retours eleve-carte-question">
+          <MessageSquare size={13} aria-hidden="true" /> {eleve.questions_en_attente} question{eleve.questions_en_attente > 1 ? 's' : ''} pour vous
+        </p>
+      )}
 
       {eleve.retours_ia_a_relire > 0 && (
         <p className="eleve-carte-retours">
@@ -457,6 +463,277 @@ function TableauKpi({ kpis }) {
   )
 }
 
+// --- Alertes d'intervention (29/10/2026) : eleves qui ont besoin de Rony, avec
+// un message WhatsApp pret a envoyer. -----------------------------------------------
+
+function MessagePret({ alerte }) {
+  const [copie, setCopie] = useState(false)
+  if (!alerte.message) return null
+  const copier = async () => {
+    try {
+      await navigator.clipboard.writeText(alerte.message)
+      setCopie(true)
+      setTimeout(() => setCopie(false), 2000)
+    } catch {
+      setCopie(false)
+    }
+  }
+  return (
+    <div className="alerte-message">
+      <p className="alerte-message-texte">{alerte.message}</p>
+      <div className="alerte-message-actions">
+        <a className="alerte-whatsapp" href={alerte.whatsapp} target="_blank" rel="noopener noreferrer">
+          <MessageCircle size={14} aria-hidden="true" /> Envoyer sur WhatsApp
+        </a>
+        <button type="button" className="resultats-bouton" onClick={copier}>
+          <Copy size={14} aria-hidden="true" /> {copie ? 'Copié' : 'Copier'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function AlertesEleves({ coachKey, onOuvrir, eleves }) {
+  const [etat, setEtat] = useState({ chargement: true, liste: [] })
+  const [deplie, setDeplie] = useState(null)
+
+  async function charger(frais = false) {
+    setEtat((e) => ({ ...e, chargement: true }))
+    const r = await appelAgenda(`/coach/alertes${frais ? '?frais=true' : ''}`, coachKey, () => {})
+    setEtat({ chargement: false, liste: Array.isArray(r.data?.eleves) ? r.data.eleves : [], erreur: r.erreur })
+  }
+
+  useEffect(() => {
+    charger()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (etat.chargement && !etat.liste.length) return null
+  if (!etat.liste.length) {
+    return etat.erreur === undefined ? <p className="alertes-calme"><CheckCircle2 size={15} aria-hidden="true" /> Aucun élève à relancer aujourd'hui.</p> : null
+  }
+
+  return (
+    <section className="alertes">
+      <div className="alertes-entete">
+        <p className="alertes-titre"><AlertTriangle size={16} aria-hidden="true" /> À surveiller aujourd'hui · {etat.liste.length}</p>
+        <button type="button" className="coach-bouton-icone" onClick={() => charger(true)} disabled={etat.chargement} aria-label="Recalculer" title="Recalculer">
+          <RefreshCw size={14} className={etat.chargement ? 'coach-tourne' : undefined} />
+        </button>
+      </div>
+      <ul className="alertes-liste">
+        {etat.liste.map((e) => {
+          const premiere = e.alertes.find((a) => a.message) || e.alertes[0]
+          const ouvert = deplie === e.client_page_id
+          const eleve = eleves.find((x) => x.client_page_id === e.client_page_id)
+          return (
+            <li key={e.client_page_id} className="alerte">
+              <div className="alerte-haut">
+                <div className="min-w-0">
+                  <p className="alerte-nom">{e.nom}</p>
+                  <p className="alerte-signaux">{e.alertes.map((a) => a.titre).join(' · ')}</p>
+                </div>
+                <div className="alerte-boutons">
+                  {premiere.message && (
+                    <button type="button" className="resultats-bouton" aria-expanded={ouvert} onClick={() => setDeplie(ouvert ? null : e.client_page_id)}>
+                      {ouvert ? 'Masquer' : 'Message prêt'}
+                    </button>
+                  )}
+                  {eleve && (
+                    <button type="button" className="coach-bouton-icone" onClick={() => onOuvrir(eleve)} aria-label={`Ouvrir la fiche de ${e.nom}`} title="Ouvrir sa fiche">
+                      <ChevronRight size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {ouvert && (
+                <>
+                  {premiere.detail && <p className="alerte-detail">{premiere.detail}</p>}
+                  <MessagePret alerte={premiere} />
+                </>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+// --- Preparation d'un point (29/10/2026) ------------------------------------------------
+
+function PreparationPoint({ eleve, coachKey, onAuthFailure, onFerme }) {
+  const [etat, setEtat] = useState({ chargement: true })
+  const [idris, setIdris] = useState({})
+
+  useEffect(() => {
+    let actif = true
+    appelAgenda(`/coach/eleves/${eleve.client_page_id}/preparation`, coachKey, onAuthFailure)
+      .then((r) => { if (actif) setEtat({ ...r, chargement: false }) })
+    return () => { actif = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eleve.client_page_id])
+
+  async function demanderIdris() {
+    setIdris({ chargement: true })
+    const r = await appelAgenda(`/coach/eleves/${eleve.client_page_id}/preparation/idris`, coachKey, onAuthFailure, { method: 'POST' })
+    setIdris(r.erreur !== undefined ? { erreur: r.erreur || "Idris n'a pas pu préparer le point. Réessayez." } : r.data)
+  }
+
+  const p = etat.data
+
+  return (
+    <div className="energie-carte preparation">
+      <div className="coach-signature-entete">
+        <p className="energie-surtitre"><ClipboardList size={14} aria-hidden="true" /> Préparer le point avec {(eleve.nom || '').split(' ')[0]}</p>
+        <button type="button" className="coach-bouton-icone" onClick={onFerme} aria-label="Fermer" title="Fermer"><X size={15} /></button>
+      </div>
+
+      {etat.chargement && <Vide>Je rassemble ce qu'il a fait…</Vide>}
+      {etat.erreur && <p className="text-sm" style={{ color: 'var(--danger)' }}>{etat.erreur}</p>}
+
+      {p && (
+        <>
+          <p className="preparation-periode">
+            {p.depuis_dernier_point ? `Depuis le dernier point (${dateFr(p.depuis)})` : `Ces 14 derniers jours (depuis le ${dateFr(p.depuis)})`}
+            {p.jour !== null && p.jour !== undefined ? ` · jour ${p.jour}` : ''}
+          </p>
+
+          {p.alertes.length > 0 && (
+            <ul className="preparation-alertes">
+              {p.alertes.map((a) => <li key={a.type}><AlertTriangle size={13} aria-hidden="true" /> <strong>{a.titre}</strong>{a.detail ? ` · ${a.detail}` : ''}</li>)}
+            </ul>
+          )}
+
+          <div className="preparation-grille">
+            <div>
+              <p className="coach-signature-label">Fiches travaillées</p>
+              {p.fiches_travaillees.length
+                ? <ul className="preparation-liste">{p.fiches_travaillees.map((f) => <li key={f.fiche}>{f.fiche} <small>{dateFr(f.date)}</small></li>)}</ul>
+                : <p className="preparation-vide">Aucune.</p>}
+              {p.fiches_en_retard > 0 && <p className="preparation-vide">{p.fiches_en_retard} fiche{p.fiches_en_retard > 1 ? 's' : ''} en retard.</p>}
+            </div>
+            <div>
+              <p className="coach-signature-label">Ses chiffres (bilans)</p>
+              {p.bilans.length
+                ? <ul className="preparation-liste">{p.bilans.map((b) => <li key={b.semaine_du}>Sem. du {dateFr(b.semaine_du)} <small>{b.contacts} contacts · {b.rdv} RDV · {b.ventes} vente{b.ventes > 1 ? 's' : ''}</small></li>)}</ul>
+                : <p className="preparation-vide">Aucun bilan.</p>}
+            </div>
+            <div>
+              <p className="coach-signature-label">Engagements du dernier point</p>
+              {p.engagements.length
+                ? <ul className="compte-rendu-suivi">{p.engagements.map((e) => (
+                  <li key={e.id} className={e.fait ? 'compte-rendu-tenu' : undefined}>
+                    {e.fait ? <CheckCircle2 size={15} aria-hidden="true" /> : <Circle size={15} aria-hidden="true" />}<span>{e.texte}</span>
+                  </li>
+                ))}</ul>
+                : <p className="preparation-vide">Pas encore de compte rendu.</p>}
+            </div>
+            <div>
+              <p className="coach-signature-label">Ce qu'il a demandé</p>
+              {p.questions_rony.length + p.questions_idris.length
+                ? <ul className="preparation-liste">
+                  {p.questions_rony.map((q) => <li key={q.id}><strong>À vous :</strong> {q.question}</li>)}
+                  {p.questions_idris.map((q, i) => <li key={i}><strong>À Idris :</strong> {q.question}</li>)}
+                </ul>
+                : <p className="preparation-vide">Aucune question.</p>}
+              <p className="preparation-vide">
+                Carnet : {Object.entries(p.carnet.par_statut).map(([s, n]) => `${s} ${n}`).join(', ') || 'vide'}
+                {p.carnet.a_relancer ? ` · ${p.carnet.a_relancer} à relancer` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="preparation-idris">
+            {!idris.synthese && (
+              <button type="button" className="resultats-bouton" onClick={demanderIdris} disabled={idris.chargement}>
+                <Sparkles size={14} aria-hidden="true" /> {idris.chargement ? 'Idris prépare…' : 'Synthèse et 3 questions par Idris'}
+              </button>
+            )}
+            {idris.erreur && <p className="agenda-message" role="status">{idris.erreur}</p>}
+            {idris.synthese && (
+              <div className="coach-retour-idris">
+                <p className="energie-surtitre">Idris · pour vous</p>
+                <p className="text-sm">{idris.synthese}</p>
+                {idris.questions?.length > 0 && (
+                  <ol className="preparation-questions">{idris.questions.map((q, i) => <li key={i}>{q}</li>)}</ol>
+                )}
+                {idris.vigilance && <p className="text-sm"><strong>À ne pas laisser passer :</strong> {idris.vigilance}</p>}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// --- Questions pour Rony (29/10/2026) ---------------------------------------------------
+
+function QuestionsRony({ eleve, questions, coachKey, onAuthFailure }) {
+  const [liste, setListe] = useState(questions)
+  const [reponses, setReponses] = useState({})
+  const [envoi, setEnvoi] = useState('')
+  const [message, setMessage] = useState('')
+
+  useEffect(() => { setListe(questions) }, [questions])
+
+  async function repondre(q) {
+    setEnvoi(q.id)
+    setMessage('')
+    const r = await appelAgenda(`/coach/eleves/${eleve.client_page_id}/questions/${q.id}/reponse`, coachKey, onAuthFailure, {
+      method: 'POST',
+      body: JSON.stringify({ reponse: reponses[q.id] || '' }),
+    })
+    setEnvoi('')
+    if (r.erreur !== undefined) return setMessage(r.erreur)
+    setListe((l) => l.map((x) => (x.id === q.id ? r.data : x)))
+    setMessage("Réponse envoyée. L'élève est prévenu sur son téléphone.")
+  }
+
+  return (
+    <Section titre="Ses questions pour vous">
+      {message && <p className="agenda-message" role="status">{message}</p>}
+      {liste.length ? (
+        <div className="space-y-3">
+          {liste.slice(0, 8).map((q) => (
+            <div key={q.id} className={`energie-carte question-rony${q.reponse ? '' : ' question-rony-attente'}`}>
+              <div className="coach-signature-entete">
+                <p className="energie-surtitre">Posée le {dateFr(q.posee_le)}</p>
+                <span className={`coach-puce ${q.reponse ? 'coach-puce-ok' : 'coach-puce-attente'}`}>{q.reponse ? 'Répondu' : 'En attente'}</span>
+              </div>
+              <p className="question-rony-texte">{q.question}</p>
+              {q.reponse ? (
+                <div className="coach-mot">
+                  <p className="coach-signature-label">Votre réponse · {dateFr(q.repondu_le)}</p>
+                  <p className="text-sm whitespace-pre-wrap">{q.reponse}</p>
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    className="field-input"
+                    rows={4}
+                    value={reponses[q.id] || ''}
+                    onChange={(e) => setReponses((r) => ({ ...r, [q.id]: e.target.value }))}
+                    placeholder="Votre réponse…"
+                    aria-label="Votre réponse"
+                  />
+                  <div className="compte-rendu-outils">
+                    <DicteeVocale value={reponses[q.id] || ''} onChange={(v) => setReponses((r) => ({ ...r, [q.id]: v }))} libelle="Dicter votre réponse" />
+                    <button type="button" className="fiche-bouton" disabled={envoi === q.id || !(reponses[q.id] || '').trim()} onClick={() => repondre(q)}>
+                      <Send size={14} aria-hidden="true" /> {envoi === q.id ? 'Envoi…' : 'Répondre'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : <Vide>Aucune question pour l'instant. L'élève peut vous écrire depuis son tableau de bord.</Vide>}
+    </Section>
+  )
+}
+
 // --- Compte rendu apres chaque point (29/10/2026) ----------------------------------
 // Rony dicte ou tape ses notes, Idris peut les mettre en forme, l'eleve
 // retrouve le resume et ses engagements sur son tableau de bord.
@@ -645,6 +922,7 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
   const [etat, setEtat] = useState({ chargement: true })
   const [detailKpi, setDetailKpi] = useState(false)
   const [planifier, setPlanifier] = useState(false)
+  const [preparer, setPreparer] = useState(false)
   const [message, setMessage] = useState('')
 
   async function charger(frais = false) {
@@ -696,6 +974,11 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
         <p className="coach-intro">Ce que l'élève voit dans son espace, lu à la même source.</p>
         <div className="coach-detail-actions">
           <ProchainRdv rdv={rdv} />
+          {eleve.parcours !== 'Autonome' && (
+            <button type="button" className="resultats-bouton" onClick={() => setPreparer((v) => !v)} aria-expanded={preparer}>
+              <ClipboardList size={15} aria-hidden="true" /> Préparer le point
+            </button>
+          )}
           {onRdv && (
             <button type="button" className="resultats-bouton" onClick={() => setPlanifier(nouveauRdv({ eleve }))}>
               <CalendarPlus size={15} aria-hidden="true" /> Planifier un RDV
@@ -704,6 +987,8 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
         </div>
         {message && <p className="agenda-message" role="status">{message}</p>}
       </div>
+
+      {preparer && <PreparationPoint eleve={eleve} coachKey={coachKey} onAuthFailure={onAuthFailure} onFerme={() => setPreparer(false)} />}
 
       {planifier && (
         <FormulaireRdv
@@ -730,6 +1015,10 @@ function DetailEleve({ eleve, rdv, points, eleves, coachKey, onAuthFailure, onRe
             onPlanifier={onRdv ? (p) => setPlanifier(rdvPourPoint(p, { ...eleve, parcours: points.parcours })) : null}
           />
         </Section>
+      )}
+
+      {d && !autonome && eleve.parcours !== 'Atelier' && (
+        <QuestionsRony eleve={eleve} questions={etat.data?.questions_rony || []} coachKey={coachKey} onAuthFailure={onAuthFailure} />
       )}
 
       {d && !autonome && (
@@ -927,6 +1216,13 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail, nouveau
     if (r.erreur !== undefined) return setError(r.erreur)
     if (!Array.isArray(r.data?.eleves)) return setError(MESSAGE_SERVICE_INDISPONIBLE)
     setEleves(r.data.eleves)
+    // ?eleve=<id> : ouverture depuis une notification (question d'un eleve).
+    const demande = new URLSearchParams(window.location.search).get('eleve')
+    const cible = demande && r.data.eleves.find((e) => e.client_page_id === demande)
+    if (cible) {
+      setOuvert(cible)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
   }
 
   useEffect(() => {
@@ -965,6 +1261,7 @@ export default function CoachEleves({ coachKey, onAuthFailure, onDetail, nouveau
   return (
     <div>
       {eleves.length > 0 && <BandeauEleves eleves={eleves} />}
+      {eleves.length > 0 && <AlertesEleves coachKey={coachKey} eleves={eleves} onOuvrir={setOuvert} />}
 
       <div className="coach-recherche">
         <div className="field-input coach-recherche-champ">

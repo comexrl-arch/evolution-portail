@@ -7301,3 +7301,122 @@ button.eleve-carte:hover {
 .engagements .mot-rony { background: var(--surface-3); }
 .engagements .engagement { background: var(--surface-1); }
 .engagements .engagement-fait { background: var(--success-soft); }
+
+/* --- Préparation des points, alertes, questions pour Rony (29/10/2026) --- */
+
+.alertes {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(168, 83, 15, 0.25);
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+}
+
+.alertes-entete { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+
+.alertes-titre {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: var(--warning);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.alertes-calme {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  color: var(--success);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.alertes-liste { display: grid; gap: 0.5rem; margin: 0.75rem 0 0; padding: 0; list-style: none; }
+
+.alerte {
+  padding: 0.7rem 0.8rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.alerte-haut { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.alerte-nom { margin: 0; color: var(--text-primary); font-weight: 700; font-size: 0.92rem; }
+.alerte-signaux { margin: 0.15rem 0 0; color: var(--warning); font-size: 0.8rem; }
+.alerte-boutons { display: flex; flex: none; align-items: center; gap: 0.4rem; }
+.alerte-detail { margin: 0.6rem 0 0; color: var(--text-tertiary); font-size: 0.8rem; }
+
+.alerte-message {
+  margin-top: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border-left: 3px solid var(--brand-gold-metal);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--surface-3);
+}
+
+.alerte-message-texte { margin: 0; color: var(--text-primary); font-size: 0.88rem; line-height: 1.5; }
+.alerte-message-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+
+.alerte-whatsapp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: var(--radius-sm);
+  background: #1F7A4D;
+  color: #FFFFFF;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.eleve-carte-question { display: flex; align-items: center; gap: 0.3rem; color: var(--accent); }
+
+.preparation { margin: 0 0 1.25rem; }
+.preparation .energie-surtitre { display: inline-flex; align-items: center; gap: 0.35rem; }
+.preparation-periode { margin: 0 0 0.6rem; color: var(--text-tertiary); font-size: 0.82rem; }
+
+.preparation-alertes { display: grid; gap: 0.3rem; margin: 0 0 0.6rem; padding: 0; list-style: none; }
+.preparation-alertes li { display: flex; gap: 0.35rem; align-items: baseline; color: var(--warning); font-size: 0.84rem; }
+.preparation-alertes strong { color: var(--warning); }
+
+.preparation-grille { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.25rem 1.25rem; }
+.preparation-liste { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; font-size: 0.86rem; color: var(--text-primary); }
+.preparation-liste small { color: var(--text-tertiary); margin-left: 0.25rem; }
+.preparation-vide { margin: 0.3rem 0 0; color: var(--text-tertiary); font-size: 0.84rem; }
+.preparation-idris { margin-top: 0.9rem; }
+.preparation-questions { margin: 0.5rem 0; padding-left: 1.2rem; font-size: 0.88rem; color: var(--text-primary); display: grid; gap: 0.3rem; }
+
+.question-rony-attente-carte,
+.question-rony-attente { border-color: rgba(168, 83, 15, 0.3); }
+.question-rony-texte { margin: 0 0 0.6rem; color: var(--text-primary); font-size: 0.92rem; white-space: pre-wrap; }
+.question-rony textarea { width: 100%; resize: vertical; margin-top: 0.3rem; }
+
+.question-pour-rony {
+  padding: 1.1rem 1.15rem;
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.question-pour-rony .panel-eyebrow { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; }
+.question-rony-intro { margin: 0.4rem 0 0.8rem; color: var(--text-secondary); font-size: 0.86rem; }
+.question-pour-rony textarea { width: 100%; resize: vertical; }
+.question-rony-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+.questions-rony-liste { display: grid; gap: 0.9rem; margin: 1rem 0 0; padding: 0.9rem 0 0; border-top: var(--border-subtle); list-style: none; }
+.question-rony-moi { margin: 0; color: var(--text-secondary); font-size: 0.88rem; white-space: pre-wrap; }
+.questions-rony-liste .mot-rony { margin-top: 0.5rem; background: var(--surface-3); }
+p.question-rony-attente { margin: 0.35rem 0 0; color: var(--text-tertiary); font-size: 0.82rem; font-style: italic; }
+
+@media (max-width: 640px) {
+  .preparation-grille { grid-template-columns: 1fr; }
+  .alerte-haut { align-items: flex-start; }
+}
+.compte-rendu-outils .fiche-bouton,
+.question-rony .fiche-bouton { display: inline-flex; align-items: center; gap: 0.4rem; }
+.preparation-questions { list-style: decimal; }

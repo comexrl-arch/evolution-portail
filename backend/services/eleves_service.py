@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from backend.services import notion_service as ns
-from backend.services import comptes_rendus_service, prospects_service
+from backend.services import comptes_rendus_service, prospects_service, questions_rony_service
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def _ligne_eleve(row: dict, maintenant: datetime) -> dict:
     )
     # Ce que Rony ecrit lui-meme (comptes rendus de point) n'est pas une saisie de l'eleve.
     entrees = [e for e in entrees if not comptes_rendus_service.est_compte_rendu(e)]
-    derniere_saisie = max((e.get("last_edited_time") or "" for e in entrees), default="") or None
+    derniere_saisie = max((_quand_saisi(e) for e in entrees), default="") or None
     carnet = next(
         (e for e in entrees if prospects_service.NOM_CARNET in str(ns._prop_value(ns._prop(e.get("properties", {}), "Nom")) or "")),
         None,
@@ -124,6 +124,7 @@ def _ligne_eleve(row: dict, maintenant: datetime) -> dict:
             s: sum(1 for p in prospects if p.get("statut") == s) for s in prospects_service.STATUTS
         },
         "retours_ia_a_relire": retours_a_relire,
+        "questions_en_attente": len(questions_rony_service.en_attente(questions_rony_service.depuis_entrees(entrees))),
         "fiches_a_relire": sorted({f for f in (ns._relation_id(e.get("properties", {}), "Fiche Client") for e in a_relire) if f}),
         "derniere_relance": ns._prop_value(ns._prop(props, "Dernière relance")),
         "nb_relances": ns._prop_value(ns._prop(props, "Nb relances")) or 0,
@@ -160,6 +161,13 @@ def liste(maintenant: datetime | None = None) -> list[dict]:
     return eleves
 
 
+def _quand_saisi(entree: dict) -> str:
+    # Une question pour Rony compte quand l'eleve la pose, pas quand Rony y repond.
+    if questions_rony_service.est_question(entree):
+        return entree.get("created_time") or ""
+    return entree.get("last_edited_time") or ""
+
+
 def _signe_par_coach(entree: dict) -> bool:
     # Derniere modification = Rony qui valide le retour : pas une saisie de l'eleve.
     valide_le = ns._prop_value(ns._prop(entree.get("properties", {}), "Retour validé le"))
@@ -193,7 +201,7 @@ def activite(jours: int = 30, maintenant: datetime | None = None) -> dict[str, s
             continue
 
         for lien in (entree.get("properties", {}).get("Client") or {}).get("relation") or []:
-            quand = entree.get("last_edited_time") or ""
+            quand = _quand_saisi(entree)
 
             if quand > dernieres.get(lien["id"], ""):
                 dernieres[lien["id"]] = quand
@@ -230,6 +238,7 @@ def detail(client_page_id: str, frais: bool = False) -> dict:
         ns._cache_clear(f"dashboard:{client_page_id}")
         ns._cache_clear(f"carnet:{client_page_id}")
         ns._cache_clear(f"comptes_rendus:{client_page_id}")
+        ns._cache_clear(f"questions_rony:{client_page_id}")
 
     dashboard = ns.get_client_dashboard(client_page_id)
     carnet = prospects_service.vue_client(prospects_service.lire(client_page_id, dashboard))
@@ -243,6 +252,13 @@ def detail(client_page_id: str, frais: bool = False) -> dict:
             logger.warning("Bilans illisibles (%s)", ns._resume_erreur(error))
 
     comptes_rendus = []
+    questions = []
+
+    if questions_rony_service.ouvert_a(dashboard.get("parcours")):
+        try:
+            questions = questions_rony_service.lister(client_page_id)
+        except RuntimeError as error:
+            logger.warning("Questions pour Rony illisibles (%s)", ns._resume_erreur(error))
 
     if not ns._est_parcours_autonome(dashboard.get("parcours")):
         try:
@@ -256,4 +272,5 @@ def detail(client_page_id: str, frais: bool = False) -> dict:
         "carnet": carnet,
         "bilans": bilans,
         "comptes_rendus": comptes_rendus,
+        "questions_rony": questions,
     }
