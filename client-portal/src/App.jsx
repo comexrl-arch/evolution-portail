@@ -3010,13 +3010,13 @@ function OutilsCarnet({ total, maximum, onImporte }) {
     <div className="carnet-outils">
       <div className="biblio-actions">
         <button type="button" className="idris-copier" disabled={!total || !!attente} onClick={() => exporter('xlsx')}>
-          {attente === 'xlsx' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Exporter en Excel
+          {attente === 'xlsx' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Exporter en Excel
         </button>
         <button type="button" className="idris-copier" disabled={!total || !!attente} onClick={() => exporter('csv')}>
-          {attente === 'csv' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} CSV
+          {attente === 'csv' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} CSV
         </button>
         <button type="button" className="idris-copier" disabled={!!attente || total >= maximum} onClick={() => champFichier.current?.click()}>
-          {attente === 'lecture' ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Importer une liste
+          {attente === 'lecture' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Importer une liste
         </button>
         <input ref={champFichier} type="file" hidden accept=".xlsx,.csv,.txt,.vcf,text/csv,text/vcard" onChange={choisir} />
       </div>
