@@ -109,7 +109,55 @@ check("2 bilans : prospection plafonnee a 2", reel["scores"]["Prospection"] == 2
 check("sans RDV : conversion du diagnostic", "Conversion" not in reel["scores"])
 
 with patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 0, 0), bilan(40, 12, 0, 0)]):
-    check("1 seul bilan recent : pas de chiffres", ns._scores_reels("fb", MAINTENANT) is None)
+    reel = ns._scores_reels("fb", MAINTENANT)
+check("1 bilan sur 4 semaines : les semaines vides comptent pour zero", reel["scores"]["Prospection"] == 1)
+check("1 bilan sur 4 semaines : suivi 0", reel["scores"]["Suivi commercial"] == 0)
+
+with patch.object(ns, "_query_data_source", return_value=[]):
+    reel = ns._scores_reels("fb", MAINTENANT)
+check("aucun bilan sur 4 semaines : prospection et suivi a 0", reel["scores"]["Prospection"] == 0 and reel["scores"]["Suivi commercial"] == 0)
+check("aucun bilan : conversion du diagnostic", "Conversion" not in reel["scores"])
+
+with patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 0, 0)]):
+    check("bilan ouvert depuis 1 semaine : diagnostic garde", ns._scores_reels("fb", MAINTENANT, semaines_attendues=1) is None)
+    reel = ns._scores_reels("fb", MAINTENANT, semaines_attendues=2)
+check("1 bilan sur 2 semaines : suivi 1", reel["scores"]["Suivi commercial"] == 1)
+
+with patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 0, 0), bilan(9, 12, 0, 0), bilan(16, 12, 0, 0)]):
+    reel = ns._scores_reels("fb", MAINTENANT)
+check("3 bilans sur 4 : suivi 2, 9 contacts/sem -> prospection 2", reel["scores"]["Suivi commercial"] == 2 and reel["scores"]["Prospection"] == 2)
+
+print("Semaines de bilan")
+check("avant l'ouverture du bilan (J31) : 0", ns._semaines_de_bilan(20, ns._FICHE_JOUR) == 0)
+check("J45 : 2 semaines", ns._semaines_de_bilan(45, ns._FICHE_JOUR) == 2)
+check("J80 : fenetre de 4", ns._semaines_de_bilan(80, ns._FICHE_JOUR) == 4)
+check("sans date : seules les semaines remplies", ns._semaines_de_bilan(None, ns._FICHE_JOUR) == 0)
+check("Atelier sans bilan : 0", ns._semaines_de_bilan(10, ns._ATELIER_JOUR) == 0)
+
+print("Offre et Visibilite suivent les fiches")
+num = ns._NUMERO_TO_MASTER_ID
+diag = {"Offre": 2, "Visibilité": 1, "Prospection": 0, "Conversion": 1, "Suivi commercial": 1}
+
+
+def avec_etats(etats):
+    liste = fiches()
+    for f in liste:
+        for n, etat in etats.items():
+            if f["master_id"] == num[n]:
+                f["etat"] = etat
+    return liste
+
+
+t = ns._scores_travail(avec_etats({"9": "Terminé", "11": "Terminé"}), diag, 6, ns._FICHE_JOUR)
+check("J6 : fiches 9 et 11 terminees -> offre +1, visibilite +1", t["scores"] == {"Offre": 3, "Visibilité": 2})
+t = ns._scores_travail(avec_etats({"9": "En cours"}), diag, 12, ns._FICHE_JOUR)
+check("J12 : fiche 9 ouverte a J4 pas finie -> offre -1", t["scores"]["Offre"] == 1)
+check("constat du retard", "en retard" in t["constats"]["Offre"])
+t = ns._scores_travail(avec_etats({"9": "Terminé", "11": "Terminé"}), diag, 12, ns._FICHE_JOUR)
+check("J12 : fiches 10 et 12 ouvertes depuis 1 jour -> pas de changement", "Offre" not in t["scores"] and "Visibilité" not in t["scores"])
+t = ns._scores_travail(avec_etats({}), {**diag, "Offre": 0}, 12, ns._FICHE_JOUR)
+check("jamais sous 0", t["scores"]["Offre"] == 0)
+check("sans date : diagnostic", ns._scores_travail(avec_etats({}), diag, None, ns._FICHE_JOUR)["scores"] == {})
 
 with patch.object(ns, "_list_children", return_value=fiche8), \
         patch.object(ns, "_query_data_source", return_value=[bilan(2, 12, 4, 0), bilan(9, 10, 2, 0), bilan(16, 14, 2, 0), bilan(23, 8, 2, 0)]):
@@ -117,6 +165,15 @@ with patch.object(ns, "_list_children", return_value=fiche8), \
 check("prospection devient un point fort", "Prospection" in perso["zones_fortes"])
 check("conversion prioritaire d'apres les chiffres", perso["zones_prioritaires"][0]["zone"] == "Conversion" and perso["zones_prioritaires"][0]["source"] == "chiffres")
 check("score du diagnostic conserve", perso["total"] == 8 and perso["scores_diagnostic"]["Prospection"] == 0)
+
+with patch.object(ns, "_list_children", return_value=fiche8), patch.object(ns, "_query_data_source", return_value=[]):
+    liste = fiches()
+    for f in liste:
+        if f["master_id"] in (num["9"], num["11"], num["14"], num["10"], num["12"]):
+            f["etat"] = "Terminé"
+    perso = ns._personnaliser_parcours(liste, 60, ns._FICHE_JOUR)
+check("J60 sans aucun bilan : prospection 0, suivi 0", perso["scores"]["Prospection"] == 0 and perso["scores"]["Suivi commercial"] == 0)
+check("J60 sans aucun bilan : le total baisse", perso["total_actuel"] < perso["total"] + 1 and perso["scores"]["Suivi commercial"] < perso["scores_diagnostic"]["Suivi commercial"])
 
 print(f"\n{passed} PASS, {failed} FAIL")
 sys.exit(1 if failed else 0)

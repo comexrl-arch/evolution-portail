@@ -1177,7 +1177,9 @@ def _build_client_dashboard(client_page_id: str) -> dict:
         "fiches": fiches,
         "kpi": kpi_future.result(),
         "syntheses": syntheses,
-        "personnalisation": _personnaliser_parcours(fiches),
+        "personnalisation": _personnaliser_parcours(
+            fiches, _jour_parcours(date_demarrage), _ATELIER_JOUR if atelier else _FICHE_JOUR
+        ),
         "regularite": _regularite_bilans(fiches),
         "rythme": rythme,
         "lien_groupe": _lien_groupe(cohorte),
@@ -2837,7 +2839,7 @@ def _scores_fiche8(fiche8_id: str) -> dict:
     return scores
 
 
-def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
+def _personnaliser_parcours(fiches: list[dict], jour: int | None = None, jours: dict | None = None) -> dict | None:
     """Marque les fiches liees aux zones faibles du diagnostic.
 
     Zones prioritaires : les 3 plus faibles sous 3/3 (a egalite, l'ordre des
@@ -2863,14 +2865,19 @@ def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
     reel = None
     fiche_bilan = next((f for f in fiches if f.get("master_id") == _BILAN_HEBDO_MASTER_ID), None)
 
+    jours = _FICHE_JOUR if jours is None else jours
+
     if fiche_bilan and "Bloqué" not in str(fiche_bilan.get("acces") or ""):
         try:
-            reel = _scores_reels(fiche_bilan["id"])
+            reel = _scores_reels(fiche_bilan["id"], semaines_attendues=_semaines_de_bilan(jour, jours))
         except Exception as error:
             logger.warning("Bilans hebdomadaires illisibles (%s) : priorites du diagnostic.", error)
 
     if reel:
         scores.update(reel["scores"])
+
+    travail = _scores_travail(fiches, diagnostic, jour, jours)
+    scores.update(travail["scores"])
 
     ordre = [zone["zone"] for zone in _DIAGNOSTIC_ZONES]
     faibles = sorted((z for z in ordre if scores[z] < 3), key=lambda z: (scores[z], ordre.index(z)))[:3]
@@ -2887,7 +2894,7 @@ def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
             if master_id in par_id and "priorite" not in par_id[master_id]:
                 par_id[master_id]["priorite"] = {"type": "point_fort", "zone": zone}
 
-    constats = (reel or {}).get("constats", {})
+    constats = {**(reel or {}).get("constats", {}), **travail["constats"]}
 
     return {
         "scores": scores,
@@ -2911,13 +2918,71 @@ def _personnaliser_parcours(fiches: list[dict]) -> dict | None:
 
 
 # --- Diagnostic vivant (decision de Rony du 22/10/2026) ---
-# Des que le client a rempli au moins 2 bilans hebdomadaires sur les 4
-# dernieres semaines, ses vrais chiffres remplacent les reponses du
-# diagnostic de depart pour 3 zones : Prospection (contacts par semaine),
-# Conversion (ventes / rendez-vous) et Suivi commercial (regularite des
-# bilans). Offre et Visibilite gardent le score du diagnostic. Seuils de
-# travail, a ajuster avec l'experience.
+# Les vrais chiffres des bilans hebdomadaires des 4 dernieres semaines
+# remplacent les reponses du diagnostic de depart pour 3 zones : Prospection
+# (contacts par semaine), Conversion (ventes / rendez-vous) et Suivi
+# commercial (regularite des bilans). Seuils de travail, a ajuster avec
+# l'experience.
+# 29/10/2026, Rony : « que sa note fluctue totalement par rapport au travail
+# fourni ». Une semaine sans bilan compte desormais pour zero (elle faisait
+# revenir au diagnostic sous 2 bilans), et Offre et Visibilite suivent les
+# fiches de leur zone (_scores_travail).
 _FENETRE_REELLE_JOURS = 28
+_SEMAINES_FENETRE = 4
+
+
+def _semaines_de_bilan(jour: int | None, jours: dict) -> int:
+    """Semaines pleines depuis l'ouverture du bilan hebdomadaire, dans la
+    limite de la fenetre. Sans date de demarrage, on ne sait pas : seules les
+    semaines remplies comptent (au moins 2, comme avant)."""
+    if jour is None:
+        return 0
+
+    ouverture = jours.get(_BILAN_HEBDO_MASTER_ID)
+
+    if ouverture is None:
+        return 0
+
+    return max(0, min(_SEMAINES_FENETRE, (jour - ouverture) // 7))
+
+
+def _scores_travail(fiches: list[dict], diagnostic: dict, jour: int | None, jours: dict) -> dict:
+    """Offre et Visibilite d'apres les fiches de leur zone deja ouvertes
+    (jour atteint) : toutes terminees = diagnostic + 1, une fiche ouverte
+    depuis plus de _DELAI_FICHE jours et pas terminee = diagnostic - 1."""
+    scores, constats = {}, {}
+
+    if jour is None:
+        return {"scores": scores, "constats": constats}
+
+    par_id = {f.get("master_id"): f for f in fiches}
+
+    for zone in ("Offre", "Visibilité"):
+        ouvertes = [
+            par_id[m] for m in _FICHES_PAR_ZONE[zone]
+            if m in par_id and m in jours and jours[m] <= jour
+        ]
+
+        if not ouvertes:
+            continue
+
+        faites = [f for f in ouvertes if f.get("etat") == "Terminé"]
+        en_retard = [f for f in ouvertes if f.get("etat") != "Terminé" and jours[f["master_id"]] <= jour - _DELAI_FICHE]
+        avant = diagnostic[zone]
+
+        if en_retard:
+            scores[zone] = max(0, avant - 1)
+        elif len(faites) == len(ouvertes):
+            scores[zone] = min(3, avant + 1)
+        else:
+            continue
+
+        constats[zone] = (
+            f"{len(faites)} fiche(s) terminée(s) sur {len(ouvertes)} ouverte(s) pour cette zone"
+            + (f", dont {len(en_retard)} en retard." if en_retard else ".")
+        )
+
+    return {"scores": scores, "constats": constats}
 
 
 def _nombre(valeur) -> float:
@@ -2927,7 +2992,9 @@ def _nombre(valeur) -> float:
         return 0.0
 
 
-def _scores_reels(fiche_bilan_id: str, maintenant: datetime | None = None) -> dict | None:
+def _scores_reels(
+    fiche_bilan_id: str, maintenant: datetime | None = None, semaines_attendues: int = _SEMAINES_FENETRE
+) -> dict | None:
     maintenant = maintenant or datetime.now(timezone.utc)
     champs = FICHE_SCHEMAS[_BILAN_HEBDO_MASTER_ID]["champs"]
     pages = _query_data_source(
@@ -2949,19 +3016,23 @@ def _scores_reels(fiche_bilan_id: str, maintenant: datetime | None = None) -> di
         semaines[str(quand)[:10]] = donnees
 
     n = len(semaines)
+    # Une semaine attendue sans bilan compte pour zero contact.
+    attendues = max(n, semaines_attendues)
 
-    if n < 2:
+    # Trop tot pour juger (bilan ouvert depuis moins de 2 semaines) et pas
+    # encore 2 bilans : on garde le diagnostic.
+    if attendues < 2:
         return None
 
     total = {cle: sum(_nombre(d.get(cle)) for d in semaines.values())
              for cle in ("nb_contacts_tentes", "nb_rdv_obtenus", "nb_ventes_conclues")}
-    contacts_semaine = total["nb_contacts_tentes"] / n
+    contacts_semaine = total["nb_contacts_tentes"] / attendues
     scores = {}
     constats = {}
 
     prospection = 3 if contacts_semaine >= 10 else 2 if contacts_semaine >= 5 else 1 if contacts_semaine > 0 else 0
     scores["Prospection"] = min(prospection, 2) if n < 3 else prospection
-    constats["Prospection"] = f"{contacts_semaine:.0f} contacts par semaine en moyenne sur tes {n} derniers bilans."
+    constats["Prospection"] = f"{contacts_semaine:.0f} contacts par semaine en moyenne sur les {attendues} dernières semaines."
 
     if total["nb_rdv_obtenus"] > 0:
         taux = total["nb_ventes_conclues"] / total["nb_rdv_obtenus"]
@@ -2970,8 +3041,9 @@ def _scores_reels(fiche_bilan_id: str, maintenant: datetime | None = None) -> di
             f"{total['nb_ventes_conclues']:.0f} vente(s) pour {total['nb_rdv_obtenus']:.0f} rendez-vous sur {n} semaines."
         )
 
-    scores["Suivi commercial"] = 3 if n >= 4 else 2 if n == 3 else 1
-    constats["Suivi commercial"] = f"{n} bilan(s) hebdomadaire(s) rempli(s) sur les 4 dernières semaines."
+    part = n / attendues
+    scores["Suivi commercial"] = 3 if part >= 1 else 2 if part >= 0.75 else 1 if part >= 0.5 else 0
+    constats["Suivi commercial"] = f"{n} bilan(s) hebdomadaire(s) rempli(s) sur {attendues} semaine(s)."
 
     return {
         "scores": scores,

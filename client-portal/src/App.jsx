@@ -4568,8 +4568,8 @@ export function ScoreCommercial({ personnalisation, coach = false }) {
           {ecart > 0 ? '+' : '−'}{Math.abs(ecart)} point{Math.abs(ecart) > 1 ? 's' : ''}
         </span>
       )}
-      {!personnalisation.chiffres && !coach && (
-        <p className="resultat-score-note">Remplis au moins 2 bilans hebdomadaires : ton score suivra alors tes vrais chiffres de prospection, de conversion et de suivi.</p>
+      {!coach && (
+        <p className="resultat-score-note">Ton score suit ton travail : tes fiches pour l'offre et la visibilité, tes bilans hebdomadaires des 4 dernières semaines pour la prospection, la conversion et le suivi. Une semaine sans bilan le fait baisser.</p>
       )}
     </div>
   )
