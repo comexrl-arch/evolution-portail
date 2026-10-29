@@ -116,7 +116,8 @@ def _detecter(dashboard: dict, entrees: list[dict], historique: list[dict], comp
             break
 
     saisies = _saisies_eleve(entrees)
-    derniere = max((e.get("created_time") or "" for e in saisies), default="") or None
+    coches = [comptes_rendus_service.derniere_coche(e) for e in entrees if comptes_rendus_service.est_compte_rendu(e)]
+    derniere = max([e.get("created_time") or "" for e in saisies] + coches, default="") or None
     sans_saisie = _jours(derniere, maintenant)
     jour = ns._jour_parcours(dashboard.get("date_demarrage"))
 
@@ -125,7 +126,7 @@ def _detecter(dashboard: dict, entrees: list[dict], historique: list[dict], comp
         alertes.append({
             "type": "inactif",
             "titre": f"Rien saisi depuis {duree}",
-            "detail": "Ni fiche, ni bilan, ni prospect.",
+            "detail": "Ni fiche, ni bilan, ni prospect, ni engagement coché.",
             "message": (
                 f"Salut {prenom}, je n'ai rien vu passer dans ton espace depuis {duree}. Tout va bien ? "
                 "Dis-moi ce qui te bloque, on regarde ça ensemble en 10 minutes."

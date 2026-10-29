@@ -284,5 +284,25 @@ check("dernier avis lu : note, texte, accord, signature", lu["note"] == 8 and lu
 with patch.object(notion_service, "_query_data_source", return_value=[]):
     check("pas d'avis : None", fidelite_service.dernier_avis("marie") is None)
 
+print("\n13. Cocher un engagement compte comme une activite de l'eleve")
+coche = (maintenant - timedelta(days=1)).isoformat(timespec="seconds")
+cr_coche = entree("Marie — Compte rendu de point du 20/10/2026", iso(9), {"engagements": [{"id": "a", "texte": "Appeler", "fait": True, "coche_le": coche}, {"id": "b", "texte": "Relancer", "fait": False}]})
+cr_rony = entree("Marie — Compte rendu de point du 28/10/2026", iso(1), {"engagements": [{"id": "a", "texte": "Appeler", "fait": False}]})
+from backend.services import comptes_rendus_service as crs
+check("derniere coche lue dans le compte rendu", crs.derniere_coche(cr_coche) == coche)
+check("compte rendu jamais coche : rien", crs.derniere_coche(cr_rony) == "")
+alertes = scs._detecter(dashboard(), [entree("Marie — fiche", iso(9), fiche="f11"), cr_coche], [], None, [], maintenant)
+check("engagement coche hier : pas d'alerte inactif", not any(a["type"] == "inactif" for a in alertes))
+alertes = scs._detecter(dashboard(), [entree("Marie — fiche", iso(9), fiche="f11"), cr_rony], [], None, [], maintenant)
+check("compte rendu de Rony seul : alerte inactif maintenue", any(a["type"] == "inactif" for a in alertes))
+with patch.object(notion_service, "_query_data_source", return_value=[cr_coche, cr_rony]):
+    vu = eleves_service.activite(maintenant=maintenant)
+check("badge activite : la coche compte, pas l'ecriture de Rony", vu.get("marie") == coche)
+with patch.object(notion_service, "_query_data_source", return_value=[cr_coche]), patch.object(notion_service, "_update_page") as maj:
+    crs.cocher("marie", cr_coche["id"], "b", True)
+    ecrit = json.loads(maj.call_args[0][1]["Données (JSON)"]["rich_text"][0]["text"]["content"])
+check("cocher enregistre l'heure de la coche", ecrit["engagements"][1]["fait"] and ecrit["engagements"][1]["coche_le"])
+notion_service._cache_clear("comptes_rendus:")
+
 print(f"\nRESULTAT : {passed}/{passed + failed} assertions reussies")
 sys.exit(1 if failed else 0)

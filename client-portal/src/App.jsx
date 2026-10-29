@@ -1375,6 +1375,41 @@ function RetourIA({ retour, actif }) {
   )
 }
 
+// Retours des saisies precedentes (29/10/2026) : sans ca, l'eleve ne voyait
+// le retour d'Idris et le mot de Rony que sur sa derniere saisie.
+function jourSaisie(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
+}
+
+function RetoursPrecedents({ entrees, actif }) {
+  if (!actif) return null
+  const anciens = (entrees || [])
+    .slice(0, -1)
+    .filter((e) => e.retour_ia?.statut === 'publie' && (e.retour_ia.texte || e.retour_ia.mot_coach))
+    .reverse()
+  if (!anciens.length) return null
+
+  return (
+    <details className="retours-precedents">
+      <summary>
+        Tes retours précédents ({anciens.length})
+        <ChevronDown size={16} aria-hidden="true" className="retours-precedents-chevron" />
+      </summary>
+      {anciens.map((e) => (
+        <article key={e.id} className="retours-precedents-item">
+          <p className="retours-precedents-date">Saisie du {jourSaisie(e.date) || '—'}</p>
+          {e.retour_ia.texte && <ParagraphesIdris texte={e.retour_ia.texte} />}
+          {e.retour_ia.valide_par_coach && e.retour_ia.texte && (
+            <p className="retour-valide-rony"><CheckCircle2 size={15} aria-hidden="true" /> Validé par Rony</p>
+          )}
+          <MotDeRony mot={e.retour_ia.mot_coach} date={e.retour_ia.valide_par_coach ? e.retour_ia.date : null} />
+        </article>
+      ))}
+    </details>
+  )
+}
+
 // « Question pour Rony » (29/10/2026) : canal direct, Coaching seulement.
 // Separe d'Idris : c'est Rony qui repond, l'eleve est prevenu.
 function QuestionPourRony() {
@@ -5331,6 +5366,7 @@ function Portail() {
               actif={ficheData.retour_ia_actif}
               retour={ficheData.entrees[ficheData.entrees.length - 1]?.retour_ia}
             />
+            <RetoursPrecedents actif={ficheData.retour_ia_actif} entrees={ficheData.entrees} />
 
             <LivrablesSection livrables={ficheData.livrables} onOpen={openLivrable} />
 
