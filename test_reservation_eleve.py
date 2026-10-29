@@ -183,5 +183,47 @@ lu = agenda_service._vers_portail({"id": "x", "start": {"dateTime": "2026-10-30T
                                     "extendedProperties": {"private": {"source": "portail", "type": "rdv", "reserve_par": "eleve"}}})
 check("relue par le portail", lu["reserve_par"] == "eleve")
 
+print("\n6. Rony est prevenu sur son appli Coach")
+with patch.object(portal_main, "_prevenir_coach") as prevenir:
+    code, rep, _, _ = appel(portal_main.portal_reserver, reservation=portal_main.ReservationRdv(debut="2026-10-30T10:00"))
+check("reservation : alerte « reserve » avec le nom et l'heure", prevenir.call_args is not None
+      and prevenir.call_args.args == ("reserve", "Marie Test", "2026-10-30T10:00"))
+
+with patch.object(portal_main, "_prevenir_coach") as prevenir:
+    code, rep, _, _ = appel(portal_main.portal_reserver, evenements=[occupe], reservation=portal_main.ReservationRdv(debut="2026-10-30T11:00"))
+check("reservation refusee : pas d'alerte", not prevenir.called)
+
+with patch.object(portal_main, "_prevenir_coach") as prevenir:
+    code, _, _ = annuler({**evt("r1", "2026-11-03T10:00", "2026-11-03T11:00", eleve_id="eleve1", reserve_par="eleve"), "eleve_nom": "Marie Test"})
+check("annulation : alerte « annule »", code == 200 and prevenir.call_args.args == ("annule", "Marie Test", "2026-11-03T10:00"))
+
+titre, texte = portal_main.push_service.message_reservation("reserve", "Marie Test", "2026-10-30T10:00")
+check("texte de l'alerte", titre == "Nouveau RDV réservé" and texte == "Marie Test a réservé le vendredi 30 octobre à 10h00.")
+
+envois = []
+with patch.object(portal_main.push_service, "enabled", return_value=True), \
+     patch.object(portal_main.push_service, "abonnements_coach", return_value=[{"endpoint": "https://a"}]), \
+     patch.object(portal_main.push_service, "_envoyer_un", side_effect=lambda a, c: envois.append(json.loads(c)) or True):
+    portal_main._prevenir_coach("reserve", "Marie Test", "2026-10-30T10:00")
+check("envoi vers l'appli Coach, ouverte sur l'agenda", envois and envois[0]["url"] == "/coach?onglet=agenda")
+
+with patch.object(portal_main.push_service, "abonnements_coach", side_effect=RuntimeError("Google")):
+    with patch.object(portal_main.push_service, "enabled", return_value=True):
+        portal_main._prevenir_coach("reserve", "Marie Test", "2026-10-30T10:00")
+check("panne : jamais d'erreur pour l'eleve", True)
+
+stock = {}
+abo = {"endpoint": "https://fcm.googleapis.com/x", "keys": {"p256dh": "p", "auth": "a"}}
+with patch.object(agenda_service, "lire_reglage", side_effect=lambda cle: stock.get(cle)), \
+     patch.object(agenda_service, "ecrire_reglage", side_effect=lambda cle, v: stock.__setitem__(cle, v)), \
+     patch.object(agenda_service, "enabled", return_value=True), \
+     patch.object(portal_main.push_service, "enabled", return_value=True):
+    code, _ = statut(portal_main.coach_push_abonner, portal_main.PushAbonnementRequest(abonnement=abo), x_coach_key="cle-coach-test")
+    check("abonnement coach garde dans les reglages de l'agenda", code == 200 and stock.get("push_coach") == [abo])
+    code, _ = statut(portal_main.coach_push_abonner, portal_main.PushAbonnementRequest(abonnement=abo), x_coach_key="mauvaise")
+    check("abonnement coach : mauvaise cle refusee", code == 401)
+    statut(portal_main.coach_push_desabonner, portal_main.PushDesabonnementRequest(endpoint=abo["endpoint"]), x_coach_key="cle-coach-test")
+    check("desabonnement coach", stock.get("push_coach") == [])
+
 print(f"\n{passed} passed, {failed} failed")
 raise SystemExit(1 if failed else 0)

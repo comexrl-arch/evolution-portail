@@ -507,8 +507,18 @@ def portal_creneaux(authorization: str = Header(default="")):
         return {"possible": False, "raison": "indisponible", "creneaux": []}
 
 
+def _prevenir_coach(changement: str, nom: str, debut: str) -> None:
+    # Best-effort, apres la reponse : jamais d'erreur pour l'eleve.
+    try:
+        titre, texte = push_service.message_reservation(changement, nom, debut)
+        push_service.envoyer_coach(titre, texte, "/coach?onglet=agenda")
+
+    except Exception as error:
+        _journaliser_alerte_impossible("push_coach", error)
+
+
 @app.post("/portal/creneaux")
-def portal_reserver(reservation: ReservationRdv, authorization: str = Header(default="")):
+def portal_reserver(reservation: ReservationRdv, background_tasks: BackgroundTasks = None, authorization: str = Header(default="")):
     session = _session_from_header(authorization)
 
     if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$", reservation.debut):
@@ -518,7 +528,8 @@ def portal_reserver(reservation: ReservationRdv, authorization: str = Header(def
         raise HTTPException(status_code=503, detail="La réservation est momentanément indisponible.")
 
     try:
-        cree = reservation_service.reserver(_eleve_agenda(session), reservation.debut, _maintenant_agenda())
+        eleve = _eleve_agenda(session)
+        cree = reservation_service.reserver(eleve, reservation.debut, _maintenant_agenda())
 
     except reservation_service.ReservationRefusee as error:
         raise HTTPException(status_code=409, detail=error.message)
@@ -526,18 +537,19 @@ def portal_reserver(reservation: ReservationRdv, authorization: str = Header(def
     except Exception as error:
         raise _erreur_service_indisponible("portal_reserver", error)
 
+    _en_fond(background_tasks, _prevenir_coach, "reserve", eleve["nom"], cree["debut"])
     return {k: cree[k] for k in ("debut", "fin", "lieu")}
 
 
 @app.delete("/portal/creneaux/{evenement_id}")
-def portal_annuler_reservation(evenement_id: str, authorization: str = Header(default="")):
+def portal_annuler_reservation(evenement_id: str, background_tasks: BackgroundTasks = None, authorization: str = Header(default="")):
     session = _session_from_header(authorization)
 
     if not agenda_service.enabled():
         raise HTTPException(status_code=503, detail="L'annulation est momentanément indisponible.")
 
     try:
-        reservation_service.annuler(evenement_id, session["client_page_id"], _maintenant_agenda())
+        annule = reservation_service.annuler(evenement_id, session["client_page_id"], _maintenant_agenda())
 
     except reservation_service.ReservationRefusee as error:
         raise HTTPException(status_code=409, detail=error.message)
@@ -545,6 +557,7 @@ def portal_annuler_reservation(evenement_id: str, authorization: str = Header(de
     except Exception as error:
         raise _erreur_service_indisponible("portal_annuler_reservation", error)
 
+    _en_fond(background_tasks, _prevenir_coach, "annule", annule.get("eleve_nom") or "", annule["debut"])
     return {"annule": True}
 
 
@@ -1334,6 +1347,46 @@ def portal_push_desabonner(request: PushDesabonnementRequest, authorization: str
 
     except RuntimeError as error:
         raise _erreur_service_indisponible("portal_push_desabonner", error)
+
+    return {"status": "desabonne"}
+
+
+@app.get("/coach/push/cle")
+def coach_push_cle(x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+    # Les abonnements de Rony vivent dans son agenda : sans agenda, pas de notifications.
+    disponible = push_service.enabled() and agenda_service.enabled()
+    return {"cle": push_service.cle_publique() if disponible else None}
+
+
+@app.post("/coach/push/abonnement")
+def coach_push_abonner(request: PushAbonnementRequest, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    if not push_service.enabled() or not agenda_service.enabled():
+        raise HTTPException(status_code=404, detail="Notifications indisponibles.")
+
+    try:
+        push_service.abonner_coach(request.abonnement)
+
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Abonnement invalide.")
+
+    except RuntimeError as error:
+        raise _agenda_erreur("coach_push_abonner", error)
+
+    return {"status": "abonne"}
+
+
+@app.post("/coach/push/desabonnement")
+def coach_push_desabonner(request: PushDesabonnementRequest, x_coach_key: str = Header(default="")):
+    _require_coach_key(x_coach_key)
+
+    try:
+        push_service.desabonner_coach(request.endpoint)
+
+    except RuntimeError as error:
+        raise _agenda_erreur("coach_push_desabonner", error)
 
     return {"status": "desabonne"}
 

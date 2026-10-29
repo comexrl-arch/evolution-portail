@@ -9,6 +9,7 @@
 #   (liste JSON, 5 appareils au plus).
 # - Envois : retour d'Idris pret (Autonome), et chaque matin via n8n
 #   (/automation/notifications-du-jour) : fiche qui s'ouvre, relances du carnet.
+#   Appli Coach : Rony est prevenu quand un eleve reserve ou annule un RDV.
 
 import json
 import logging
@@ -134,6 +135,71 @@ def envoyer(client_page_id: str, titre: str, texte: str, url: str = "/", liste: 
 
 def retour_idris_pret(client_page_id: str, fiche_id: str) -> None:
     envoyer(client_page_id, "Idris t'a répondu", "Ton retour sur la fiche que tu viens d'enregistrer est prêt.", f"/?ouvrir=fiche:{fiche_id}")
+
+
+# --- Appli Coach (29/10/2026) : Rony est prevenu quand un eleve reserve ou annule ---------
+# Ses abonnements sont gardes dans les reglages de l'Espace Coach (evenement
+# prive de son agenda, agenda_service.ecrire_reglage) : pas de stockage en plus.
+
+_CLE_COACH = "push_coach"
+
+
+def abonnements_coach() -> list[dict]:
+    from backend.services import agenda_service
+
+    liste = agenda_service.lire_reglage(_CLE_COACH) or []
+    return [a for a in liste if isinstance(a, dict) and a.get("endpoint")] if isinstance(liste, list) else []
+
+
+def _ecrire_coach(liste: list[dict]) -> None:
+    from backend.services import agenda_service
+
+    agenda_service.ecrire_reglage(_CLE_COACH, liste)
+
+
+def abonner_coach(abonnement: dict) -> None:
+    propre = abonnement_valide(abonnement)
+    liste = [a for a in abonnements_coach() if a["endpoint"] != propre["endpoint"]]
+    _ecrire_coach((liste + [propre])[-_MAX_APPAREILS:])
+
+
+def desabonner_coach(endpoint: str) -> None:
+    liste = abonnements_coach()
+    restants = [a for a in liste if a["endpoint"] != endpoint]
+
+    if len(restants) != len(liste):
+        _ecrire_coach(restants)
+
+
+def envoyer_coach(titre: str, texte: str, url: str = "/coach") -> int:
+    if not enabled():
+        return 0
+
+    liste = abonnements_coach()
+
+    if not liste:
+        return 0
+
+    charge = json.dumps({"titre": titre, "texte": texte, "url": url}, ensure_ascii=False)
+    valables = [a for a in liste if _envoyer_un(a, charge)]
+
+    if len(valables) != len(liste):
+        try:
+            _ecrire_coach(valables)
+        except RuntimeError as error:
+            logger.warning("Abonnements coach expires non retires (%s)", error)
+
+    return len(valables)
+
+
+def message_reservation(changement: str, nom: str, debut: str) -> tuple[str, str]:
+    """changement : reserve ou annule. Retourne (titre, texte) pour Rony."""
+    qui = nom or "Un élève"
+
+    if changement == "reserve":
+        return "Nouveau RDV réservé", f"{qui} a réservé le {quand(debut)}."
+
+    return "RDV annulé par l'élève", f"{qui} a annulé son RDV du {quand(debut)}."
 
 
 # --- RDV poses par Rony dans l'Espace Coach (28/10/2026) -------------------------------

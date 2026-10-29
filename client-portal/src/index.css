@@ -7025,3 +7025,4 @@ button.eleve-carte:hover {
 .reserver-lien { padding: 0.3rem 0; border: 0; background: none; color: var(--accent); font-size: 0.8rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
 .reserver-annuler { margin-top: 0.4rem; }
 .reserver-erreur { margin: 0.5rem 0 0; font-size: 0.82rem; color: #B42318; }
+.coach-notif-aide { margin: 0.4rem 0.9rem 0; font-size: 0.75rem; line-height: 1.4; color: rgba(255, 255, 255, 0.7); }
