@@ -7466,3 +7466,19 @@ p.question-rony-attente { margin: 0.35rem 0 0; color: var(--text-tertiary); font
   align-items: center;
   gap: 0.35rem;
 }
+
+@media (max-width: 600px) {
+  .coach-repliable-entete {
+    flex-wrap: wrap;
+    row-gap: 0.2rem;
+  }
+
+  .coach-repliable-entete .resultats-titre {
+    flex: 1;
+  }
+
+  .coach-repliable-resume {
+    order: 3;
+    flex-basis: 100%;
+  }
+}

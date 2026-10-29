@@ -742,8 +742,15 @@ function QuestionsRony({ eleve, questions, coachKey, onAuthFailure }) {
     setMessage("Réponse envoyée. L'élève est prévenu sur son téléphone.")
   }
 
+  const attente = liste.filter((q) => !q.reponse).length
+  const repondues = liste.length - attente
+  const resume = [
+    attente && `${attente} en attente`,
+    repondues && `${repondues} répondue${repondues > 1 ? 's' : ''}`,
+  ].filter(Boolean).join(' · ') || 'Aucune question'
+
   return (
-    <Section titre="Ses questions pour vous">
+    <SectionRepliable titre="Ses questions pour vous" resume={resume}>
       {message && <p className="agenda-message" role="status">{message}</p>}
       {liste.length ? (
         <div className="space-y-3">
@@ -781,7 +788,7 @@ function QuestionsRony({ eleve, questions, coachKey, onAuthFailure }) {
           ))}
         </div>
       ) : <Vide>Aucune question pour l'instant. L'élève peut vous écrire depuis son tableau de bord.</Vide>}
-    </Section>
+    </SectionRepliable>
   )
 }
 
